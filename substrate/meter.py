@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from substrate.ledger import InsufficientFunds, Ledger, purse
+from substrate.telemetry import NULL, Hub
 
 
 @dataclass(frozen=True)
@@ -58,7 +59,8 @@ class BudgetExhausted(Exception):
 
 
 class Meter:
-    def __init__(self, ledger: Ledger, daily_ceiling: int, cycles_per_day: int = 1):
+    def __init__(self, ledger: Ledger, daily_ceiling: int, cycles_per_day: int = 1, hub: Hub = NULL):
+        self.hub = hub
         self.ledger = ledger
         self.daily_ceiling = daily_ceiling
         self.cycles_per_day = cycles_per_day
@@ -85,6 +87,7 @@ class Meter:
             self._day, self._spent_today = day, 0
         if self._spent_today + amount > self.daily_ceiling:
             self.halted = True
+            self.hub.emit("meter.kill_switch", cycle, reason="daily ceiling", spent=self._spent_today, ceiling=self.daily_ceiling)
             raise KillSwitch(f"daily ceiling {self.daily_ceiling} reached on day {day}")
         if task_id is not None and task_id in self._task_budget and self.remaining(task_id) < amount:
             raise BudgetExhausted(task_id)
@@ -93,6 +96,7 @@ class Meter:
         self.by_community[community] = self.by_community.get(community, 0) + amount
         if task_id is not None:
             self._task_spend[task_id] = self._task_spend.get(task_id, 0) + amount
+        self.hub.emit("meter.charge", cycle, community=community, amount=amount, memo=memo, spent_today=self._spent_today)
 
     def charge_usage(self, community: str, model: str, usage: Usage, **kw) -> int:
         amount = cost_micros(model, usage)
@@ -101,6 +105,10 @@ class Meter:
 
     def can_afford(self, community: str, amount: int) -> bool:
         return self.ledger.balance(purse(community)) >= amount and not self.halted
+
+    def halt(self, reason: str, cycle: int | None = None) -> None:
+        self.halted = True
+        self.hub.emit("meter.kill_switch", cycle, reason=reason, spent=self._spent_today, ceiling=self.daily_ceiling)
 
     def reset(self) -> None:
         self.halted = False

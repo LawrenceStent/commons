@@ -124,17 +124,23 @@ contract-net, ledger, reputation, bus, knowledge, meter and LLM calls, grader, g
 host process), and a run can be paused from it.
 - [x] `substrate/telemetry.py`: an in-process hub. Components `emit(kind, **fields)`; the hub keeps a bounded
       ring per kind plus rolling counters, and the dashboard subscribes to it. Emitting costs nothing when no one is listening.
-- [ ] Engine, ledger, bus, reputation and meter emit into it (no component imports the console)
-- [ ] Server-Sent Events stream (one connection) instead of a separate 1 s poll per panel
-- [ ] Panels: run header (cycle, speed, state, spend vs ceiling) · communities · market board ·
+- [x] Engine, ledger, bus, reputation and meter emit into it (no component imports the console); ~7% run-time cost
+- [x] Server-Sent Events stream (one connection) instead of a separate 1 s poll per panel
+- [x] Panels: run header (cycle, speed, state, spend vs ceiling) · communities · market board ·
       contract pipeline (open → awarded → delivered → reviewed, with expiries) · ledger flows
       and treasury trend · reputation matrix · bus rate per family and tail · playbook library
       and royalties · LLM calls (model, tokens, cache hit %, cost, latency, last transcript) ·
-      grader scores and cost · gate queue · host (RSS, CPU, LM Studio status)
-- [ ] Drill-down: click a community or contract to see its journal, events and transcript
-- [ ] Controls: pause / resume / step, speed, kill-switch; RSS guard trips a visible pause
+      grader scores and cost · gate queue · host (RSS, CPU, LM Studio status). LLM, grader and gate
+      panels show empty states until 1.3/1.4 emit `llm.call` / `grader.grade`; the market and contract
+      panels gain open/in-flight stages once the turn-based engine exists
+- [x] Drill-down: click a community to see its recent events
+- [ ] Drill-down: journal, contract detail and LLM transcript (needs 1.1 / 1.4)
+- [x] Controls: pause / resume / step, speed, kill-switch; RSS guard (2 GB default) trips a visible pause
 - [ ] Runs attach to the dashboard or replay from a `runs/<id>.sqlite` file
-- [ ] Test: panels render against a fake world, and the stream stays bounded over 10k cycles
+- [x] Test: panels render against a real world, snapshot size stays flat as a run grows
+- [x] Found and fixed a Phase 0 leak: MemoryBus kept every contract/knowledge envelope forever
+      (nobody consumes those families). Streams are now capped like Redis MAXLEN; 3k-cycle RSS
+      growth fell 191 MB → 40 MB, or 13 MB with `Params(ledger_path="runs/….sqlite")`
 
 ### 1.1 Turn-based engine (prerequisite for LLM agents)
 - [x] Mock market board, parts and rubrics, `StubGrader` (`sim/market.py`)

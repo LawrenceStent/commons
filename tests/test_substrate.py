@@ -188,3 +188,20 @@ def test_workspace_isolation(tmp_path):
     for bad in ("../coop-b/x", "/etc/passwd", "notes/../../x"):
         with pytest.raises(WorkspaceEscape):
             ws.path(bad)
+
+
+def test_memory_bus_backlog_is_capped_even_with_no_readers():
+    from protocol import Envelope, Identity
+    from protocol.knowledge import Publish
+    from substrate.bus import MemoryBus
+    from substrate.registry import Registry
+
+    me = Identity("a")
+    reg = Registry()
+    reg.register("a", me.public, ["write"])
+    bus = MemoryBus(reg, base_allowance=10**6, max_backlog=50)
+    for i in range(500):
+        bus.publish(Envelope.seal(me, Publish(playbook_id=str(i), capability="write", title="t", content_hash="h"), 0))
+        bus.compact()
+    assert len(bus._streams["knowledge"]) == 50
+    assert [e.open().playbook_id for e in bus.read("knowledge", "late")][0] == "450"

@@ -7,11 +7,12 @@ initiating verbs are rate-limited by the sender's standing in the commons.
 
 from __future__ import annotations
 
-from collections import defaultdict, deque
+from collections import Counter, defaultdict, deque
 from collections.abc import Callable
 
 from protocol import FAMILIES, Envelope
 from substrate.registry import Registry
+from substrate.telemetry import NULL, Hub
 
 # Verbs that fulfil an obligation or report on one are never throttled. Limiting them
 # would let a low-reputation party use "I was rate-limited" as an excuse not to deliver.
@@ -48,7 +49,9 @@ class Bus:
         standing: Callable[[str], float] | None = None,
         base_allowance: int = 12,
         verify: bool = True,
+        hub: Hub = NULL,
     ):
+        self.hub = hub
         self.registry = registry
         self.standing = standing or (lambda _: 0.5)
         self.base_allowance = base_allowance
@@ -56,6 +59,7 @@ class Bus:
         self.cycle = 0
         self._used: dict[str, int] = defaultdict(int)
         self.rejected: dict[str, int] = defaultdict(int)
+        self.sent: Counter[str] = Counter()  # per family, since the start
         self.recent: deque[Envelope] = deque(maxlen=500)
 
     # ── rate limiting ──────────────────────────────────────────
@@ -78,10 +82,14 @@ class Bus:
         if (env.family, env.verb) not in EXEMPT:
             if self._used[env.sender] >= self.allowance(env.sender):
                 self.rejected[env.sender] += 1
+                self.hub.emit("bus.rate_limited", self.cycle, sender=env.sender, family=env.family, verb=env.verb)
                 raise RateLimited(f"{env.sender} over allowance at cycle {self.cycle}")
             self._used[env.sender] += 1
         self._append(env)
         self.recent.append(env)
+        self.sent[env.family] += 1
+        self.hub.emit("bus.publish", self.cycle, sender=env.sender, family=env.family, verb=env.verb,
+                      body={k: v for k, v in env.body.items() if k != "artifact"})
         return env.id
 
     def read(self, family: str, group: str) -> list[Envelope]:
@@ -95,8 +103,9 @@ class Bus:
 class MemoryBus(Bus):
     """In-process streams. Same semantics as Redis, fast enough for 10k-cycle sims."""
 
-    def __init__(self, *args, **kw):
+    def __init__(self, *args, max_backlog: int = 5_000, **kw):
         super().__init__(*args, **kw)
+        self.max_backlog = max_backlog
         self._streams: dict[str, list[Envelope]] = {f: [] for f in FAMILIES}
         self._cursors: dict[tuple[str, str], int] = defaultdict(int)
 
@@ -110,17 +119,18 @@ class MemoryBus(Bus):
         return stream[start:]
 
     def compact(self) -> None:
-        """Drop envelopes every known group has consumed, so long sims don't grow unbounded."""
+        """Drop envelopes every known group has consumed, then cap each stream at `max_backlog`
+        (like Redis MAXLEN): a family nobody reads, or a group that has stopped reading, must
+        not grow memory without bound. A lagging group loses the oldest envelopes."""
         for family, stream in self._streams.items():
             groups = [n for (f, _), n in self._cursors.items() if f == family]
-            if not groups:
-                continue
-            done = min(groups)
-            if done:
+            done = min(groups) if groups else 0
+            done = max(done, len(stream) - self.max_backlog)
+            if done > 0:
                 del stream[:done]
                 for key in list(self._cursors):
                     if key[0] == family:
-                        self._cursors[key] -= done
+                        self._cursors[key] = max(0, self._cursors[key] - done)
 
 
 class RedisBus(Bus):

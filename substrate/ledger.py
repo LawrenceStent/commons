@@ -12,6 +12,8 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Iterable
 
+from substrate.telemetry import NULL, Hub
+
 EXTERNAL = ("market", "compute", "genesis")
 
 SCHEMA = """
@@ -43,7 +45,8 @@ def purse(community: str) -> str:
 
 
 class Ledger:
-    def __init__(self, path: str = ":memory:"):
+    def __init__(self, path: str = ":memory:", hub: Hub = NULL):
+        self.hub = hub
         # the console builds a world on one thread and drives it from the event loop's
         self.db = sqlite3.connect(path, isolation_level=None, check_same_thread=False)
         if path != ":memory:":
@@ -84,6 +87,7 @@ class Ledger:
             self.db.execute("ROLLBACK")
             raise
         self._balances.update(after)
+        self.hub.emit("ledger.post", cycle, entry=entry, kind=kind, memo=memo, legs=legs)
         return entry
 
     def transfer(self, src: str, dst: str, amount: int, *, cycle: int, kind: str, memo: str = "") -> int:

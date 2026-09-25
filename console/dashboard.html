@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Commons Console</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg:#EEF1F0; --card:#FCFCFB; --fg:#16202B; --muted:#5D6B70; --rule:#D2DAD8;
+  --accent:#1B6B5E; --good:#1B6B5E; --warn:#9A6A00; --bad:#B03A2E;
+  --series:#2a78d6; --seq-0:#E8F0FB; --seq-1:#2a78d6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg:#0F1518; --card:#151D20; --fg:#DDE5E3; --muted:#93A2A4; --rule:#26312F;
+    --accent:#4CB8A0; --good:#4CB8A0; --warn:#D9A43A; --bad:#E66767;
+    --series:#3987e5; --seq-0:#1A2530; --seq-1:#3987e5;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg:#0F1518; --card:#151D20; --fg:#DDE5E3; --muted:#93A2A4; --rule:#26312F;
+  --accent:#4CB8A0; --good:#4CB8A0; --warn:#D9A43A; --bad:#E66767;
+  --series:#3987e5; --seq-0:#1A2530; --seq-1:#3987e5;
+}
+* { box-sizing:border-box; }
+body { background:var(--bg); color:var(--fg); font:13px/1.5 ui-sans-serif,-apple-system,sans-serif; margin:0; padding:16px; }
+main { max-width:1400px; margin:0 auto; display:grid; gap:14px; grid-template-columns:repeat(12, minmax(0,1fr)); }
+.w12 { grid-column:span 12; } .w8 { grid-column:span 8; } .w6 { grid-column:span 6; } .w4 { grid-column:span 4; }
+@media (max-width:1000px) { .w8, .w6, .w4 { grid-column:span 12; } }
+h1 { font:600 18px ui-monospace,Menlo,monospace; margin:0; }
+h2 { font:600 11px ui-monospace,Menlo,monospace; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin:0 0 8px; display:flex; justify-content:space-between; gap:8px; }
+h2 small { letter-spacing:0; text-transform:none; font-weight:400; }
+section { background:var(--card); border:1px solid var(--rule); padding:12px 14px; overflow-x:auto; min-width:0; }
+table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }
+th, td { text-align:left; padding:4px 8px; border-bottom:1px solid var(--rule); white-space:nowrap; vertical-align:middle; }
+th { font-size:11px; color:var(--muted); font-weight:600; }
+.num { text-align:right; font-family:ui-monospace,Menlo,monospace; }
+.mono { font-family:ui-monospace,Menlo,monospace; font-size:12px; }
+.muted { color:var(--muted); } .good { color:var(--good); } .warn { color:var(--warn); } .bad { color:var(--bad); }
+.bar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+.stats { display:flex; gap:22px; flex-wrap:wrap; }
+.stat b { display:block; font:600 18px ui-monospace,Menlo,monospace; }
+.stat span { font-size:11px; color:var(--muted); }
+button, select { font:inherit; padding:3px 10px; border:1px solid var(--rule); background:var(--card); color:var(--fg); cursor:pointer; }
+button.danger { color:var(--bad); border-color:var(--bad); }
+#banner { display:none; padding:6px 10px; border:1px solid var(--warn); color:var(--warn); }
+#banner.on { display:block; }
+a.c { color:inherit; text-decoration:underline dotted; cursor:pointer; }
+.spark { display:block; overflow:visible; }
+.spark polyline { fill:none; stroke:var(--series); stroke-width:2; stroke-linejoin:round; stroke-linecap:round; }
+.spark .dot { fill:var(--series); stroke:var(--card); stroke-width:2; }
+.spark .hit { fill:transparent; }
+#tip { position:fixed; pointer-events:none; background:var(--fg); color:var(--bg); padding:2px 7px; font:12px ui-monospace,Menlo,monospace; display:none; z-index:9; }
+.hbar { display:grid; grid-template-columns:110px 1fr 90px; gap:8px; align-items:center; margin:3px 0; }
+.hbar i { display:block; height:10px; background:var(--series); border-radius:0 4px 4px 0; min-width:2px; }
+.meter { height:10px; background:var(--rule); position:relative; }
+.meter i { position:absolute; inset:0 auto 0 0; background:var(--series); }
+.meter.hot i { background:var(--bad); }
+td.cell { text-align:center; font-family:ui-monospace,Menlo,monospace; font-size:12px; }
+pre { margin:0; font:12px/1.55 ui-monospace,Menlo,monospace; white-space:pre-wrap; }
+.empty { color:var(--muted); font-style:italic; }
+#drill { position:fixed; top:0; right:0; bottom:0; width:min(560px,100%); background:var(--card); border-left:1px solid var(--rule); padding:16px; overflow:auto; transform:translateX(100%); transition:transform .15s; z-index:5; }
+#drill.on { transform:none; }
+</style></head>
+<body>
+<main>
+  <section class="w12">
+    <div class="bar">
+      <h1>Commons</h1>
+      <span id="state" class="mono muted">connecting…</span>
+      <span style="flex:1"></span>
+      <button data-a="pause">pause</button>
+      <button data-a="resume">resume</button>
+      <button data-a="step">step</button>
+      <label class="muted">speed <select id="speed">
+        <option>1</option><option>2</option><option selected>4</option><option>10</option><option>25</option><option>50</option>
+      </select> cycles/s</label>
+      <button data-a="kill" class="danger">kill-switch</button>
+      <button data-a="reset-kill">reset kill</button>
+    </div>
+    <div id="banner" style="margin-top:10px"></div>
+    <div class="stats" style="margin-top:10px">
+      <div class="stat"><b id="s-cycle">–</b><span>cycle</span></div>
+      <div class="stat"><b id="s-treasury">–</b><span>treasury</span></div>
+      <div class="stat"><svg id="treasury-spark" class="spark" width="220" height="38"></svg><span>treasury, recent cycles</span></div>
+      <div class="stat"><b id="s-jobs">–</b><span>jobs paid / attempted</span></div>
+      <div class="stat"><b id="s-spend">–</b><span>compute today / ceiling</span></div>
+      <div class="stat"><b id="s-rss">–</b><span>console process memory</span></div>
+    </div>
+  </section>
+
+  <section class="w12"><h2>Communities <small>click a name for its activity</small></h2><div id="communities"></div></section>
+
+  <section class="w6"><h2>Reputation <small>row trusts column, first-hand</small></h2><div id="reputation"></div></section>
+  <section class="w6"><h2>Contract-net <small id="contracts-window"></small></h2><div id="contracts"></div></section>
+
+  <section class="w4"><h2>Market</h2><div id="market"></div></section>
+  <section class="w4"><h2>Ledger flows <small id="ledger-window"></small></h2><div id="ledger"></div></section>
+  <section class="w4"><h2>Bus</h2><div id="bus"></div></section>
+
+  <section class="w4"><h2>Knowledge</h2><div id="knowledge"></div></section>
+  <section class="w4"><h2>LLM calls</h2><div id="llm"></div></section>
+  <section class="w4"><h2>Grader &amp; gate</h2><div id="grader"></div></section>
+
+  <section class="w6"><h2>Host</h2><div id="host"></div></section>
+  <section class="w6"><h2>Telemetry <small>events since start, by kind</small></h2><div id="events"></div></section>
+
+  <section class="w12"><h2>Bus tail</h2><div id="tail"></div></section>
+</main>
+<aside id="drill"></aside>
+<div id="tip"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const usd = m => (m < 0 ? "−$" : "$") + (Math.abs(m) / 1e6).toLocaleString(undefined, {minimumFractionDigits:3, maximumFractionDigits:3});
+const mb = b => (b / 2**20).toLocaleString(undefined, {maximumFractionDigits:0}) + " MB";
+const gb = b => (b / 2**30).toFixed(1) + " GB";
+const tone = s => s == null ? "" : s < 0.35 ? "bad" : s > 0.7 ? "good" : "";
+const empty = t => `<p class="empty">${esc(t)}</p>`;
+const table = (head, rows) => `<table><tr>${head.map(h => `<th class="${h.startsWith("#") ? "num" : ""}">${esc(h.replace(/^#/, ""))}</th>`).join("")}</tr>${rows.join("")}</table>`;
+const hbars = (entries, fmt) => {
+  const max = Math.max(1, ...entries.map(e => e[1]));
+  return entries.map(([k, v]) => `<div class="hbar"><span class="mono">${esc(k)}</span><i style="width:${100 * v / max}%"></i><span class="num">${fmt(v)}</span></div>`).join("");
+};
+
+// sparkline with a hover readout: points are [x, y]
+const tip = $("tip");
+function spark(svg, pts, fmt, xLabel = "cycle") {
+  const W = +svg.getAttribute("width"), H = +svg.getAttribute("height");
+  if (!pts || pts.length < 2) { svg.innerHTML = ""; return; }
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const X = x => 2 + (W - 4) * (x - x0) / ((x1 - x0) || 1), Y = y => H - 3 - (H - 6) * (y - y0) / ((y1 - y0) || 1);
+  svg.innerHTML = `<polyline points="${pts.map(p => X(p[0]) + "," + Y(p[1])).join(" ")}"/>` +
+    `<circle class="dot" r="4" cx="${X(xs.at(-1))}" cy="${Y(ys.at(-1))}"/><rect class="hit" x="0" y="0" width="${W}" height="${H}"/>`;
+  const dot = svg.querySelector(".dot");
+  svg.onmousemove = ev => {
+    const r = svg.getBoundingClientRect(), mx = ev.clientX - r.left;
+    let i = 0; pts.forEach((p, j) => { if (Math.abs(X(p[0]) - mx) < Math.abs(X(pts[i][0]) - mx)) i = j; });
+    dot.setAttribute("cx", X(pts[i][0])); dot.setAttribute("cy", Y(pts[i][1]));
+    tip.style.display = "block"; tip.style.left = ev.clientX + 12 + "px"; tip.style.top = ev.clientY - 26 + "px";
+    tip.textContent = `${xLabel} ${pts[i][0]}: ${fmt(pts[i][1])}`;
+  };
+  svg.onmouseleave = () => { tip.style.display = "none"; dot.setAttribute("cx", X(xs.at(-1))); dot.setAttribute("cy", Y(ys.at(-1))); };
+}
+
+function render(s) {
+  const r = s.run;
+  $("state").textContent = `${r.running ? "running" : "paused"} · ${r.speed} cycles/s · seed ${r.seed}${r.reputation ? "" : " · reputation OFF (control run)"}`;
+  $("banner").className = r.pause_reason || r.halted ? "on" : "";
+  $("banner").textContent = r.halted ? `Kill-switch is on. ${r.pause_reason || ""}` : (r.pause_reason || "");
+  $("s-cycle").textContent = r.cycle.toLocaleString();
+  $("s-treasury").textContent = usd(r.treasury);
+  $("s-jobs").textContent = `${r.jobs_done.toLocaleString()} / ${(r.jobs_done + r.jobs_failed).toLocaleString()}`;
+  $("s-spend").textContent = `${usd(r.spent_today)} / ${r.ceiling >= 1e11 ? "none" : usd(r.ceiling)}`;
+  $("s-rss").textContent = s.host.rss ? `${mb(s.host.rss)} / ${mb(r.rss_limit)}` : "–";
+  spark($("treasury-spark"), s.treasury_series, usd);
+  if (document.activeElement !== $("speed")) $("speed").value = String(r.speed);
+
+  $("communities").innerHTML = table(
+    ["community", "strategy", "capabilities", "#thinking", "#purse", "purse, recent", "#standing", "#bus/cycle", "#won", "#delivered", "#compute", "#royalties", "#rate-limited"],
+    s.communities.map((c, i) => `<tr>
+      <td><a class="c" data-c="${esc(c.name)}">${esc(c.name)}</a></td><td class="muted">${esc(c.strategy)}</td>
+      <td class="muted">${esc(c.capabilities.join(", "))}</td>
+      <td class="num">${c.thinking ?? "–"}/${c.members}${c.active === false ? ' <span class="warn">silent</span>' : ""}</td>
+      <td class="num">${c.purse != null ? usd(c.purse) : "–"}</td>
+      <td><svg class="spark" id="sp-${i}" width="130" height="24"></svg></td>
+      <td class="num ${tone(c.standing)}">${c.standing?.toFixed(3) ?? "–"}</td>
+      <td class="num">${c.allowance ?? "–"}</td><td class="num">${c.won_total}</td><td class="num">${c.ok_total}</td>
+      <td class="num">${usd(c.compute)}</td><td class="num">${usd(c.royalties)}</td>
+      <td class="num ${c.rate_limited ? "warn" : ""}">${c.rate_limited}</td></tr>`));
+  s.communities.forEach((c, i) => spark($("sp-" + i), c.purse_series, usd));
+
+  const R = s.reputation, stand = Object.fromEntries(s.communities.map(c => [c.name, c.standing]));
+  $("reputation").innerHTML = table(["observer ↓ / subject →", ...R.names],
+    R.names.map(o => `<tr><td class="mono">${esc(o)}</td>${R.names.map(t => {
+      const v = R.trust[o][t];
+      if (v == null) return `<td class="cell muted">·</td>`;
+      const a = Math.round(100 * Math.min(1, Math.abs(v - 0.5) * 2));
+      const bg = v >= 0.5 ? `color-mix(in oklab, var(--seq-1) ${a * 0.55}%, var(--seq-0))` : `color-mix(in oklab, var(--bad) ${a * 0.45}%, var(--seq-0))`;
+      return `<td class="cell" style="background:${bg}" title="${esc(o)} trusts ${esc(t)}: ${v}">${v.toFixed(2)}</td>`;
+    }).join("")}</tr>`).concat(
+      `<tr><td class="mono muted">commons standing</td>${R.names.map(n => `<td class="cell ${tone(stand[n])}">${stand[n]?.toFixed(2) ?? "–"}</td>`).join("")}</tr>`)) +
+    `<p class="muted" style="margin:8px 0 4px">Blue: trusted, red: distrusted, pale: unknown (0.5).</p>` +
+    (R.attests.length ? `<pre>${R.attests.map(a => `${esc(a.observer).padEnd(10)} → ${esc(a.subject).padEnd(10)} ${esc(a.capability).padEnd(9)} ${a.outcome.toFixed(2)}`).join("\n")}</pre>` : "");
+
+  const C = s.contracts;
+  $("contracts-window").textContent = `last ${C.window} closed`;
+  const stageOrder = ["accepted", "rejected", "no_award", "unfunded", "rate_limited"];
+  $("contracts").innerHTML = (C.window ? hbars(stageOrder.map(k => [k, C.stages[k] || 0]), v => v) : empty("No contracts yet.")) +
+    (C.recent.length ? table(["cycle", "capability", "prime", "winner", "#bids", "#price", "#quality", "stage"],
+      C.recent.map(c => `<tr><td class="num">${c.cycle}</td><td>${esc(c.capability)}</td><td>${esc(c.prime)}</td><td>${esc(c.winner || "–")}</td>
+        <td class="num">${Object.keys(c.bids).length}</td><td class="num">${c.price != null ? usd(c.price) : "–"}</td>
+        <td class="num">${c.quality ?? "–"}</td><td class="${c.stage === "accepted" ? "good" : c.stage === "rejected" ? "bad" : "warn"}">${esc(c.stage)}</td></tr>`)) : "");
+
+  const M = s.market;
+  $("market").innerHTML = `<p class="mono">paid ${M.done.toLocaleString()} · failed ${M.failed.toLocaleString()}</p>` +
+    (M.recent.length ? table(["cycle", "prime", "parts", "#reward", "status"], M.recent.map(j =>
+      `<tr><td class="num">${j.cycle}</td><td>${esc(j.prime)}</td><td class="muted">${esc(j.caps.join("+"))}</td><td class="num">${usd(j.reward)}</td>
+       <td class="${j.status === "paid" ? "good" : "bad"}">${esc(j.status)}</td></tr>`)) : empty("No jobs yet."));
+
+  const L = s.ledger;
+  $("ledger-window").textContent = `last ${L.window} entries`;
+  $("ledger").innerHTML = hbars(Object.entries(L.flows).sort((a, b) => b[1] - a[1]), usd) +
+    `<p class="mono muted">market paid out ${usd(-L.market)} · compute burned ${usd(-L.compute)}</p>` +
+    `<pre>${L.recent.slice(0, 8).map(p => `${String(p.cycle).padStart(6)} ${esc(p.kind).padEnd(9)} ${esc(p.memo).slice(0, 24)}`).join("\n")}</pre>`;
+
+  const B = s.bus;
+  $("bus").innerHTML = table(["family", "#last cycle", "#total"], Object.entries(B.sent).map(([f, n]) =>
+      `<tr><td>${esc(f)}</td><td class="num">${B.last_cycle[f] ?? 0}</td><td class="num">${n.toLocaleString()}</td></tr>`)) +
+    `<p class="muted" style="margin:8px 0 0">Rate-limited: ${Object.entries(B.rate_limited).map(([k, v]) => `${esc(k)} ${v}`).join(" · ") || "nobody"}</p>`;
+  $("tail").innerHTML = `<pre>${B.tail.map(e => `${String(e.cycle).padStart(6)}  ${esc(e.sender).padEnd(10)} ${esc(e.family + "." + e.verb).padEnd(22)} ${esc(Object.entries(e.body).map(([k, v]) => `${k}=${typeof v === "object" ? JSON.stringify(v) : v}`).join(", ")).slice(0, 140)}`).join("\n") || "(quiet)"}</pre>`;
+
+  $("knowledge").innerHTML = s.knowledge.length ? table(["playbook", "author", "capability", "#uses"], s.knowledge.map(p =>
+    `<tr><td class="mono">${esc(p.id)}</td><td>${esc(p.author)}</td><td>${esc(p.capability)}</td><td class="num">${p.uses}</td></tr>`)) : empty("No playbooks published yet.");
+
+  const G = s.llm;
+  $("llm").innerHTML = G.calls ? `<p class="mono">${G.calls} calls · ${usd(G.cost)} in the last ${G.recent.length}</p>` +
+    table(["cycle", "who", "model", "#in", "#out", "#cache %", "#cost", "#ms"], G.recent.map(c => `<tr><td class="num">${c.cycle}</td><td>${esc(c.community)}</td>
+      <td class="muted">${esc(c.model)}</td><td class="num">${c.input_tokens}</td><td class="num">${c.output_tokens}</td>
+      <td class="num">${c.cache_hit != null ? Math.round(100 * c.cache_hit) : "–"}</td><td class="num">${usd(c.cost)}</td><td class="num">${c.ms ?? "–"}</td></tr>`))
+    : empty("No model calls yet. Every community is scripted until the LLM runtime lands (1.4).");
+
+  $("grader").innerHTML = (s.grader.count ? table(["cycle", "part", "#score", "#cost"], s.grader.recent.map(g =>
+      `<tr><td class="num">${g.cycle}</td><td>${esc(g.part)}</td><td class="num">${g.score.toFixed(2)}</td><td class="num">${usd(g.cost)}</td></tr>`))
+      : empty("No grading yet. Scripted runs declare their own quality.")) +
+    `<h2 style="margin-top:12px">Gate queue</h2>` + (s.gate.length ? "" : empty("No pending requests. Nothing touches the outside world until Phase 2."));
+
+  const H = s.host, lm = H.lmstudio || {};
+  const frac = H.rss ? H.rss / r.rss_limit : 0;
+  $("host").innerHTML = H.rss ? `
+    <div class="hbar"><span>console RSS</span><div class="meter ${frac > 0.8 ? "hot" : ""}"><i style="width:${Math.min(100, 100 * frac)}%"></i></div><span class="num">${mb(H.rss)}</span></div>
+    <div class="hbar"><span>system used</span><div class="meter ${H.sys_percent > 90 ? "hot" : ""}"><i style="width:${H.sys_percent}%"></i></div><span class="num">${H.sys_percent.toFixed(0)}%</span></div>
+    <p class="mono">CPU ${H.cpu.toFixed(0)}% · ${gb(H.sys_available)} free of ${gb(H.sys_total)} · guard pauses the run at ${mb(r.rss_limit)}</p>
+    <p class="mono">LM Studio: ${lm.app ? "app open" : "not running"} · server ${lm.server ? '<span class="good">up</span>' : "off"} · ` +
+    `${lm.loaded?.length ? `<span class="warn">loaded: ${esc(lm.loaded.join(", "))}</span>` : "no model loaded"}</p>
+    <svg id="rss-spark" class="spark" width="300" height="30"></svg>` : empty("Waiting for the first sample…");
+  if (H.rss) spark($("rss-spark"), H.rss_series, mb, "t");
+
+  const byComp = {};
+  for (const [k, v] of Object.entries(s.events)) (byComp[k.split(".")[0]] ||= []).push([k, v]);
+  $("events").innerHTML = table(["component", "kinds"], Object.entries(byComp).sort().map(([c, ks]) =>
+    `<tr><td>${esc(c)}</td><td class="mono muted">${ks.map(([k, v]) => `${esc(k.split(".").slice(1).join("."))} ${v.toLocaleString()}`).join(" · ")}</td></tr>`));
+}
+
+async function drill(name) {
+  const d = await (await fetch("/api/community/" + encodeURIComponent(name))).json();
+  $("drill").innerHTML = `<div class="bar"><h1>${esc(d.name)}</h1><span style="flex:1"></span><button id="close">close</button></div>
+    <p class="muted">${esc(d.charter)} · purse ${usd(d.purse)}</p>
+    <pre>${d.events.map(e => `${String(e.cycle ?? "").padStart(6)} ${esc(e.kind).padEnd(18)} ${esc(JSON.stringify(Object.fromEntries(Object.entries(e).filter(([k]) => !["seq", "kind", "cycle"].includes(k))))).slice(0, 160)}`).join("\n") || "(nothing recent)"}</pre>`;
+  $("drill").className = "on";
+  $("close").onclick = () => $("drill").className = "";
+}
+
+document.addEventListener("click", async e => {
+  const a = e.target.closest("[data-a]"), c = e.target.closest("[data-c]");
+  if (a) {
+    const res = await fetch("/control/" + a.dataset.a, {method: "POST"});
+    if (!res.ok) alert((await res.json()).error);
+  }
+  if (c) drill(c.dataset.c);
+});
+$("speed").onchange = e => fetch("/control/speed?value=" + e.target.value, {method: "POST"});
+
+function connect() {
+  const es = new EventSource("/stream");
+  es.onmessage = m => render(JSON.parse(m.data));
+  es.onerror = () => { $("state").textContent = "disconnected, retrying…"; };
+}
+connect();
+</script>
+</body></html>

@@ -40,7 +40,7 @@ class Hub:
         self._subs: list[Subscriber] = []
         self._seq = itertools.count(1)
 
-    def emit(self, kind: str, cycle: int | None = None, **fields: Any) -> Event:
+    def emit(self, kind: str, cycle: int | None = None, /, **fields: Any) -> Event:
         ev = Event(next(self._seq), kind, cycle, time.time(), fields)
         self.counts[kind] += 1
         ring = self._rings.get(kind)
@@ -72,4 +72,11 @@ class Hub:
         return sorted(self._rings)
 
 
-NULL = Hub(ring=1)  # default for components constructed without a hub
+class _NullHub(Hub):
+    """For components built without a hub: emitting does nothing and keeps nothing."""
+
+    def emit(self, kind: str, cycle: int | None = None, /, **fields: Any) -> None:  # type: ignore[override]
+        return None
+
+
+NULL: Hub = _NullHub(ring=1)

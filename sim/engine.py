@@ -28,6 +28,7 @@ from substrate.ledger import InsufficientFunds, Ledger, purse
 from substrate.meter import Meter
 from substrate.registry import Registry
 from substrate.reputation import Reputation
+from substrate.telemetry import Hub
 
 CAPABILITIES = ("research", "build", "design", "write")
 
@@ -52,6 +53,7 @@ class Params:
     decay: float = 0.995
     daily_ceiling: int = 10**12
     verify: bool = True
+    ledger_path: str = ":memory:"  # a file under runs/ keeps long runs out of RAM
 
 
 def default_population() -> list[Community]:
@@ -114,24 +116,27 @@ class _View:
 
 
 class World:
-    def __init__(self, params: Params | None = None, population: list[Community] | None = None):
+    def __init__(self, params: Params | None = None, population: list[Community] | None = None, hub: Hub | None = None):
         self.params = p = params or Params()
+        self.hub = hub or Hub()
         self.rng = random.Random(p.seed)
         self.cycle = 0
         self.communities = {c.name: c for c in (population or default_population())}
-        self.ledger = Ledger()
-        self.meter = Meter(self.ledger, daily_ceiling=p.daily_ceiling)
-        self.rep = Reputation(decay=p.decay)
+        self.ledger = Ledger(p.ledger_path, hub=self.hub)
+        self.meter = Meter(self.ledger, daily_ceiling=p.daily_ceiling, hub=self.hub)
+        self.rep = Reputation(decay=p.decay, hub=self.hub)
         self.registry = Registry()
         self.bus = MemoryBus(
             self.registry,
             standing=self._standing,
             base_allowance=p.base_allowance,
             verify=p.verify,
+            hub=self.hub,
         )
         self.library: dict[str, list[Playbook]] = {}
         self.history: dict[str, list[Snapshot]] = {n: [] for n in self.communities}
         self.jobs_done = self.jobs_failed = 0
+        self.royalties_paid: dict[str, int] = {}  # author -> total, since the start
         self._cycle_stats: dict[str, dict[str, int]] = {}
 
         self.ledger.transfer("genesis", "treasury", p.treasury_seed, cycle=0, kind="genesis")
@@ -249,6 +254,7 @@ class World:
 
         if not ok:
             self.jobs_failed += 1
+            self.hub.emit("market.job", self.cycle, id=job_id, prime=prime.name, caps=list(caps), reward=reward, status="failed")
             return
         self.jobs_done += 1
         royalties: dict[str, int] = {}
@@ -261,10 +267,18 @@ class World:
         self._stat(prime.name, "earned", reward * 70 // 100)
         for author, amount in split.items():
             self._stat(author, "earned", amount)
+            self.royalties_paid[author] = self.royalties_paid.get(author, 0) + amount
+        self.hub.emit("market.job", self.cycle, id=job_id, prime=prime.name, caps=list(caps), reward=reward,
+                      status="paid", royalties=split)
+
+    def _contract_event(self, prime: Community, job: Job, stage: str, bids: list[tuple[str, int]] = (), **kw) -> None:
+        self.hub.emit("contract.closed", self.cycle, id=job.job_id, capability=job.capability, prime=prime.name,
+                      max_price=job.reward, bids=dict(bids), stage=stage, **kw)
 
     def _subcontract(self, prime: Community, job: Job) -> tuple[bool, list[str]]:
         if not self._send(prime, Announce(job_id=job.job_id, capability=job.capability,
                                           reward=job.reward, advance_frac=self.params.advance_frac)):
+            self._contract_event(prime, job, "rate_limited")
             return False, []
 
         bids: list[tuple[str, int]] = []
@@ -283,11 +297,13 @@ class World:
             c = self.communities[bidder]
             c.strategy.on_bid_result(c, bidder == winner_name)
         if winner_name is None:
+            self._contract_event(prime, job, "no_award", bids)
             return False, []
         winner = self.communities[winner_name]
         price = dict(bids)[winner_name]
         advance = round(price * self.params.advance_frac)
         if not self._pay(prime, winner, advance, f"advance {job.job_id}"):
+            self._contract_event(prime, job, "unfunded", bids, winner=winner_name, price=price)
             return False, []
         self._send(prime, Award(job_id=job.job_id, winner=winner.name, price=price, advance=advance))
         self._stat(winner.name, "won")
@@ -311,6 +327,8 @@ class World:
         elif accepted:
             accepted = False  # prime couldn't pay; the job fails and the winner will say so
         self._send(prime, Settle(job_id=job.job_id, accepted=accepted, paid=paid))
+        self._contract_event(prime, job, "accepted" if accepted else "rejected", bids, winner=winner.name,
+                             price=price, advance=advance, paid=paid, quality=round(work.quality, 3), cites=list(work.cites))
 
         self._attest(prime, winner, job, prime.strategy.attest(prime, 1.0 if work.quality >= 0.5 else 0.0))
         self._attest(winner, prime, job, winner.strategy.attest(winner, 1.0 if paid or work.quality < 0.5 else 0.0))
@@ -337,6 +355,7 @@ class World:
                 continue
             self._charge(c, self.params.publish_cost, f"publish {pid}")
             self.library.setdefault(cap, []).append(Playbook(pid, c.name, cap))
+            self.hub.emit("knowledge.publish", self.cycle, id=pid, author=c.name, capability=cap)
             if c.workspace:
                 c.workspace.write(f"playbooks/{pid}.md", f"# {c.name} on {cap}\n")
 
@@ -348,11 +367,14 @@ class World:
             for subject, cap, score, n in beliefs:
                 self._send(c, Gossip(subject=subject, capability=cap, score=round(score, 4), evidence=round(n, 3)))
         # every community consumes the reputation stream through its own consumer group
+        heard = 0
         for listener in self.communities.values():
             for env in self.bus.read("reputation", listener.name):
                 if env.verb == "gossip":
                     g = env.open()
                     self.rep.hear(listener.name, env.sender, g.subject, g.capability, g.score, g.evidence)
+                    heard += 1
+        self.hub.emit("reputation.gossip", self.cycle, heard=heard)
 
     def _record(self, start: dict[str, int]) -> None:
         for name, c in self.communities.items():
@@ -368,6 +390,18 @@ class World:
                 delivered_ok=s["ok"],
                 earned=s["earned"],
             ))
+        self.hub.emit(
+            "world.cycle", self.cycle,
+            treasury=self.ledger.balance("treasury"),
+            jobs_done=self.jobs_done, jobs_failed=self.jobs_failed,
+            bus_sent=dict(self.bus.sent),
+            communities={
+                n: {"purse": h[-1].purse, "standing": round(h[-1].standing, 4), "allowance": h[-1].allowance,
+                    "active": h[-1].active, "thinking": h[-1].thinking, "won": h[-1].won,
+                    "ok": h[-1].delivered_ok, "earned": h[-1].earned}
+                for n, h in self.history.items()
+            },
+        )
 
 
 def summary(world: World, window: int = 50) -> str:
