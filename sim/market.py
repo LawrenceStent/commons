@@ -12,6 +12,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from substrate.meter import Usage
+
 CAPABILITIES = ("research", "build", "design", "write")
 
 PRODUCTS = (
@@ -89,8 +91,15 @@ def generate_job(rng: random.Random, job_id: str, cycle: int, reward: int, board
 @dataclass(frozen=True)
 class Grade:
     score: float  # 0..1
-    cost: int = 0  # micro-dollars spent grading, charged to the treasury
+    cost: int = 0  # micro-units spent grading, charged to the treasury
     reason: str = ""
+    # set when a model did the grading
+    model: str | None = None  # what answered
+    price_as: str | None = None  # the price-table entry it is charged at
+    usage: Usage | None = None
+    real: bool = False  # someone is billed for this call
+    ms: int | None = None
+    cache_hit: float | None = None
 
 
 class Grader(Protocol):

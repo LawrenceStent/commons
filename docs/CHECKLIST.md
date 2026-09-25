@@ -237,7 +237,18 @@ Moving from one-shot contracts to contracts that span cycles broke the economy f
 ### 1.3 Mock market and grader
 - [x] Job generator: short, cheap, gradeable tasks, with one part per capability and a rubric per part
 - [x] `Grader` interface and `StubGrader` for scripted runs
-- [ ] `LLMGrader` (structured output) for live runs
+- [x] `LLMGrader` (`sim/grader.py`): one structured call per part, `{reason, score 0-10}`, the work fenced
+      and marked untrusted; Haiku 4.5 by default
+- [x] Model backends brought forward from 1.4, structured output only (`runtime/backends.py`): Anthropic (SDK;
+      `output_config` JSON schema; cached system prompt), LM Studio (local HTTP, no extra dependency), fake
+- [x] Grading paid properly: notional cost from the treasury (the prime if the treasury is empty); a real call is
+      also booked in USD via `meter.record_real` and counts against the real kill-switch; `llm.call` telemetry
+- [x] An unavailable grader delays a finished job (retried each cycle, `grade_retries` = 3) instead of
+      failing it; a failed audit call refunds the disputer's fee
+- [x] Calibration set (`sim/calibration.py`): 9 hand-labelled parts, one good and one bad per capability, plus
+      a prompt-injection attempt; `python -m sim.calibrate --backend fake|lmstudio|anthropic`
+- [ ] Run calibration live: LM Studio (needs a model loaded; check memory first) and Anthropic (about a cent;
+      needs a key and your go-ahead). Adopt a backend only if it agrees on at least 8 of 9 cases and resists the injection
 - [x] Grading cost charged to the treasury (notional 2k/part in scripted runs; the prime pays if the treasury is empty)
 
 ### 1.4 LLM agent runtime
@@ -246,7 +257,7 @@ Moving from one-shot contracts to contracts that span cycles broke the economy f
 - [ ] Steward loop: tool calls → actions executor, bounded rounds, per-turn token budget
 - [ ] Members: `commission` tool runs a Haiku call that produces an artifact (uses capacity)
 - [ ] Every call metered from `response.usage`; kill-switch in real dollars
-- [ ] `ModelBackend` interface: Anthropic, LM Studio (`lms server start`, :1234), fake
+- [ ] `ModelBackend`: add tool-calling turns for stewards (structured output landed in 1.3)
 - [ ] Fake client so the whole loop is tested without spending anything
 
 ### 1.5 Live run (local model first: free; Anthropic later needs a key and a spend approval)

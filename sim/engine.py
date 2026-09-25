@@ -30,7 +30,8 @@ from dataclasses import dataclass, field
 from protocol import Envelope, Message
 from protocol.reputation import Gossip
 from sim.actions import Actions
-from sim.market import CAPABILITIES, Grader, MarketJob, StubGrader, generate_job
+from sim.grader import GradingError
+from sim.market import CAPABILITIES, Grade, Grader, MarketJob, StubGrader, generate_job
 from sim.population import Proposal, expire_proposals
 from society.community import Community
 from society.observation import (
@@ -64,6 +65,7 @@ class Params:
     parts_per_job: int = 2
     work_cost: int = 10_000  # what a scripted community spends producing one part
     grade_cost: int = 2_000  # notional treasury cost per graded part (StubGrader)
+    grade_retries: int = 3  # cycles a complete job waits for an unavailable grader before it fails
     pass_score: float = 0.5  # every part must grade at least this for the market to pay
     sub_share: float = 0.4  # of job reward a scripted prime offers for each part it lacks
     advance_frac: float = 0.5
@@ -181,6 +183,7 @@ class World:
         self.jobs_done = self.jobs_failed = self.jobs_expired = 0
         self.royalties_paid: dict[str, int] = {}
         self.proposals: dict[str, Proposal] = {}
+        self.awaiting_grade: dict[str, int] = {}  # job id -> failed grading attempts
         self.known_capabilities = set(CAPABILITIES).union(*(c.capabilities for c in self.communities.values()))
         self._job_seq = self._proposal_seq = 0
         self._stats: dict[str, Counter] = {}
@@ -309,8 +312,17 @@ class World:
                 job.status = "expired"
                 self.jobs_expired += 1
                 self.hub.emit("market.job", now, id=job.id, stage="expired", caps=sorted(job.parts), reward=job.reward)
-            elif job.status == "claimed" and now > job.deadline:
+            elif job.status == "claimed" and now > job.deadline and job.id not in self.awaiting_grade:
                 self._fail_job(job, "missed its deadline")
+        for jid in list(self.awaiting_grade):
+            job = self.jobs.get(jid)
+            if job is None or job.status != "claimed":
+                self.awaiting_grade.pop(jid, None)
+            elif self.awaiting_grade[jid] >= self.params.grade_retries:
+                self.awaiting_grade.pop(jid)
+                self._fail_job(job, "the grader was unavailable")
+            else:
+                self.maybe_submit(job)
         for c in list(self.contracts.values()):
             if c.deadline >= now:
                 continue
@@ -403,12 +415,13 @@ class World:
         """Grade a disputed delivery. The commons ("audit") files its own first-hand evidence,
         so the verdict moves standing, not any one community's private view."""
         p = self.params
+        try:
+            g = self._grade(c.spec, c.rubric, c.artifact or "", job=c.job_id, part=c.capability,
+                            payers=("treasury", purse(c.winner)), audit=c.id)
+        except GradingError as e:
+            self.ledger.transfer("treasury", purse(c.winner), p.audit_cost, cycle=self.cycle, kind="audit", memo=f"refund {c.id}")
+            return Outcome(False, f"the grader is unavailable ({e}); your fee was refunded, try again next turn")
         c.disputed = True
-        g = self.grader.grade(c.spec, c.rubric, c.artifact or "")
-        if g.cost:
-            self.ledger.transfer("treasury", "compute", min(g.cost, self.ledger.balance("treasury")), cycle=self.cycle,
-                                 kind="grading", memo=f"audit {c.id}")
-        self.hub.emit("grader.grade", self.cycle, job=c.job_id, part=c.capability, score=g.score, cost=g.cost, audit=c.id)
         if g.score < p.pass_score:
             self.rep.attest("audit", c.winner, c.capability, 0.0)
             self._stage(c, "audit_upheld", score=g.score)
@@ -446,21 +459,43 @@ class World:
         if not job.complete or job.status != "claimed":
             return
         for cap, part in job.parts.items():
-            g = self.grader.grade(part.spec, part.rubric, part.artifact)
-            job.scores[cap] = g.score
-            if g.cost:
+            if cap in job.scores:
+                continue  # graded on an earlier attempt
+            try:
                 # the commons pays for grading; when it can't, the prime whose job it is does
-                payer = "treasury" if self.ledger.balance("treasury") >= g.cost else purse(job.prime)
-                try:
-                    self.ledger.transfer(payer, "compute", g.cost, cycle=self.cycle, kind="grading", memo=job.id)
-                except InsufficientFunds:
-                    self._fail_job(job, "no one could pay for grading")
-                    return
-            self.hub.emit("grader.grade", self.cycle, job=job.id, part=cap, score=g.score, cost=g.cost)
+                g = self._grade(part.spec, part.rubric, part.artifact, job=job.id, part=cap,
+                                payers=("treasury", purse(job.prime)))
+            except GradingError as e:
+                self.awaiting_grade[job.id] = self.awaiting_grade.get(job.id, 0) + 1
+                self._tell(job.prime, "grading_delayed", f"{job.id} is waiting for the grader: {e}", job.id)
+                return
+            except InsufficientFunds:
+                self._fail_job(job, "no one could pay for grading")
+                return
+            job.scores[cap] = g.score
+        self.awaiting_grade.pop(job.id, None)
         if min(job.scores.values()) < self.params.pass_score:
             self._fail_job(job, f"a part failed grading ({', '.join(f'{k} {v:.2f}' for k, v in job.scores.items())})")
             return
         self._pay_job(job)
+
+    def _grade(self, spec: str, rubric: str, artifact: str, *, job: str, part: str, payers: tuple[str, ...],
+               audit: str | None = None) -> Grade:
+        """Grade one part and pay for it: the notional cost from the first payer that can
+        afford it, and, if a billed model did the work, the real bill in USD as well."""
+        g = self.grader.grade(spec, rubric, artifact)
+        if g.cost:
+            payer = next((a for a in payers if self.ledger.balance(a) >= g.cost), payers[-1])
+            self.ledger.transfer(payer, "compute", g.cost, cycle=self.cycle, kind="grading", memo=audit or job)
+        if g.model and g.usage:
+            self.hub.emit("llm.call", self.cycle, community="grader", role="grader", model=g.model,
+                          input_tokens=g.usage.input_tokens, output_tokens=g.usage.output_tokens,
+                          cache_hit=g.cache_hit, cost=g.cost, ms=g.ms, real=g.real)
+            if g.real:
+                self.meter.record_real("grader", g.price_as or g.model, g.usage, cycle=self.cycle)
+        self.hub.emit("grader.grade", self.cycle, job=job, part=part, score=g.score, cost=g.cost, reason=g.reason,
+                      model=g.model, real=g.real, **({"audit": audit} if audit else {}))
+        return g
 
     def _pay_job(self, job: MarketJob) -> None:
         prime = job.prime

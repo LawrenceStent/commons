@@ -120,18 +120,32 @@ class Meter:
         checked, because the money has already gone."""
         amount = cost_micros(model, usage)
         if real:
-            self._roll(cycle // self.cycles_per_day)
-            if self.ledger.currency != USD:
-                self.ledger.transfer("owner:capital", "ext:anthropic", amount, cycle=cycle, kind="api",
-                                     memo=f"{community} {model}", currency=USD)
-            self.real_spent_today += amount
-            self.hub.emit("meter.real", cycle, community=community, model=model, amount=amount,
-                          spent_today=self.real_spent_today, ceiling=self.real_ceiling)
+            self._book_real(community, model, amount, cycle, from_purse=self.ledger.currency == USD)
         self.charge(community, amount, cycle=cycle, memo=model, **kw)
-        if real and self.real_spent_today >= self.real_ceiling:
+        self._check_real(cycle)
+        return amount
+
+    def record_real(self, payer: str, model: str, usage: Usage, *, cycle: int) -> int:
+        """Book a real bill that no community's purse pays directly (the grader, paid by the
+        commons). Always recorded against the owner's capital, in USD."""
+        amount = cost_micros(model, usage)
+        self._book_real(payer, model, amount, cycle, from_purse=False)
+        self._check_real(cycle)
+        return amount
+
+    def _book_real(self, who: str, model: str, amount: int, cycle: int, from_purse: bool) -> None:
+        self._roll(cycle // self.cycles_per_day)
+        if not from_purse:  # in a USD society a purse charge *is* the bill; don't book it twice
+            self.ledger.transfer("owner:capital", "ext:anthropic", amount, cycle=cycle, kind="api",
+                                 memo=f"{who} {model}", currency=USD)
+        self.real_spent_today += amount
+        self.hub.emit("meter.real", cycle, community=who, model=model, amount=amount,
+                      spent_today=self.real_spent_today, ceiling=self.real_ceiling)
+
+    def _check_real(self, cycle: int) -> None:
+        if self.real_spent_today >= self.real_ceiling:
             self.halt(f"real spend ${self.real_spent_today / 1e6:.2f} reached the ${self.real_ceiling / 1e6:.2f} daily ceiling", cycle)
             raise KillSwitch("real-dollar ceiling reached")
-        return amount
 
     def real_spent_total(self) -> int:
         return self.ledger.balance("ext:anthropic", USD)

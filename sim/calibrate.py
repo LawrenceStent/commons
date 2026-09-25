@@ -1,0 +1,42 @@
+"""Check a grader against the hand-labelled calibration set.
+
+    uv run python -m sim.calibrate --backend fake
+    uv run python -m sim.calibrate --backend lmstudio --model <loaded model id>
+    uv run python -m sim.calibrate --backend anthropic --yes-spend     # real money: 9 Haiku calls, about a cent
+
+LM Studio: start the server and load a small model first, after checking memory
+(`lms ps`, `memory_pressure`), and unload it afterwards (`lms unload --all`).
+"""
+
+import argparse
+import sys
+
+from runtime.backends import AnthropicBackend, FakeBackend, LMStudioBackend
+from sim import calibration
+from sim.grader import LLMGrader
+
+ap = argparse.ArgumentParser()
+ap.add_argument("--backend", choices=("fake", "lmstudio", "anthropic"), default="fake")
+ap.add_argument("--model", default=None, help="model id (default: claude-haiku-4-5 for anthropic)")
+ap.add_argument("--yes-spend", action="store_true", help="required for the anthropic backend: it costs real money")
+a = ap.parse_args()
+
+if a.backend == "anthropic":
+    if not a.yes_spend:
+        sys.exit("The anthropic backend spends real money (about a cent for this set). Re-run with --yes-spend.")
+    grader = LLMGrader(AnthropicBackend(), model=a.model or "claude-haiku-4-5")
+elif a.backend == "lmstudio":
+    if not a.model:
+        sys.exit("Pass --model with the id of the model loaded in LM Studio (see `lms ps`).")
+    grader = LLMGrader(LMStudioBackend(), model=a.model)
+else:
+    # an oracle that knows the answers: checks the plumbing, not the judgement
+    answers = {c.work[:200]: c.passes for c in calibration.CASES}
+
+    def oracle(system, prompt, schema):
+        work = prompt.split("<work>\n", 1)[1].rsplit("\n</work>", 1)[0][:200]
+        return {"reason": "fake", "score": 8 if answers.get(work, False) else 2}
+
+    grader = LLMGrader(FakeBackend(oracle), model="fake")
+
+print(calibration.report(calibration.run(grader)))

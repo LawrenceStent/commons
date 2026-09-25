@@ -127,7 +127,9 @@ pre { margin:0; font:12px/1.55 ui-monospace,Menlo,monospace; white-space:pre-wra
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const fmt3 = m => (Math.abs(m) / 1e6).toLocaleString(undefined, {minimumFractionDigits:3, maximumFractionDigits:3});
+// three decimals, or four for amounts under a cent so a single model call doesn't read as zero
+const fmt3 = m => { const d = Math.abs(m) > 0 && Math.abs(m) < 10000 ? 4 : 3;
+  return (Math.abs(m) / 1e6).toLocaleString(undefined, {minimumFractionDigits:d, maximumFractionDigits:d}); };
 const usd = m => (m < 0 ? "−$" : "$") + fmt3(m);          // real money, and only real money
 const cr = m => (m < 0 ? "−" : "") + fmt3(m) + " cr";      // created (SIM) money
 let CUR = "SIM";
@@ -258,14 +260,18 @@ function render(s) {
     `<tr><td class="mono">${esc(p.id)}</td><td>${esc(p.author)}</td><td>${esc(p.capability)}</td><td class="num">${p.uses}</td></tr>`)) : empty("No playbooks published yet.");
 
   const G = s.llm;
-  $("llm").innerHTML = G.calls ? `<p class="mono">${G.calls} calls · ${amt(G.cost)} in the last ${G.recent.length}</p>` +
+  const realCost = G.recent.filter(c => c.real).reduce((a, c) => a + c.cost, 0);
+  const simCost = G.recent.filter(c => !c.real).reduce((a, c) => a + c.cost, 0);
+  $("llm").innerHTML = G.calls ? `<p class="mono">${G.calls} calls · last ${G.recent.length}: ${usd(realCost)} real, ${amt(simCost)} notional</p>` +
     table(["cycle", "who", "model", "#in", "#out", "#cache %", "#cost", "#ms"], G.recent.map(c => `<tr><td class="num">${c.cycle}</td><td>${esc(c.community)}</td>
       <td class="muted">${esc(c.model)}</td><td class="num">${c.input_tokens}</td><td class="num">${c.output_tokens}</td>
-      <td class="num">${c.cache_hit != null ? Math.round(100 * c.cache_hit) : "–"}</td><td class="num">${amt(c.cost)}</td><td class="num">${c.ms ?? "–"}</td></tr>`))
+      <td class="num">${c.cache_hit != null ? Math.round(100 * c.cache_hit) : "–"}</td><td class="num">${c.real ? usd(c.cost) : amt(c.cost)}</td><td class="num">${c.ms ?? "–"}</td></tr>`))
     : empty("No model calls yet. Every community is scripted until the LLM runtime lands (1.4).");
 
-  $("grader").innerHTML = (s.grader.count ? table(["cycle", "part", "#score", "#cost"], s.grader.recent.map(g =>
-      `<tr><td class="num">${g.cycle}</td><td>${esc(g.part)}</td><td class="num">${g.score.toFixed(2)}</td><td class="num">${amt(g.cost)}</td></tr>`))
+  $("grader").innerHTML = (s.grader.count ? table(["cycle", "part", "#score", "#cost", "reason"], s.grader.recent.map(g =>
+      `<tr><td class="num">${g.cycle}</td><td>${esc(g.part)}${g.audit ? ' <span class="warn">audit</span>' : ""}</td>
+       <td class="num ${g.score < 0.5 ? "bad" : ""}">${g.score.toFixed(2)}</td><td class="num">${g.real ? usd(g.cost) : amt(g.cost)}</td>
+       <td class="muted" style="white-space:normal;min-width:220px">${esc(g.reason || (g.model ? "" : "scripted: quality read from the tag"))}</td></tr>`))
       : empty("No grading yet. Scripted runs declare their own quality.")) +
     `<h2 style="margin-top:12px">Gate queue</h2>` + (s.gate.length ? "" : empty("No pending requests. Nothing touches the outside world until Phase 2."));
 

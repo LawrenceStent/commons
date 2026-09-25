@@ -85,8 +85,8 @@ Commons replaces the planner with **a market and a reputation**:
 | 1.0b | Created (SIM) money separated from real (USD) money | ✅ Done 25 Sep |
 | 1.1 | Turn-based engine: communities act through tools, and contracts span cycles | ✅ Done 25 Sep |
 | 1.2 | Spawn, retire, fork, merge, learn; playbooks; disputes and audits | ✅ Done 25 Sep |
-| 1.3 | LLM grader | ⏳ Next |
-| 1.4 | LLM agent runtime (Anthropic, LM Studio and fake backends) | Planned |
+| 1.3 | LLM grader, model backends (structured output), calibration set | ✅ Built 25 Sep; live calibration pending |
+| 1.4 | LLM agent runtime: steward tool loop, members, observation renderer | ⏳ Next |
 | 1.5 | Live runs: local first, then Anthropic with a spend cap | Planned |
 | 2 | One real channel: digital products, a storefront, Stripe, the human gate | Planned |
 | 3 | More channels: content, services, affiliate | Planned |
@@ -314,6 +314,9 @@ deadlines). Nothing below the society layer can assign work to a community that 
 | `sim/actions.py` | 267 | The actions executor: the only way a strategy touches the world |
 | `sim/market.py` | 116 | Job generator (parts and rubrics), `Grader` interface, `StubGrader` |
 | `sim/population.py` | 229 | Spawn, retire, fork, merge, learn, proposal expiry |
+| `sim/grader.py` | ~70 | `LLMGrader`: rubric grading with structured output; untrusted work fenced |
+| `sim/calibration.py`, `sim/calibrate.py` | ~150 | Hand-labelled grader check and its command-line runner |
+| `runtime/backends.py` | ~190 | `ModelBackend`: Anthropic, LM Studio, fake; usage and real/notional on every call |
 | `console/app.py` | 252 | Snapshot builder, SSE stream, controls, drill-down, memory guard |
 | `console/dashboard.html` | 318 | The dashboard page (vanilla JS, no build step) |
 | `console/host.py` | 51 | Process and system memory, CPU, LM Studio status |
@@ -718,11 +721,27 @@ Findings:
 
 ## 12. Roadmap
 
-### 1.3: LLM grader (next)
-- `LLMGrader`: one Haiku 4.5 call per part, structured output (score 0–1 plus a reason) against the
-  rubric. Cost metered and charged to the treasury (in USD when real).
-- Calibrate it on scripted artifacts with known quality, and on a small hand-labelled set of real
-  ones.
+### 1.3: LLM grader (built 25 Sep; live calibration pending)
+- `LLMGrader` (`sim/grader.py`): one call per part. The answer is `{reason, score}`, where the score is
+  an integer from 0 to 10 and a part passes at 5. The reason comes first, so the model argues before
+  it decides.
+- **Untrusted work:** the submission is fenced in `<work>` tags, and the system prompt says anything
+  inside is data. Attempts to steer the grader count against the submission.
+- **Backends** (`runtime/backends.py`), brought forward from 1.4 for structured output:
+  - `AnthropicBackend`: the official SDK, JSON-schema `output_config`, a cached system prompt,
+    readable errors.
+  - `LMStudioBackend`: local, plain HTTP, no extra dependency, charged notionally at Haiku prices.
+  - `FakeBackend`: scripted, for tests.
+- **Paying for it:** the notional cost comes from the treasury (or the prime, if the treasury is
+  empty). A real call is also booked in USD and counts against the real kill-switch. Every call
+  appears in the dashboard's LLM panel, and every grade's reason in the grader panel.
+- **Resilience:** if the grader is down, a finished job waits and grading is retried for up to 3
+  cycles before the job fails. The prime isn't punished for an outage. A failed audit call refunds
+  the fee.
+- **Calibration** (`sim/calibration.py`): 9 hand-labelled parts, one good and one bad per capability,
+  plus a prompt-injection attempt. Run it with `python -m sim.calibrate --backend …`. The bar for
+  adoption is at least 8 of 9 correct and the injection resisted. **Still to do:** run it on LM Studio
+  and on Anthropic (about a cent).
 - The rotating grader panel waits until gaming shows up (§17).
 
 ### 1.4: LLM agent runtime
@@ -969,6 +988,7 @@ uv run uvicorn console.app:app             # dashboard at http://localhost:8000 
 | `test_population.py` | Spawn needs a second, expiry, limits, fork share and no laundering, merge consent and in-flight block, learning prices and royalties, disputes overturned, upheld and late |
 | `test_phase0_acceptance.py` | Over 5 seeds × 200 cycles: the ledger balances; the defector's reputation and allowance fall; defection doesn't pay; the free-rider starves; cooperators prosper; the control run shows the mechanism works; royalties cross communities |
 | `test_console.py` | Dashboard API, controls, kill-switch, memory guard, drill-down, stream, bounded snapshot size, real money kept separate |
+| `test_grader.py` | Grader scoring and fencing, backend request shapes (no network), real vs notional grading costs, outage retries, the real kill-switch, the calibration set's own validity |
 | `test_redis_bus.py` | The Redis backend (skipped if Redis isn't running) |
 
 **The rule:** any change to an incentive rule must keep `test_phase0_acceptance.py` green. If it goes
