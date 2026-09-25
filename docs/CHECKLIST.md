@@ -175,7 +175,7 @@ kill-switch.
 - [x] Actions executor: validates, enforces capacity and funds, returns outcomes the agent can read
 - [x] Port cooperator / defector / free-rider to turn policies; Phase 0 acceptance passes on the new engine
       (5 seeds), plus `tests/test_turns.py` for deadlines, visibility, determinism and pruning
-- [x] Retune the mock market so the treasury doesn't balloon: the reserve rule below keeps it flat at 2M cr
+- [x] Retune the mock market so the treasury doesn't balloon: the reserve rule below keeps it flat at 2 cr (2,000,000 micro-credits)
       over 10k cycles. 10k cycles take 35 s with signature checks and grow RSS about 59 MB
 
 #### 1.1 findings
@@ -194,7 +194,7 @@ Moving from one-shot contracts to contracts that span cycles broke the economy f
 - **Treasury reserve rule:** the commons takes its 20% only while the treasury is below
   `treasury_reserve`; above it, the earner gets 90%. Grading is paid by the treasury, or by the prime
   when the treasury is empty.
-- **Open: cooperators get very rich** (120–200M cr each after 10k cycles). Wealth now builds up in
+- **Open: cooperators get very rich** (120–200 cr each after 10k cycles, from a 0.15 cr start). Wealth now builds up in
   purses instead of the treasury. 1.2's spawn, fork and learn are the natural sinks; revisit prices
   in 1.5 against measured token cost.
 - **Open: supply is capacity-bound.** About 30% of posted jobs expire unclaimed, because each
@@ -228,8 +228,8 @@ Moving from one-shot contracts to contracts that span cycles broke the economy f
   With no fresh evidence, an honest community's rare mistakes outlived its good record. Now only records
   that are mostly bad forget slowly; a mostly good record fades evenly and keeps its ratio. The defector
   still stays refused.
-- **Growth absorbs wealth.** With spawn and fork, cooperators end 2,000 cycles at 5–20M cr instead of
-  about 35M, the society grows to its 12-community limit, and unclaimed jobs fall from about 30% to about 1%.
+- **Growth absorbs wealth.** With spawn and fork, cooperators end 2,000 cycles at 5–20 cr instead of
+  about 35 cr, the society grows to its 12-community limit, and unclaimed jobs fall from about 30% to about 1%.
 - **Cost:** the acceptance suite now takes about 30 s (12 communities instead of 5).
 - **Not yet exercised by any strategy:** merge and disputes (tested directly). Those are the first
   things to watch for when LLM agents take over.

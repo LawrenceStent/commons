@@ -1,7 +1,10 @@
 # Commons
 
-A non-hierarchical economy of agent communities. See `docs/plan.html` for the design and
-`docs/CHECKLIST.md` for progress.
+A non-hierarchical economy of agent communities.
+
+- `docs/COMMONS.md`: the complete guide (architecture, concepts, acronyms, roadmap, reasoning, risks)
+- `docs/plan.html`: the original design brief
+- `docs/CHECKLIST.md`: the working build checklist and findings
 
 ```sh
 uv sync
