@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import threading
 from collections import Counter
 from pathlib import Path
 
@@ -147,18 +148,33 @@ def community_detail(w: World, name: str, n: int = 60) -> list[dict]:
 
 
 def create_app(world: World | None = None, cycles_per_second: float = 4.0, autostart: bool = True,
-               rss_limit: int = 2 * 1024**3, host_every: float = 2.0) -> FastAPI:
+               rss_limit: int = 2 * 1024**3, host_every: float = 2.0, stop_at: int | None = None) -> FastAPI:
+    """`stop_at` pauses the run at that cycle. The world steps in a worker thread under a lock, so
+    slow (LLM) cycles never freeze the page, and a snapshot never sees a half-finished cycle."""
     state = {"world": world or World(Params(seed=0)), "running": autostart, "speed": cycles_per_second,
-             "reason": None, "rss_limit": rss_limit}
+             "reason": None, "rss_limit": rss_limit, "stop_at": stop_at}
+    lock = threading.Lock()
 
     def pause(reason: str | None) -> None:
         state["running"], state["reason"] = False, reason
 
     def step() -> None:
-        try:
-            state["world"].step()
-        except KillSwitch as e:
-            pause(f"kill-switch: {e}")
+        with lock:
+            try:
+                state["world"].step()
+            except KillSwitch as e:
+                pause(f"kill-switch: {e}")
+            except Exception as e:  # a crash pauses the run and says why, rather than killing the driver
+                pause(f"the world raised {type(e).__name__}: {e}")
+        if state["stop_at"] and state["world"].cycle >= state["stop_at"]:
+            pause(f"reached the cycle limit ({state['stop_at']})")
+
+    def locked(fn, *a):
+        with lock:
+            return fn(*a)
+
+    async def snap() -> dict:
+        return await asyncio.to_thread(locked, snapshot, state)
 
     def sample_host() -> None:
         s = host.sample()
@@ -172,7 +188,7 @@ def create_app(world: World | None = None, cycles_per_second: float = 4.0, autos
         since_host = host_every
         while True:
             if state["running"]:
-                step()
+                await asyncio.to_thread(step)
             since_host += 1 / state["speed"]
             if since_host >= host_every:
                 since_host = 0.0
@@ -194,17 +210,22 @@ def create_app(world: World | None = None, cycles_per_second: float = 4.0, autos
 
     @app.get("/api/snapshot")
     async def api_snapshot():
-        return JSONResponse(snapshot(state))
+        return JSONResponse(await snap())
 
     @app.get("/api/community/{name}")
     async def api_community(name: str):
         w = state["world"]
         if name not in w.communities:
             return JSONResponse({"error": f"no community {name}"}, status_code=404)
-        c = w.communities[name]
-        return {"name": name, "charter": c.charter, "purse": w.ledger.balance(purse(name)),
-                "journal": list(w.journal[name]), "inbox": [e.__dict__ for e in w.inbox[name]],
-                "events": community_detail(w, name)}
+        def detail():
+            c = w.communities[name]
+            return {"name": name, "charter": c.charter, "purse": w.ledger.balance(purse(name)),
+                    "strategy": c.strategy.name,
+                    "journal": list(w.journal[name]), "inbox": [e.__dict__ for e in w.inbox[name]],
+                    "transcripts": list(w.transcripts.get(name, [])),
+                    "events": community_detail(w, name)}
+
+        return await asyncio.to_thread(locked, detail)
 
     @app.get("/stream")
     async def stream(request: Request, interval: float = 0.5, limit: int | None = None):
@@ -213,11 +234,11 @@ def create_app(world: World | None = None, cycles_per_second: float = 4.0, autos
             while limit is None or sent < limit:
                 if await request.is_disconnected():
                     break
-                snap = snapshot(state)
+                snap_ = await snap()
                 # while paused, only resend every few seconds so host stats stay fresh
-                if snap["run"]["cycle"] != last_cycle or sent % 6 == 0:
-                    yield f"data: {json.dumps(snap, separators=(',', ':'))}\n\n"
-                    last_cycle = snap["run"]["cycle"]
+                if snap_["run"]["cycle"] != last_cycle or sent % 6 == 0:
+                    yield f"data: {json.dumps(snap_, separators=(',', ':'))}\n\n"
+                    last_cycle = snap_["run"]["cycle"]
                 sent += 1
                 await asyncio.sleep(interval)
 
@@ -233,7 +254,7 @@ def create_app(world: World | None = None, cycles_per_second: float = 4.0, autos
                 return JSONResponse({"error": "the kill-switch is on; reset it first"}, status_code=409)
             state["running"], state["reason"] = True, None
         elif action == "step":
-            step()
+            await asyncio.to_thread(step)
         elif action == "speed" and value:
             state["speed"] = min(50.0, max(0.25, value))
         elif action == "kill":
@@ -244,7 +265,7 @@ def create_app(world: World | None = None, cycles_per_second: float = 4.0, autos
             state["reason"] = None
         else:
             return JSONResponse({"error": f"unknown action {action}"}, status_code=400)
-        return snapshot(state)["run"]
+        return (await snap())["run"]
 
     return app
 

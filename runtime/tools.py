@@ -1,0 +1,82 @@
+"""The steward's tools: the actions executor, described for a model.
+
+Sorted by name and never generated per turn, so the tool list is byte-identical on every call and
+sits inside the cached prefix. Two tools belong to the runtime rather than the executor:
+`commission` (a member writes a draft) and `end_turn`.
+
+Descriptions are the only instructions a tool gets, so each says what it does, what it costs,
+and when it will be refused.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+
+def _obj(props: dict[str, Any], required: list[str]) -> dict[str, Any]:
+    return {"type": "object", "properties": props, "required": required, "additionalProperties": False}
+
+
+S = {"type": "string"}
+I = {"type": "integer"}
+N = {"type": "number"}
+B = {"type": "boolean"}
+IDS = {"type": "array", "items": {"type": "string"}}
+
+_TOOLS: list[dict[str, Any]] = [
+    {"name": "accept_merge", "description": "Accept a merge offer addressed to you: the proposer's members, purse, "
+     "capabilities and playbooks join your community. Refused if they still have work in flight or the total would "
+     "exceed the member limit.", "input_schema": _obj({"proposal_id": S}, ["proposal_id"])},
+    {"name": "announce", "description": "Offer a part of a job you are prime on to other communities. Bids arrive "
+     "from their next turns. max_price is the most you'll pay (µcr); advance_frac (0 to 1) is paid on award. Free "
+     "to post but rate-limited by your standing.", "input_schema": _obj(
+        {"job_id": S, "capability": S, "max_price": I, "advance_frac": N}, ["job_id", "capability", "max_price", "advance_frac"])},
+    {"name": "attest", "description": "Rate the prime of a closed contract where you were the contractor: 1.0 good "
+     "counterparty, 0.0 bad. Once per contract.", "input_schema": _obj({"contract_id": S, "outcome": N}, ["contract_id", "outcome"])},
+    {"name": "award", "description": "Award one of your announcements to a bidder. Pays the advance immediately. "
+     "Not allowed in the cycle you announced.", "input_schema": _obj({"contract_id": S, "bidder": S}, ["contract_id", "bidder"])},
+    {"name": "bid", "description": "Bid on another community's open contract for a capability you have. Uses one "
+     "capacity. price in µcr, at most the contract's max.", "input_schema": _obj({"contract_id": S, "price": I}, ["contract_id", "price"])},
+    {"name": "claim", "description": "Take a job from the board and become its prime. Uses one capacity. You must "
+     "submit every part by the job's deadline.", "input_schema": _obj({"job_id": S}, ["job_id"])},
+    {"name": "commission", "description": "Have an awake member write the work for a part, for a job you are prime "
+     "on (ref = job id) or a contract you won (ref = contract id). Returns a draft id and a preview. Costs a model "
+     "call, charged to your purse. Optionally pass playbook_id to work from a library playbook; the draft then "
+     "cites it. Use the draft with do_part or deliver.", "input_schema": _obj(
+        {"ref": S, "capability": S, "instructions": S, "playbook_id": S}, ["ref", "capability", "instructions"])},
+    {"name": "deliver", "description": "Deliver a draft for a contract you won. Uses one capacity. The prime then "
+     "reviews it.", "input_schema": _obj({"contract_id": S, "draft_id": S}, ["contract_id", "draft_id"])},
+    {"name": "dispute", "description": "Take a rejection of your delivery to a paid audit by the grader. If the work "
+     "passes, the prime pays what it owed plus the fee; if not, you lose the fee and standing.",
+     "input_schema": _obj({"contract_id": S, "reason": S}, ["contract_id", "reason"])},
+    {"name": "do_part", "description": "Submit a draft as a part of a job you are prime on, for a capability you "
+     "have. Uses one capacity. When every part is in, the job goes to the grader.",
+     "input_schema": _obj({"job_id": S, "capability": S, "draft_id": S}, ["job_id", "capability", "draft_id"])},
+    {"name": "end_turn", "description": "Finish your turn.", "input_schema": _obj({}, [])},
+    {"name": "fork", "description": "Split `members` of your members off into a new community called `name` with "
+     "the listed capabilities (a subset of yours) and a share of your purse. Uses one capacity.",
+     "input_schema": _obj({"name": S, "members": I, "capabilities": IDS, "charter": S}, ["name", "members", "capabilities", "charter"])},
+    {"name": "learn", "description": "Buy a capability you lack. Expensive, and more so the more you have. Cheaper "
+     "with a playbook_id for that capability, whose author earns a royalty. Uses one capacity.",
+     "input_schema": _obj({"capability": S, "playbook_id": S}, ["capability"])},
+    {"name": "note", "description": "Write a short journal entry for your future turns (max 500 characters). Free.",
+     "input_schema": _obj({"text": S}, ["text"])},
+    {"name": "propose_merge", "description": "Offer to merge your community into `target`. They must accept. Uses "
+     "one capacity.", "input_schema": _obj({"target": S}, ["target"])},
+    {"name": "propose_spawn", "description": "Ask to add a member with the given role. Needs a second from another "
+     "community within a few cycles; the spawn fee is charged then. Uses one capacity.",
+     "input_schema": _obj({"role": S}, ["role"])},
+    {"name": "publish", "description": "Publish a playbook for a capability you have: a title and the method as "
+     "text. Costs the publish fee. You earn royalties when paid work cites it.",
+     "input_schema": _obj({"capability": S, "title": S, "text": S}, ["capability", "title", "text"])},
+    {"name": "read_playbook", "description": "Read a playbook's full text. Free.", "input_schema": _obj({"playbook_id": S}, ["playbook_id"])},
+    {"name": "retire", "description": "Drop one member. No refund.", "input_schema": _obj({}, [])},
+    {"name": "review", "description": "Review a delivery on your contract: accept pays the remainder; reject pays "
+     "nothing more (the contractor may dispute).", "input_schema": _obj(
+        {"contract_id": S, "accept": B, "reason": S}, ["contract_id", "accept", "reason"])},
+    {"name": "second_spawn", "description": "Second another community's spawn request. Free.",
+     "input_schema": _obj({"proposal_id": S}, ["proposal_id"])},
+]
+
+TOOLS: list[dict[str, Any]] = sorted(_TOOLS, key=lambda t: t["name"])
+NAMES = frozenset(t["name"] for t in TOOLS)

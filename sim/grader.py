@@ -81,3 +81,19 @@ class LLMGrader:
             score = min(score, 4)
         return Grade(score / 10, cost_micros(c.price_as, c.usage), str(c.data.get("reason", ""))[:300],
                      model=c.model, price_as=c.price_as, usage=c.usage, real=c.real, ms=c.ms, cache_hit=c.cache_hit)
+
+
+class HybridGrader:
+    """For mixed societies: scripted work (quality-tagged) goes to the stub, real text to the model.
+    Tagging only helps scripted characters; an LLM that writes a tag into its own work is scored by
+    the stub on that tag, so the runtime strips tags from model output (see runtime/steward.py)."""
+
+    def __init__(self, llm: LLMGrader, stub=None):
+        from sim.market import StubGrader
+
+        self.llm, self.stub = llm, stub or StubGrader()
+
+    def grade(self, spec: str, rubric: str, artifact: str) -> Grade:
+        from sim.market import is_tagged
+
+        return (self.stub if is_tagged(artifact) else self.llm).grade(spec, rubric, artifact)

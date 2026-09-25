@@ -86,8 +86,8 @@ Commons replaces the planner with **a market and a reputation**:
 | 1.1 | Turn-based engine: communities act through tools, and contracts span cycles | ✅ Done 25 Sep |
 | 1.2 | Spawn, retire, fork, merge, learn; playbooks; disputes and audits | ✅ Done 25 Sep |
 | 1.3 | LLM grader, model backends (structured output), calibration set | ✅ Done 25 Sep; local Hermes 8B scores 8/9 and resists injection; Anthropic calibration optional |
-| 1.4 | LLM agent runtime: steward tool loop, members, observation renderer | ⏳ Next |
-| 1.5 | Live runs: local first, then Anthropic with a spend cap | Planned |
+| 1.4 | LLM agent runtime: steward tool loop, members, observation renderer, live runner | ✅ Done 25 Sep (tested with fake models) |
+| 1.5 | Live runs: local first, then Anthropic with a spend cap | ⏳ Next |
 | 2 | One real channel: digital products, a storefront, Stripe, the human gate | Planned |
 | 3 | More channels: content, services, affiliate | Planned |
 | 4 | On-chain settlement (Coinbase Agentic Wallets, x402) | Planned |
@@ -316,7 +316,12 @@ deadlines). Nothing below the society layer can assign work to a community that 
 | `sim/population.py` | 229 | Spawn, retire, fork, merge, learn, proposal expiry |
 | `sim/grader.py` | ~70 | `LLMGrader`: rubric grading with structured output; untrusted work fenced |
 | `sim/calibration.py`, `sim/calibrate.py` | ~150 | Hand-labelled grader check and its command-line runner |
-| `runtime/backends.py` | ~190 | `ModelBackend`: Anthropic, LM Studio, fake; usage and real/notional on every call |
+| `runtime/backends.py` | ~330 | `ModelBackend`: `structured` and `chat` for Anthropic, LM Studio and fake; usage and real/notional on every call |
+| `runtime/render.py` | ~170 | The frozen preamble, the charter block, and the observation renderer (untrusted content fenced) |
+| `runtime/tools.py` | ~110 | The 21 steward tools, sorted and stable |
+| `runtime/steward.py` | ~210 | `LLMStrategy`: the steward loop, members via `commission`, drafts, metering, transcripts |
+| `runtime/fakes.py` | ~35 | A fake steward and grade for dry runs and tests |
+| `sim/live.py` | ~110 | Runs an LLM society with limits; `--serve` for the dashboard |
 | `console/app.py` | 252 | Snapshot builder, SSE stream, controls, drill-down, memory guard |
 | `console/dashboard.html` | 318 | The dashboard page (vanilla JS, no build step) |
 | `console/host.py` | 51 | Process and system memory, CPU, LM Studio status |
@@ -750,7 +755,7 @@ Findings:
   - Remaining weaknesses: word counting (it's poor at counting words) and subjective rubric lines.
 - The rotating grader panel waits until gaming shows up (§17).
 
-### 1.4: LLM agent runtime
+### 1.4: LLM agent runtime (built 25 Sep)
 - **One runtime for every agent:** the Messages API with our own tool loop. Each `ActionsAPI` method
   becomes a tool, sorted and stable.
 - **Prompt layout:** a frozen protocol preamble and the community's charter first (cached), with the
@@ -973,6 +978,9 @@ uv run python -m sim 200                   # scripted society, 200 cycles, summa
 uv run python -m sim 2000 --no-verify      # faster (skips signature checks)
 uv run python -m sim 200 --no-rep          # control run: reputation disabled
 uv run uvicorn console.app:app             # dashboard at http://localhost:8000 (Ctrl-C to stop)
+uv run python -m sim.live --backend fake   # dry run of an LLM society (free)
+uv run python -m sim.live --backend lmstudio --model <id> --cycles 10 --serve   # local, watch it live
+uv run python -m sim.calibrate --backend lmstudio --model <id>                  # check a grader
 ```
 
 **Resource rules** (from the checklist, after the 24 Sep restart):
@@ -997,6 +1005,7 @@ uv run uvicorn console.app:app             # dashboard at http://localhost:8000 
 | `test_phase0_acceptance.py` | Over 5 seeds × 200 cycles: the ledger balances; the defector's reputation and allowance fall; defection doesn't pay; the free-rider starves; cooperators prosper; the control run shows the mechanism works; royalties cross communities |
 | `test_console.py` | Dashboard API, controls, kill-switch, memory guard, drill-down, stream, bounded snapshot size, real money kept separate |
 | `test_grader.py` | Grader scoring and fencing, backend request shapes (no network), real vs notional grading costs, outage retries, the real kill-switch, the calibration set's own validity |
+| `test_steward.py` | The LLM runtime end to end with fake models: claim → commission → submit → graded → paid; refusals; round and money limits; prompt-prefix stability; untrusted marking; smuggled quality tags; fork copies; Anthropic and LM Studio message translation |
 | `test_redis_bus.py` | The Redis backend (skipped if Redis isn't running) |
 
 **The rule:** any change to an incentive rule must keep `test_phase0_acceptance.py` green. If it goes

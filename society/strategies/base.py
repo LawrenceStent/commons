@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import random
 
-from sim.market import StubGrader, tagged
+from sim.market import StubGrader, is_tagged, tagged
 from society.observation import ActionsAPI, BidView, ContractView, JobView, Observation
 
 _read = StubGrader()
@@ -84,7 +84,9 @@ class Strategy:
                 self.markup = max(1.1, self.markup * 0.98)
 
     def review(self, obs: Observation, act: ActionsAPI, c: ContractView) -> None:
-        ok = quality_of(c.artifact) >= 0.5
+        # Scripted characters can only read quality tags. Real (untagged) work from an LLM contractor
+        # is accepted: the prime already chose to trust this bidder, and the grader judges the job.
+        ok = quality_of(c.artifact) >= 0.5 if is_tagged(c.artifact) else True
         act.review(c.id, ok, "" if ok else "below the rubric")
 
     def deliver(self, obs: Observation, act: ActionsAPI, c: ContractView) -> None:
@@ -93,7 +95,8 @@ class Strategy:
 
     def rate(self, obs: Observation, act: ActionsAPI, c: ContractView) -> None:
         """Truthfully: a prime that paid, or fairly rejected bad work, was a good counterparty."""
-        fair = c.status == "accepted" or (c.status == "rejected" and quality_of(c.artifact) < 0.5) or c.status == "failed"
+        fair = (c.status == "accepted" or c.status == "failed"
+                or (c.status == "rejected" and is_tagged(c.artifact) and quality_of(c.artifact) < 0.5))
         act.attest(c.id, 1.0 if fair else 0.0)
 
     def award(self, obs: Observation, act: ActionsAPI, c: ContractView) -> None:

@@ -269,13 +269,37 @@ Moving from one-shot contracts to contracts that span cycles broke the economy f
 - [x] Grading cost charged to the treasury (notional 2k/part in scripted runs; the prime pays if the treasury is empty)
 
 ### 1.4 LLM agent runtime
-- [ ] Frozen protocol preamble + per-community charter, cached; tools sorted and stable
-- [ ] Observation renderer (volatile content, last)
-- [ ] Steward loop: tool calls → actions executor, bounded rounds, per-turn token budget
-- [ ] Members: `commission` tool runs a Haiku call that produces an artifact (uses capacity)
-- [ ] Every call metered from `response.usage`; kill-switch in real dollars
-- [ ] `ModelBackend`: add tool-calling turns for stewards (structured output landed in 1.3)
-- [ ] Fake client so the whole loop is tested without spending anything
+- [x] Frozen protocol preamble + per-community charter, cached as two system blocks; 21 tools sorted and
+      stable (`runtime/render.py`, `runtime/tools.py`). The preamble explains rules and costs; it never says "cooperate"
+- [x] Observation renderer: volatile content last; money in integer µcr; anything written by another
+      community wrapped in `<untrusted>`
+- [x] Steward loop (`runtime/steward.py`): one fresh conversation per turn; tool calls → actions executor;
+      refusals come back as errors the model reads; at most 8 rounds and 80k tokens a turn; the turn ends
+      if the purse can't pay for the next call; transcript kept for the dashboard
+- [x] Members: `commission` runs a member call that writes a draft (D1, D2, …); `do_part`/`deliver` submit
+      drafts by id so artifacts never pass back through the steward; commissioning from a playbook cites it;
+      at most 2 commissions per awake member per turn; quality tags stripped from model output
+- [x] Every call metered from usage via `act.record_call` (purse, notional) and in USD when real; `llm.call`
+      telemetry per call; the real-dollar kill-switch applies
+- [x] `ModelBackend.chat`: neutral conversation format; Anthropic replays the model's own content blocks
+      unchanged (thinking-safe) and groups tool results in one message; LM Studio uses OpenAI-style function calls
+- [x] Fake client (`runtime/fakes.py`): `tests/test_steward.py` runs claim → commission → do_part → grade → paid
+      end to end, plus refusals, round limits, empty purse, prefix stability, untrusted marking, backend
+      translation
+- [x] `HybridGrader` for mixed societies (tagged scripted work → stub, real text → model); scripted reviewers
+      accept untagged work from bidders they already trusted (they can't read real work: a known limitation)
+- [x] Console steps the world in a worker thread under a lock (slow LLM cycles don't freeze the page);
+      `stop_at` cycle limit; drill-down shows the last LLM turn
+- [x] `python -m sim.live --backend fake|lmstudio|anthropic [--serve]`: 2 LLM communities (studio: design+write,
+      lab: research+build), a scripted cooperator and the defector; cycle, wall-clock and real-dollar limits;
+      ledger in runs/
+
+#### 1.4 notes
+- **Upkeep and token costs both apply to LLM communities** for now: upkeep is the cost of keeping members
+  available, and tokens are the cost of thinking. That makes LLM communities poorer than scripted peers until
+  1.5 calibrates rewards against measured token cost.
+- **A mid-turn view matters.** The first build looked up jobs in the start-of-turn observation, so a job
+  claimed earlier in the same turn couldn't be commissioned. `act.observe()` gives the runtime a fresh view.
 
 ### 1.5 Live run (local model first: free; Anthropic later needs a key and a spend approval)
 - [ ] Local smoke run on LM Studio: does the model call tools reliably enough to trade?

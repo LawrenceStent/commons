@@ -109,6 +109,15 @@ class Grader(Protocol):
 _TAG = re.compile(r"<q=([0-9.]+)>")
 
 
+def is_tagged(artifact: str | None) -> bool:
+    return bool(_TAG.search(artifact or ""))
+
+
+def strip_tags(text: str) -> str:
+    """Model-written work must never carry a scripted quality tag, or the hybrid grader would believe it."""
+    return _TAG.sub("", text)
+
+
 def tagged(quality: float, body: str = "") -> str:
     return f"<q={quality:.3f}>{body}"
 

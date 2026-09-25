@@ -24,7 +24,7 @@ Money in this world is created money (SIM credits); see substrate/ledger.py.
 from __future__ import annotations
 
 import random
-from collections import Counter, deque
+from collections import Counter, defaultdict, deque
 from dataclasses import dataclass, field
 
 from protocol import Envelope, Message
@@ -184,6 +184,7 @@ class World:
         self.royalties_paid: dict[str, int] = {}
         self.proposals: dict[str, Proposal] = {}
         self.awaiting_grade: dict[str, int] = {}  # job id -> failed grading attempts
+        self.transcripts: defaultdict[str, deque] = defaultdict(lambda: deque(maxlen=2))  # LLM turns, newest last
         self.known_capabilities = set(CAPABILITIES).union(*(c.capabilities for c in self.communities.values()))
         self._job_seq = self._proposal_seq = 0
         self._stats: dict[str, Counter] = {}

@@ -298,6 +298,10 @@ async function drill(name) {
     <p class="muted">${esc(d.charter)} · purse ${amt(d.purse)}</p>
     <h2>Journal</h2>${d.journal.length ? `<pre>${esc(d.journal.join("\n"))}</pre>` : empty("No notes yet. Scripted communities don't keep a journal.")}
     <h2 style="margin-top:12px">Waiting for its next turn</h2>${d.inbox.length ? `<pre>${d.inbox.map(e => `${String(e.cycle).padStart(6)} ${esc(e.kind).padEnd(10)} ${esc(e.text)}`).join("\n")}</pre>` : empty("Nothing new.")}
+    ${d.transcripts && d.transcripts.length ? `<h2 style="margin-top:12px">Last turn (cycle ${d.transcripts.at(-1).cycle})</h2><pre>${
+      d.transcripts.at(-1).entries.map(e => e.kind === "tool"
+        ? `${e.ok ? "✓" : "✗"} ${esc(e.name)} ${esc(JSON.stringify(e.input))}\n    → ${esc(e.result)}`
+        : e.kind === "say" ? `“${esc(e.text)}”` : `! ${esc(e.text)}`).join("\n")}</pre>` : ""}
     <h2 style="margin-top:12px">Recent activity</h2>
     <pre>${d.events.map(e => `${String(e.cycle ?? "").padStart(6)} ${esc(e.kind).padEnd(18)} ${esc(JSON.stringify(Object.fromEntries(Object.entries(e).filter(([k]) => !["seq", "kind", "cycle"].includes(k))))).slice(0, 160)}`).join("\n") || "(nothing recent)"}</pre>`;
   $("drill").className = "on";
