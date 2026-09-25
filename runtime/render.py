@@ -152,4 +152,6 @@ def render(obs: Observation) -> str:
                       + ", ".join(f"{c} (your trust {t:.2f})" for c, t in q.trust.items()) for q in obs.peers])
     section("LIBRARY (playbooks)", [f"  {b.id} {b.capability} by {b.author}, used {b.uses}×: {_u(b.title, 120)}"
                                     for b in obs.library], "empty")
+    s += ["", "This is your situation, not a question. Nobody will answer you. Act now by calling tools, "
+              "using the exact ids shown above; call end_turn when you are done."]
     return "\n".join(s)

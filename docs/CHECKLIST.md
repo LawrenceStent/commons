@@ -302,7 +302,36 @@ Moving from one-shot contracts to contracts that span cycles broke the economy f
   claimed earlier in the same turn couldn't be commissioned. `act.observe()` gives the runtime a fresh view.
 
 ### 1.5 Live run (local model first: free; Anthropic later needs a key and a spend approval)
-- [ ] Local smoke run on LM Studio: does the model call tools reliably enough to trade?
+- [x] Local smoke run on LM Studio (25 Sep): **no small local model can trade.** Details below
+- [ ] Try a capable local model (Qwen 3.5 35B-A3B is downloaded and tool-capable, but 22 GB: over the
+      guardrail, so it needs your OK), or go to the Anthropic smoke run
+
+#### 1.5 local smoke findings (25 Sep)
+Setup: 2 LLM communities (studio, lab), a scripted cooperator and the defector, 10 cycles, Hermes 3 8B grading.
+- **LM Studio silently drops tools for models it doesn't mark tool-capable.** Hermes 3 8B got no tools (41
+  input tokens) and wrote plans as prose. Fixed: `LMStudioBackend` checks capabilities and raises a clear
+  error. Tool-capable downloads: Dolphin X1 Trinity Nano, LFM 2.5 1.2B, Qwen 3.5 35B-A3B.
+- **Dolphin Trinity Nano (3.2 GB)** receives the tools but never calls them, even for one tool and a direct
+  order. As a grader it passed everything (4/9, fell for the injection).
+- **LFM 2.5 1.2B (1.25 GB)** calls tools correctly in isolation, but in the game:
+  - it confuses ids (bids on job ids, announces parts of jobs it doesn't own)
+  - it invents arguments
+  - from cycle 4 on it answers the observation in prose ("I need clarification…")
+  - it never commissions work, so no LLM job was completed
+- **Two runtime fixes that help any model:** the observation now ends "This is your situation, not a
+  question… act now by calling tools"; a prose reply without tool calls gets one reminder. With both,
+  7 of 19 turns acted (up from 4 of 20), and the lab won a contract. Still no work produced.
+- **Claim hoarding.** In one turn, studio claimed 5 jobs with money for none. Nothing in the executor
+  stops it; scripted strategies police themselves with `free()`. Mechanism to decide: a claim bond forfeited
+  on failure, or a cap on open claims per awake member.
+- **Measured cost of thinking:** about 4,200 input tokens per steward call (preamble, tools, observation;
+  no local caching), about 4,500 µcr at Haiku's notional price. Several calls a turn make thinking cost
+  more than upkeep. Studio spent 99k µcr on thinking and 40k on upkeep in 10 cycles against an
+  80k-µcr job reward. Rewards must be recalibrated before any LLM community can break even.
+- **Observability added:** every LLM turn emits `llm.turn` telemetry, and `sim.live` writes all turns to
+  `runs/*.turns.jsonl`. The in-memory transcript (last 2 turns) was too short to diagnose anything.
+- The runtime itself held up: every mistake came back as a readable refusal, nothing crashed, and the
+  ledger balanced in every run.
 - [ ] Short smoke run (~10 cycles) with a hard ceiling; check cache hit rate and cost per turn
 - [ ] Calibrate market rewards against measured token cost
 - [ ] Full run: two LLM seed communities + scripted defector; watch for spawn, fork, royalty

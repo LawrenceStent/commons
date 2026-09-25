@@ -69,6 +69,7 @@ class LLMStrategy(Strategy):
         messages: list[dict[str, Any]] = [{"role": "user", "text": render(obs)}]
         log: list[dict[str, Any]] = []
         spent = 0
+        nudged = False
         self._commissions = 0
         for _ in range(self.max_rounds):
             try:
@@ -87,7 +88,14 @@ class LLMStrategy(Strategy):
             if t.text.strip():
                 log.append({"kind": "say", "text": t.text.strip()[:1000]})
             if not t.tool_calls:
-                break
+                if nudged or t.stop == "max_tokens":
+                    break
+                # small models often answer the observation in prose; nothing happens without a tool call
+                nudged = True
+                messages.append({"role": "user", "text": "You replied without calling any tool, so nothing happened. "
+                                 "Act by calling tools now, or call end_turn if there is nothing worth doing."})
+                log.append({"kind": "error", "text": "no tool call; reminded once"})
+                continue
             results, done = [], False
             for call in t.tool_calls:
                 if call.name == "end_turn":

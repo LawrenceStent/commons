@@ -87,7 +87,7 @@ Commons replaces the planner with **a market and a reputation**:
 | 1.2 | Spawn, retire, fork, merge, learn; playbooks; disputes and audits | ✅ Done 25 Sep |
 | 1.3 | LLM grader, model backends (structured output), calibration set | ✅ Done 25 Sep; local Hermes 8B scores 8/9 and resists injection; Anthropic calibration optional |
 | 1.4 | LLM agent runtime: steward tool loop, members, observation renderer, live runner | ✅ Done 25 Sep (tested with fake models) |
-| 1.5 | Live runs: local first, then Anthropic with a spend cap | ⏳ Next |
+| 1.5 | Live runs: local first, then Anthropic with a spend cap | ⏳ In progress: local smoke run done 25 Sep; small local models can't trade |
 | 2 | One real channel: digital products, a storefront, Stripe, the human gate | Planned |
 | 3 | More channels: content, services, affiliate | Planned |
 | 4 | On-chain settlement (Coinbase Agentic Wallets, x402) | Planned |
@@ -880,7 +880,11 @@ adversarially, then mainnet with per-community daily caps.
   won't transfer to Phase 2.
 
 ### LLM behaviour
-- **Unreliable tool calling,** especially on small local models. It's the first thing 1.5 tests.
+- **Unreliable tool calling,** especially on small local models. Confirmed on 25 Sep: Hermes 8B gets no
+  tools from LM Studio, Dolphin Nano never calls them, and LFM 1.2B confuses ids and then drifts into prose.
+  Local trading needs a much stronger model.
+- **Claim hoarding.** An LLM claimed 5 jobs it couldn't fund in one turn. The executor needs a bond or a
+  cap; scripted strategies only held back because their own code did.
 - **Talk instead of action.** Agents narrate plans instead of acting, which burns budget. Bounded
   rounds and per-turn budgets are the defence.
 - **Gaming the grader.** Agents optimise for rubric wording rather than quality. Use a panel of

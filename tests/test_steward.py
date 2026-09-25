@@ -174,6 +174,7 @@ def test_lmstudio_chat_translates_tool_calls_both_ways():
                 {"id": "x1", "type": "function", "function": {"name": "bid", "arguments": '{"contract_id": "C1", "price": 9}'}}]}}]}, 12
 
     b._post = fake_post
+    b._tool_capable["hermes"] = True
     t = b.chat(model="hermes", system=["a", "b"], tools=TOOLS, messages=[
         {"role": "user", "text": "obs"},
         {"role": "assistant", "text": "", "tool_calls": [ToolCall("x0", "claim", {"job_id": "J1"})]},
@@ -183,3 +184,33 @@ def test_lmstudio_chat_translates_tool_calls_both_ways():
     assert sent["messages"][2]["tool_calls"][0]["function"]["name"] == "claim"
     assert sent["messages"][3] == {"role": "tool", "tool_call_id": "x0", "content": "claimed"}
     assert sent["tools"][0]["type"] == "function"
+
+
+def test_lmstudio_refuses_tools_for_a_model_that_cannot_use_them():
+    import pytest
+    from runtime.backends import ModelError
+
+    b = LMStudioBackend()
+    b._tool_capable["plain-model"] = False
+    with pytest.raises(ModelError, match="tool use"):
+        b.chat(model="plain-model", system=["s"], messages=[{"role": "user", "text": "x"}], tools=TOOLS)
+
+
+def test_a_prose_reply_gets_one_reminder_then_the_turn_ends():
+    def chatty(system, messages, tools):
+        if tools is None:
+            return {"text": "work"}
+        return {"text": "I would like clarification about my situation."}
+
+    w, backend = llm_world(chatty)
+    w.step()
+    steward_calls = [c for c in backend.chats if c[2] is not None]
+    assert len(steward_calls) == 2  # the reply, one reminder, then stop
+    assert "without calling any tool" in steward_calls[1][1][-1]["text"]
+    assert w.hub.recent("llm.turn")[-1].fields["tools"] == 0
+
+
+def test_the_observation_ends_by_saying_it_is_not_a_question():
+    w, _ = llm_world()
+    w.step()
+    assert render(w.observe(w.communities["llm-a"])).rstrip().endswith("call end_turn when you are done.")

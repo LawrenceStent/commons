@@ -74,6 +74,21 @@ world = World(Params(seed=a.seed, ledger_path=ledger), population=population,
               grader=HybridGrader(LLMGrader(backend, model=grader)))
 world.meter.real_ceiling = round(a.real_ceiling * 1e6)
 
+# every LLM turn, in full, on disk (the world keeps only the last two per community in memory)
+import json
+
+turns_path = ledger.replace(".sqlite", ".turns.jsonl")
+turns_file = open(turns_path, "a")
+
+
+def log_turn(ev):
+    if ev.kind == "llm.turn":
+        turns_file.write(json.dumps({"cycle": ev.cycle, **ev.fields}) + "\n")
+        turns_file.flush()
+
+
+world.hub.subscribe(log_turn)
+
 if a.serve:
     import uvicorn
 
@@ -105,4 +120,11 @@ cached = sum(e.fields.get("cache_read", 0) for e in calls)
 print(f"\nmodel calls: {dict(by)}")
 print(f"tokens in {tok_in:,} (cached {cached / tok_in:.0%}) · out {tok_out:,}" if tok_in else "no model calls")
 print(f"notional cost {sum(e.fields['cost'] for e in calls) / 1e6:.4f} cr · real ${world.ledger.real()['api_spend'] / 1e6:.4f}")
-print(f"ledger: {ledger}")
+turns = world.hub.recent("llm.turn", n=world.hub.ring)
+if turns:
+    acted = sum(e.fields["tools"] > 0 for e in turns)
+    ok = sum(e.fields["ok"] for e in turns)
+    total = sum(e.fields["tools"] for e in turns)
+    print(f"turns {len(turns)}: {acted} used tools · tool calls {total} ({ok} succeeded) · "
+          f"most used {Counter(n for e in turns for n in e.fields['names']).most_common(6)}")
+print(f"ledger: {ledger} · turns: {turns_path}")

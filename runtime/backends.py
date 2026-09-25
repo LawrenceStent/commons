@@ -218,6 +218,20 @@ class LMStudioBackend:
     def __init__(self, base_url: str = "http://localhost:1234/v1", price_as: str = "claude-haiku-4-5",
                  timeout: float = 180.0):
         self.base_url, self.price_as, self.timeout = base_url.rstrip("/"), price_as, timeout
+        self._tool_capable: dict[str, bool] = {}
+
+    def supports_tools(self, model: str) -> bool:
+        """LM Studio silently drops `tools` for models it doesn't mark tool-capable; the model then
+        writes a plan as prose and nothing happens (found in the first local smoke run). Ask once."""
+        if model not in self._tool_capable:
+            root = self.base_url.rsplit("/v1", 1)[0]
+            try:
+                with urllib.request.urlopen(f"{root}/api/v0/models/{urllib.request.quote(model, safe='')}", timeout=5) as r:
+                    info = json.load(r)
+                self._tool_capable[model] = "tool_use" in (info.get("capabilities") or [])
+            except (OSError, ValueError):
+                return True  # can't tell (older LM Studio): let the call go ahead
+        return self._tool_capable[model]
 
     def structured(self, *, model, system, prompt, schema, max_tokens=1024) -> Completion:
         body = {
@@ -241,6 +255,9 @@ class LMStudioBackend:
         return Completion(_check(data, schema), usage, r.get("model", model), self.price_as, False, ms, text)
 
     def chat(self, *, model, system, messages, tools=None, max_tokens=4096) -> Turn:
+        if tools and not self.supports_tools(model):
+            raise ModelError(f"LM Studio doesn't give {model} tool use, so it can't act. Load a tool-capable model "
+                             f"(`curl localhost:1234/api/v0/models` lists capabilities)")
         wire: list[dict[str, Any]] = [{"role": "system", "content": "\n\n".join(system)}]
         for m in messages:
             if m["role"] == "user":
