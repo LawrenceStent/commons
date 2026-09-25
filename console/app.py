@@ -70,7 +70,8 @@ def snapshot(state: dict) -> dict:
     posts = [_ev(e) for e in hub.recent("ledger.post", n=hub.ring)]
     flows: Counter[str] = Counter()
     for p in posts:
-        flows[p["kind"]] += sum(n for _, n in p["legs"] if n > 0)
+        if p["currency"] == w.ledger.currency:  # never add real dollars and credits together
+            flows[p["kind"]] += sum(n for _, n in p["legs"] if n > 0)
 
     llm = [_ev(e) for e in hub.recent("llm.call", n=hub.ring)]
     grades = [_ev(e) for e in hub.recent("grader.grade", n=hub.ring)]
@@ -85,6 +86,8 @@ def snapshot(state: dict) -> dict:
             "spent_today": w.meter._spent_today, "ceiling": w.meter.daily_ceiling,
             "rss_limit": state["rss_limit"],
         },
+        "money": {"currency": w.ledger.currency, "real": w.ledger.real(),
+                  "real_spent_today": w.meter.real_spent_today, "real_ceiling": w.meter.real_ceiling},
         "treasury_series": _downsample([[e.cycle, e.fields["treasury"]] for e in cycles]),
         "communities": communities,
         "reputation": {"names": names, "trust": trust,

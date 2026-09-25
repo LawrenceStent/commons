@@ -70,3 +70,14 @@ def test_snapshot_stays_bounded_over_a_long_run():
         sizes.append(len(json.dumps(snapshot(state))))
     assert all(len(r) <= 200 for r in w.hub._rings.values())
     assert sizes[1] < sizes[0] * 1.5, sizes
+
+
+def test_dashboard_separates_real_money_from_credits():
+    w = World(Params(seed=0)).run(3)
+    w.meter.real_ceiling = 10**9
+    from substrate.meter import Usage
+    w.meter.charge_usage("coop-a", "claude-haiku-4-5", Usage(input_tokens=1000), cycle=w.cycle, real=True)
+    snap = snapshot({"world": w, "running": False, "speed": 4, "reason": None, "rss_limit": 1})
+    assert snap["money"]["currency"] == "SIM"
+    assert snap["money"]["real"] == {"capital_in": 1000, "revenue": 0, "api_spend": 1000, "fees": 0}
+    assert snap["ledger"]["flows"].get("api", 0) == 0  # the real bill isn't mixed into credit flows

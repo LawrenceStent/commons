@@ -44,6 +44,8 @@ th { font-size:11px; color:var(--muted); font-weight:600; }
 .stat span { font-size:11px; color:var(--muted); }
 button, select { font:inherit; padding:3px 10px; border:1px solid var(--rule); background:var(--card); color:var(--fg); cursor:pointer; }
 button.danger { color:var(--bad); border-color:var(--bad); }
+.money { margin-top:10px; padding:8px 10px; border:1px solid var(--rule); border-left:3px solid var(--good); display:grid; gap:6px; }
+.money .stat b { font-size:15px; }
 #banner { display:none; padding:6px 10px; border:1px solid var(--warn); color:var(--warn); }
 #banner.on { display:block; }
 a.c { color:inherit; text-decoration:underline dotted; cursor:pointer; }
@@ -80,12 +82,22 @@ pre { margin:0; font:12px/1.55 ui-monospace,Menlo,monospace; white-space:pre-wra
       <button data-a="reset-kill">reset kill</button>
     </div>
     <div id="banner" style="margin-top:10px"></div>
+    <div class="money">
+      <div><b>Real money</b> <span class="muted">USD · traced to something outside</span></div>
+      <div class="stats">
+        <div class="stat"><b id="r-capital">–</b><span>capital you put in</span></div>
+        <div class="stat"><b id="r-revenue">–</b><span>customer revenue</span></div>
+        <div class="stat"><b id="r-api">–</b><span>real API spend</span></div>
+        <div class="stat"><b id="r-today">–</b><span>real spend today / kill-switch</span></div>
+      </div>
+      <div id="r-note" class="muted"></div>
+    </div>
     <div class="stats" style="margin-top:10px">
       <div class="stat"><b id="s-cycle">–</b><span>cycle</span></div>
-      <div class="stat"><b id="s-treasury">–</b><span>treasury</span></div>
+      <div class="stat"><b id="s-treasury">–</b><span id="treasury-label">treasury</span></div>
       <div class="stat"><svg id="treasury-spark" class="spark" width="220" height="38"></svg><span>treasury, recent cycles</span></div>
       <div class="stat"><b id="s-jobs">–</b><span>jobs paid / attempted</span></div>
-      <div class="stat"><b id="s-spend">–</b><span>compute today / ceiling</span></div>
+      <div class="stat"><b id="s-spend">–</b><span>notional compute today / ceiling</span></div>
       <div class="stat"><b id="s-rss">–</b><span>console process memory</span></div>
     </div>
   </section>
@@ -114,7 +126,11 @@ pre { margin:0; font:12px/1.55 ui-monospace,Menlo,monospace; white-space:pre-wra
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const usd = m => (m < 0 ? "−$" : "$") + (Math.abs(m) / 1e6).toLocaleString(undefined, {minimumFractionDigits:3, maximumFractionDigits:3});
+const fmt3 = m => (Math.abs(m) / 1e6).toLocaleString(undefined, {minimumFractionDigits:3, maximumFractionDigits:3});
+const usd = m => (m < 0 ? "−$" : "$") + fmt3(m);          // real money, and only real money
+const cr = m => (m < 0 ? "−" : "") + fmt3(m) + " cr";      // created (SIM) money
+let CUR = "SIM";
+const amt = m => CUR === "USD" ? usd(m) : cr(m);
 const mb = b => (b / 2**20).toLocaleString(undefined, {maximumFractionDigits:0}) + " MB";
 const gb = b => (b / 2**30).toFixed(1) + " GB";
 const tone = s => s == null ? "" : s < 0.35 ? "bad" : s > 0.7 ? "good" : "";
@@ -148,13 +164,22 @@ function spark(svg, pts, fmt, xLabel = "cycle") {
 
 function render(s) {
   const r = s.run;
+  const $m = s.money; CUR = $m.currency;
+  $("r-capital").textContent = usd($m.real.capital_in);
+  $("r-revenue").textContent = usd($m.real.revenue);
+  $("r-api").textContent = usd($m.real.api_spend);
+  $("r-today").textContent = `${usd($m.real_spent_today)} / ${usd($m.real_ceiling)}`;
+  $("r-note").textContent = CUR === "SIM"
+    ? "This society runs on SIM credits (cr): created money that can never become dollars. Only the figures in this box are real."
+    : "This society runs on real dollars: every purse is a share of money that came from you or from customers.";
+  $("treasury-label").textContent = `treasury (${CUR === "SIM" ? "credits" : "USD"})`;
   $("state").textContent = `${r.running ? "running" : "paused"} · ${r.speed} cycles/s · seed ${r.seed}${r.reputation ? "" : " · reputation OFF (control run)"}`;
   $("banner").className = r.pause_reason || r.halted ? "on" : "";
   $("banner").textContent = r.halted ? `Kill-switch is on. ${r.pause_reason || ""}` : (r.pause_reason || "");
   $("s-cycle").textContent = r.cycle.toLocaleString();
-  $("s-treasury").textContent = usd(r.treasury);
+  $("s-treasury").textContent = amt(r.treasury);
   $("s-jobs").textContent = `${r.jobs_done.toLocaleString()} / ${(r.jobs_done + r.jobs_failed).toLocaleString()}`;
-  $("s-spend").textContent = `${usd(r.spent_today)} / ${r.ceiling >= 1e11 ? "none" : usd(r.ceiling)}`;
+  $("s-spend").textContent = `${amt(r.spent_today)} / ${r.ceiling >= 1e11 ? "none" : amt(r.ceiling)}`;
   $("s-rss").textContent = s.host.rss ? `${mb(s.host.rss)} / ${mb(r.rss_limit)}` : "–";
   spark($("treasury-spark"), s.treasury_series, usd);
   if (document.activeElement !== $("speed")) $("speed").value = String(r.speed);
@@ -165,11 +190,11 @@ function render(s) {
       <td><a class="c" data-c="${esc(c.name)}">${esc(c.name)}</a></td><td class="muted">${esc(c.strategy)}</td>
       <td class="muted">${esc(c.capabilities.join(", "))}</td>
       <td class="num">${c.thinking ?? "–"}/${c.members}${c.active === false ? ' <span class="warn">silent</span>' : ""}</td>
-      <td class="num">${c.purse != null ? usd(c.purse) : "–"}</td>
+      <td class="num">${c.purse != null ? amt(c.purse) : "–"}</td>
       <td><svg class="spark" id="sp-${i}" width="130" height="24"></svg></td>
       <td class="num ${tone(c.standing)}">${c.standing?.toFixed(3) ?? "–"}</td>
       <td class="num">${c.allowance ?? "–"}</td><td class="num">${c.won_total}</td><td class="num">${c.ok_total}</td>
-      <td class="num">${usd(c.compute)}</td><td class="num">${usd(c.royalties)}</td>
+      <td class="num">${amt(c.compute)}</td><td class="num">${amt(c.royalties)}</td>
       <td class="num ${c.rate_limited ? "warn" : ""}">${c.rate_limited}</td></tr>`));
   s.communities.forEach((c, i) => spark($("sp-" + i), c.purse_series, usd));
 
@@ -192,19 +217,19 @@ function render(s) {
   $("contracts").innerHTML = (C.window ? hbars(stageOrder.map(k => [k, C.stages[k] || 0]), v => v) : empty("No contracts yet.")) +
     (C.recent.length ? table(["cycle", "capability", "prime", "winner", "#bids", "#price", "#quality", "stage"],
       C.recent.map(c => `<tr><td class="num">${c.cycle}</td><td>${esc(c.capability)}</td><td>${esc(c.prime)}</td><td>${esc(c.winner || "–")}</td>
-        <td class="num">${Object.keys(c.bids).length}</td><td class="num">${c.price != null ? usd(c.price) : "–"}</td>
+        <td class="num">${Object.keys(c.bids).length}</td><td class="num">${c.price != null ? amt(c.price) : "–"}</td>
         <td class="num">${c.quality ?? "–"}</td><td class="${c.stage === "accepted" ? "good" : c.stage === "rejected" ? "bad" : "warn"}">${esc(c.stage)}</td></tr>`)) : "");
 
   const M = s.market;
   $("market").innerHTML = `<p class="mono">paid ${M.done.toLocaleString()} · failed ${M.failed.toLocaleString()}</p>` +
     (M.recent.length ? table(["cycle", "prime", "parts", "#reward", "status"], M.recent.map(j =>
-      `<tr><td class="num">${j.cycle}</td><td>${esc(j.prime)}</td><td class="muted">${esc(j.caps.join("+"))}</td><td class="num">${usd(j.reward)}</td>
+      `<tr><td class="num">${j.cycle}</td><td>${esc(j.prime)}</td><td class="muted">${esc(j.caps.join("+"))}</td><td class="num">${amt(j.reward)}</td>
        <td class="${j.status === "paid" ? "good" : "bad"}">${esc(j.status)}</td></tr>`)) : empty("No jobs yet."));
 
   const L = s.ledger;
   $("ledger-window").textContent = `last ${L.window} entries`;
   $("ledger").innerHTML = hbars(Object.entries(L.flows).sort((a, b) => b[1] - a[1]), usd) +
-    `<p class="mono muted">market paid out ${usd(-L.market)} · compute burned ${usd(-L.compute)}</p>` +
+    `<p class="mono muted">market paid out ${amt(-L.market)} · compute burned ${amt(-L.compute)}</p>` +
     `<pre>${L.recent.slice(0, 8).map(p => `${String(p.cycle).padStart(6)} ${esc(p.kind).padEnd(9)} ${esc(p.memo).slice(0, 24)}`).join("\n")}</pre>`;
 
   const B = s.bus;
@@ -217,14 +242,14 @@ function render(s) {
     `<tr><td class="mono">${esc(p.id)}</td><td>${esc(p.author)}</td><td>${esc(p.capability)}</td><td class="num">${p.uses}</td></tr>`)) : empty("No playbooks published yet.");
 
   const G = s.llm;
-  $("llm").innerHTML = G.calls ? `<p class="mono">${G.calls} calls · ${usd(G.cost)} in the last ${G.recent.length}</p>` +
+  $("llm").innerHTML = G.calls ? `<p class="mono">${G.calls} calls · ${amt(G.cost)} in the last ${G.recent.length}</p>` +
     table(["cycle", "who", "model", "#in", "#out", "#cache %", "#cost", "#ms"], G.recent.map(c => `<tr><td class="num">${c.cycle}</td><td>${esc(c.community)}</td>
       <td class="muted">${esc(c.model)}</td><td class="num">${c.input_tokens}</td><td class="num">${c.output_tokens}</td>
-      <td class="num">${c.cache_hit != null ? Math.round(100 * c.cache_hit) : "–"}</td><td class="num">${usd(c.cost)}</td><td class="num">${c.ms ?? "–"}</td></tr>`))
+      <td class="num">${c.cache_hit != null ? Math.round(100 * c.cache_hit) : "–"}</td><td class="num">${amt(c.cost)}</td><td class="num">${c.ms ?? "–"}</td></tr>`))
     : empty("No model calls yet. Every community is scripted until the LLM runtime lands (1.4).");
 
   $("grader").innerHTML = (s.grader.count ? table(["cycle", "part", "#score", "#cost"], s.grader.recent.map(g =>
-      `<tr><td class="num">${g.cycle}</td><td>${esc(g.part)}</td><td class="num">${g.score.toFixed(2)}</td><td class="num">${usd(g.cost)}</td></tr>`))
+      `<tr><td class="num">${g.cycle}</td><td>${esc(g.part)}</td><td class="num">${g.score.toFixed(2)}</td><td class="num">${amt(g.cost)}</td></tr>`))
       : empty("No grading yet. Scripted runs declare their own quality.")) +
     `<h2 style="margin-top:12px">Gate queue</h2>` + (s.gate.length ? "" : empty("No pending requests. Nothing touches the outside world until Phase 2."));
 
@@ -248,7 +273,7 @@ function render(s) {
 async function drill(name) {
   const d = await (await fetch("/api/community/" + encodeURIComponent(name))).json();
   $("drill").innerHTML = `<div class="bar"><h1>${esc(d.name)}</h1><span style="flex:1"></span><button id="close">close</button></div>
-    <p class="muted">${esc(d.charter)} · purse ${usd(d.purse)}</p>
+    <p class="muted">${esc(d.charter)} · purse ${amt(d.purse)}</p>
     <pre>${d.events.map(e => `${String(e.cycle ?? "").padStart(6)} ${esc(e.kind).padEnd(18)} ${esc(JSON.stringify(Object.fromEntries(Object.entries(e).filter(([k]) => !["seq", "kind", "cycle"].includes(k))))).slice(0, 160)}`).join("\n") || "(nothing recent)"}</pre>`;
   $("drill").className = "on";
   $("close").onclick = () => $("drill").className = "";

@@ -142,6 +142,28 @@ host process), and a run can be paused from it.
       (nobody consumes those families). Streams are now capped like Redis MAXLEN; 3k-cycle RSS
       growth fell 191 MB → 40 MB, or 13 MB with `Params(ledger_path="runs/….sqlite")`
 
+### 1.0b Money: created vs real (built 25 Sep 2026)
+**Decision:** a live society (Phase 2 on) runs entirely on **real dollars**, including payments between
+co-ops. Purses are shares of real pooled money (your capital plus customer revenue), so earnings can
+buy real compute and, through the gate, real outside resources. Credits can't do either without an
+exchange rate, and any credit created from nothing would become an unbacked real bill.
+Trading between co-ops never creates money: it moves dollars that came in from outside, so trade only
+pays when it helps a co-op sell something to an outside customer. Simulations run on **SIM credits**
+only. Costs we accept: the basic budget comes from the real treasury, so your seed sets the runway,
+and every live run has per-co-op daily caps, gate approval for outside spending, and a real-dollar
+kill-switch.
+- [x] Ledger carries a currency on every entry: `SIM` (created) and `USD` (real); entries balance per
+      currency, and each currency has its own external accounts (SIM: genesis / market / compute;
+      USD: owner:capital / ext:stripe / ext:anthropic / ext:fees). No conversion path exists
+- [x] Real revenue must name a real source (`ext:stripe`); the mock market can only pay credits
+- [x] Meter: `charge_usage(..., real=)`. Real API calls in a simulation are also booked in USD
+      (owner:capital → ext:anthropic); local models are notional only. Real-dollar daily kill-switch
+      (`real_ceiling`, $5 default), which a reset doesn't forget
+- [x] Dashboard: "$" only ever means real money; credits show as "cr"; a Real money box shows
+      capital in, customer revenue, real API spend, and today's real spend against the kill-switch
+- [ ] Phase 2: live society on a USD ledger. Upkeep becomes the actual API bill, publishing fees go to the
+      treasury rather than the compute sink, and there are per-co-op daily caps
+
 ### 1.1 Turn-based engine (prerequisite for LLM agents)
 - [x] Mock market board, parts and rubrics, `StubGrader` (`sim/market.py`)
 - [x] Observation / Outcome / `ActionsAPI` types (`society/observation.py`)
