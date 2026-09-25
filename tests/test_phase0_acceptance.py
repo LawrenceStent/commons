@@ -80,5 +80,5 @@ def test_control_without_reputation_defection_pays_and_output_falls(run):
 
 def test_playbooks_earn_royalties_across_communities(run):
     on, _ = run
-    cited = [pb for pbs in on.library.values() for pb in pbs if pb.uses]
+    cited = [pb for pb in on.library.values() if pb.uses]
     assert cited, "someone else's playbook should have been used and paid for"

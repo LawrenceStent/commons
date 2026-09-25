@@ -1,12 +1,13 @@
-"""Phase 0's three characters. Keep these forever as a regression suite: any change to the
-incentive rules gets re-run against them, so a tweak that makes defection pay shows up
-immediately.
+"""Phase 0's three characters, ported to turns. Keep these forever as a regression suite: any
+change to the incentive rules gets re-run against them, so a tweak that makes defection pay
+shows up immediately.
 """
 
 from __future__ import annotations
 
-from society.community import Community
-from society.strategies.base import Job, Strategy, View, Work
+from sim.market import tagged
+from society.observation import ActionsAPI, ContractView, Observation
+from society.strategies.base import Strategy
 
 
 class Cooperator(Strategy):
@@ -19,38 +20,31 @@ class Defector(Strategy):
     """Underbids everything, pockets the advance, delivers junk."""
 
     name = "defector"
+    gossips = False
 
-    def take_market_job(self, me, capabilities, reward, sub_share, view) -> bool:
-        return False  # would have to deliver to the market, which can't be scammed
+    def claim(self, obs, act) -> None:
+        return  # would have to deliver to the market, which can't be scammed
 
-    def bid(self, me: Community, job: Job, view: View) -> int | None:
-        if not me.can(job.capability):
-            return None
-        return max(1, round(job.reward * 0.35))  # zero cost: undercut anyone honest
+    def bid(self, obs: Observation, act: ActionsAPI, c: ContractView) -> None:
+        if c.capability in obs.capabilities and c.my_bid is None and obs.capacity:
+            act.bid(c.id, max(1, round(c.max_price * 0.35)))  # zero cost: undercut anyone honest
 
-    def work(self, me: Community, capability: str, view: View) -> Work:
-        return Work(quality=view.rng.uniform(0.0, 0.2), cost=0)
+    def deliver(self, obs: Observation, act: ActionsAPI, c: ContractView) -> None:
+        if obs.capacity:
+            act.deliver(c.id, tagged(self.rng.uniform(0.0, 0.2), " junk"))
 
-    def publish(self, me, view) -> str | None:
-        return None
-
-    def gossips(self, me) -> bool:
-        return False
+    def publish(self, obs, act) -> None:
+        return
 
 
 class FreeRider(Strategy):
     """Takes the basic budget and contributes nothing: no market jobs, no bids, no playbooks."""
 
     name = "free-rider"
+    gossips = False
 
-    def take_market_job(self, me, capabilities, reward, sub_share, view) -> bool:
-        return False
+    def wake(self, obs) -> int:
+        return 1  # stays awake on the basic budget
 
-    def bid(self, me, job, view) -> int | None:
-        return None
-
-    def publish(self, me, view) -> str | None:
-        return None
-
-    def gossips(self, me) -> bool:
-        return False
+    def turn(self, obs, act) -> None:
+        return

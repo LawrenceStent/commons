@@ -30,6 +30,7 @@ class Evidence:
 class Reputation:
     def __init__(self, decay: float = 0.995, gossip_discount: float = 0.5, bad_memory: float = 4.0, hub: Hub = NULL):
         self.hub = hub
+        self.cycle: int | None = None  # set by the world, for telemetry only
         self.decay = decay
         # Bad evidence fades `bad_memory` times more slowly than good. With symmetric decay
         # a defector's record fades back over the refusal line, it scams once, and repeats.
@@ -47,7 +48,7 @@ class Reputation:
         e = self.direct[(observer, subject, capability)]
         e.good += outcome
         e.bad += 1 - outcome
-        self.hub.emit("reputation.attest", observer=observer, subject=subject, capability=capability, outcome=outcome)
+        self.hub.emit("reputation.attest", self.cycle, observer=observer, subject=subject, capability=capability, outcome=outcome)
 
     def hear(self, listener: str, source: str, subject: str, capability: str, score: float, evidence: float) -> None:
         """Take in gossip, weighted by how much the listener trusts the source overall."""

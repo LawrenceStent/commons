@@ -66,7 +66,8 @@ def snapshot(state: dict) -> dict:
     names = list(w.communities)
     trust = {o: {s: (None if o == s else round(w.rep.trust(o, s), 3)) for s in names} for o in names}
 
-    contracts = [_ev(e) for e in hub.recent("contract.closed", n=hub.ring)]
+    closed = ("accepted", "rejected", "failed", "defaulted", "expired", "withdrawn")
+    contracts = [_ev(e) for e in hub.recent("contract.stage", n=hub.ring) if e.fields["stage"] in closed]
     posts = [_ev(e) for e in hub.recent("ledger.post", n=hub.ring)]
     flows: Counter[str] = Counter()
     for p in posts:
@@ -92,10 +93,14 @@ def snapshot(state: dict) -> dict:
         "communities": communities,
         "reputation": {"names": names, "trust": trust,
                        "attests": [_ev(e) for e in hub.recent("reputation.attest", n=12)][::-1]},
-        "market": {"recent": [_ev(e) for e in hub.recent("market.job", n=15)][::-1],
-                   "done": w.jobs_done, "failed": w.jobs_failed},
+        "market": {"recent": [_ev(e) for e in hub.recent("market.job", n=60) if e.fields["stage"] != "posted"][-15:][::-1],
+                   "done": w.jobs_done, "failed": w.jobs_failed, "expired": w.jobs_expired,
+                   "board": sum(j.status == "open" for j in w.jobs.values()),
+                   "in_progress": sum(j.status == "claimed" for j in w.jobs.values()),
+                   "reward": w.params.job_reward},
         "contracts": {"recent": contracts[-15:][::-1], "stages": Counter(c["stage"] for c in contracts),
-                      "window": len(contracts)},
+                      "window": len(contracts),
+                      "live": Counter(c.status for c in w.contracts.values() if c.status in ("open", "awarded", "delivered"))},
         "ledger": {"recent": posts[-15:][::-1], "flows": flows, "window": len(posts),
                    "compute": w.ledger.balance("compute"), "market": w.ledger.balance("market")},
         "bus": {
@@ -104,8 +109,8 @@ def snapshot(state: dict) -> dict:
             "rate_limited": dict(w.bus.rejected),
             "tail": [_ev(e) for e in hub.recent("bus.publish", n=20)][::-1],
         },
-        "knowledge": [{"id": pb.id, "author": pb.author, "capability": pb.capability, "uses": pb.uses}
-                      for pbs in w.library.values() for pb in pbs],
+        "knowledge": [{"id": pb.id, "author": pb.author, "capability": pb.capability, "title": pb.title, "uses": pb.uses}
+                      for pb in w.library.values()],
         "llm": {"recent": llm[-10:][::-1], "calls": hub.counts["llm.call"],
                 "cost": sum(c.get("cost", 0) for c in llm)},
         "grader": {"recent": grades[-10:][::-1], "count": hub.counts["grader.grade"]},
@@ -188,6 +193,7 @@ def create_app(world: World | None = None, cycles_per_second: float = 4.0, autos
             return JSONResponse({"error": f"no community {name}"}, status_code=404)
         c = w.communities[name]
         return {"name": name, "charter": c.charter, "purse": w.ledger.balance(purse(name)),
+                "journal": list(w.journal[name]), "inbox": [e.__dict__ for e in w.inbox[name]],
                 "events": community_detail(w, name)}
 
     @app.get("/stream")

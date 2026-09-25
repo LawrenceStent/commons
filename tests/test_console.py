@@ -13,6 +13,8 @@ def test_dashboard_renders_and_controls():
         assert "EventSource" in client.get("/").text
         assert client.get("/api/snapshot").json()["run"]["cycle"] == 0
         assert client.post("/control/step").json()["cycle"] == 1
+        for _ in range(5):
+            client.post("/control/step")
         snap = client.get("/api/snapshot").json()
         names = {c["name"] for c in snap["communities"]}
         assert {"defector", "coop-a"} <= names

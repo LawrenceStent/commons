@@ -1,28 +1,41 @@
-"""The Phase 0 world: scripted communities, a mock market, and the real substrate.
+"""The turn-based world: communities act through the actions executor, one turn per cycle.
 
 One cycle:
     floor     treasury pays every community the flat basic budget
-    upkeep    each community pays compute for its members to think; can't pay => silent
-    market    jobs arrive, each needing two capabilities; one community takes each as prime
-    contract  the prime buys capabilities it lacks: announce -> bid -> award -> deliver -> settle
-    revenue   finished jobs pay out 70/20/10 (prime / treasury / cited playbooks)
-    knowledge communities publish playbooks for what they do well
+    upkeep    each community pays for as many members to think as it can; none funded => silent
+    deadlines anything past its deadline expires, fails or defaults (see below)
+    market    new jobs go up on the board
+    turns     each active community, in random order, sees an Observation and acts
     gossip    communities relay first-hand beliefs; everyone listens
     decay     old evidence fades
+
+The contract-net spans cycles, and every stage has a deadline, so no one can stall another:
+    open       bids arrive; the prime awards from the next cycle   -> expired after `bid_window`
+    awarded    advance paid; contractor delivers                    -> failed after `deliver_ttl`:
+               the prime keeps its complaint, the advance is gone
+    delivered  prime reviews and pays the remainder, or rejects     -> after `review_ttl` the
+               delivery is accepted by default; if the prime can't pay it has defaulted
+A claimed job must be complete by its deadline or it fails. A complete job is graded part by
+part; if every part passes, the market pays and revenue splits 70/20/10.
+
+Money in this world is created money (SIM credits); see substrate/ledger.py.
 """
 
 from __future__ import annotations
 
-import hashlib
 import random
+from collections import Counter, deque
 from dataclasses import dataclass, field
 
 from protocol import Envelope, Message
-from protocol.contract import Announce, Award, Bid, Deliver, Settle
-from protocol.knowledge import Cite, Publish
-from protocol.reputation import Attest, Gossip
+from protocol.reputation import Gossip
+from sim.actions import Actions
+from sim.market import CAPABILITIES, Grader, MarketJob, StubGrader, generate_job
 from society.community import Community
-from society.strategies import Cooperator, Defector, FreeRider, Job, Strategy
+from society.observation import (
+    BidView, ContractView, Event, JobView, Observation, PartView, PeerView, PlaybookView,
+)
+from society.strategies import Cooperator, Defector, FreeRider
 from substrate.bus import MemoryBus, RateLimited
 from substrate.ledger import InsufficientFunds, Ledger, purse
 from substrate.meter import Meter
@@ -30,7 +43,8 @@ from substrate.registry import Registry
 from substrate.reputation import Reputation
 from substrate.telemetry import Hub
 
-CAPABILITIES = ("research", "build", "design", "write")
+OPEN, AWARDED, DELIVERED = "open", "awarded", "delivered"
+LIVE = (OPEN, AWARDED, DELIVERED)
 
 
 @dataclass
@@ -38,14 +52,25 @@ class Params:
     seed: int = 0
     reputation: bool = True  # False = the control run: primes can't tell bidders apart
     treasury_seed: int = 2_000_000
+    treasury_reserve: int = 2_000_000  # the treasury stops taking its 20% at this balance
     purse_seed: int = 150_000
-    basic_budget: int = 6_000  # flat, per community, per cycle
-    upkeep: int = 8_000  # per member, per cycle
+    basic_budget: int = 3_000  # per cycle, to communities whose purse is below floor_cap
+    floor_cap: int = 8_000  # two cycles of one member's upkeep
+    upkeep: int = 4_000  # per member, per cycle
     actions_per_member: int = 2
-    jobs_per_cycle: int = 4
-    job_reward: int = 150_000
-    sub_share: float = 0.4  # of job reward offered for each subcontracted capability
+    jobs_per_cycle: int = 2
+    job_reward: int = 80_000
+    parts_per_job: int = 2
+    work_cost: int = 10_000  # what a scripted community spends producing one part
+    grade_cost: int = 2_000  # notional treasury cost per graded part (StubGrader)
+    pass_score: float = 0.5  # every part must grade at least this for the market to pay
+    sub_share: float = 0.4  # of job reward a scripted prime offers for each part it lacks
     advance_frac: float = 0.5
+    board_ttl: int = 3  # cycles a job stays on the board
+    job_ttl: int = 8  # cycles from claim to submission
+    bid_window: int = 3  # cycles an announcement stays open
+    deliver_ttl: int = 3
+    review_ttl: int = 2
     publish_cost: int = 15_000
     gossip_every: int = 5
     gossip_fanout: int = 3
@@ -54,6 +79,9 @@ class Params:
     daily_ceiling: int = 10**12
     verify: bool = True
     ledger_path: str = ":memory:"  # a file under runs/ keeps long runs out of RAM
+    journal_keep: int = 20
+    events_keep: int = 50
+    retain: int = 20  # cycles a closed job or contract stays visible before it's dropped
 
 
 def default_population() -> list[Community]:
@@ -72,7 +100,33 @@ class Playbook:
     id: str
     author: str
     capability: str
+    title: str = ""
+    text: str = ""
     uses: int = 0
+
+
+@dataclass
+class Contract:
+    id: str
+    job_id: str
+    capability: str
+    prime: str
+    spec: str
+    rubric: str
+    max_price: int
+    advance_frac: float
+    announced: int
+    deadline: int
+    bids: dict[str, int] = field(default_factory=dict)
+    status: str = OPEN
+    winner: str | None = None
+    price: int | None = None
+    advance: int = 0
+    artifact: str | None = None
+    cites: tuple[str, ...] = ()
+    reason: str = ""
+    winner_attested: bool = False
+    closed: int | None = None
 
 
 @dataclass
@@ -88,35 +142,9 @@ class Snapshot:
     earned: int
 
 
-class _View:
-    """What a strategy is allowed to see. Scores respect the reputation switch."""
-
-    def __init__(self, world: World, me: Community):
-        self.world, self.me = world, me
-        self.rng = world.rng
-        self.cycle = world.cycle
-
-    def balance(self) -> int:
-        return self.world.ledger.balance(purse(self.me.name))
-
-    def score(self, subject: str, capability: str) -> float:
-        if not self.world.params.reputation:
-            return 0.5
-        return self.world.rep.score(self.me.name, subject, capability)
-
-    def standing(self, subject: str) -> float:
-        return self.world._standing(subject)
-
-    def playbook_for(self, capability: str) -> str | None:
-        pbs = self.world.library.get(capability)
-        return pbs[0].id if pbs else None
-
-    def authored(self, capability: str) -> bool:
-        return any(p.author == self.me.name for p in self.world.library.get(capability, []))
-
-
 class World:
-    def __init__(self, params: Params | None = None, population: list[Community] | None = None, hub: Hub | None = None):
+    def __init__(self, params: Params | None = None, population: list[Community] | None = None,
+                 hub: Hub | None = None, grader: Grader | None = None):
         self.params = p = params or Params()
         self.hub = hub or Hub()
         self.rng = random.Random(p.seed)
@@ -126,27 +154,42 @@ class World:
         self.meter = Meter(self.ledger, daily_ceiling=p.daily_ceiling, hub=self.hub)
         self.rep = Reputation(decay=p.decay, hub=self.hub)
         self.registry = Registry()
-        self.bus = MemoryBus(
-            self.registry,
-            standing=self._standing,
-            base_allowance=p.base_allowance,
-            verify=p.verify,
-            hub=self.hub,
-        )
-        self.library: dict[str, list[Playbook]] = {}
+        self.bus = MemoryBus(self.registry, standing=self._standing, base_allowance=p.base_allowance,
+                             verify=p.verify, hub=self.hub)
+        self.grader = grader or StubGrader(cost=p.grade_cost)
+        self.jobs: dict[str, MarketJob] = {}
+        self.contracts: dict[str, Contract] = {}
+        self.library: dict[str, Playbook] = {}
+        self.journal: dict[str, deque[str]] = {n: deque(maxlen=p.journal_keep) for n in self.communities}
+        self.inbox: dict[str, deque[Event]] = {n: deque(maxlen=p.events_keep) for n in self.communities}
         self.history: dict[str, list[Snapshot]] = {n: [] for n in self.communities}
-        self.jobs_done = self.jobs_failed = 0
-        self.royalties_paid: dict[str, int] = {}  # author -> total, since the start
-        self._cycle_stats: dict[str, dict[str, int]] = {}
+        self.jobs_done = self.jobs_failed = self.jobs_expired = 0
+        self.royalties_paid: dict[str, int] = {}
+        self._job_seq = 0
+        self._stats: dict[str, Counter] = {}
 
         self.ledger.transfer("genesis", "treasury", p.treasury_seed, cycle=0, kind="genesis")
         for c in self.communities.values():
+            c.strategy.rng = random.Random(f"{p.seed}:{c.name}")
             self.registry.register(c.name, c.identity.public, sorted(c.capabilities), c.charter)
             self.ledger.transfer("genesis", purse(c.name), p.purse_seed, cycle=0, kind="genesis")
 
     # ── helpers ────────────────────────────────────────────────
     def _standing(self, name: str) -> float:
         return self.rep.standing(name) if self.params.reputation else 0.5
+
+    def _trust(self, observer: str, subject: str, capability: str) -> float:
+        return self.rep.score(observer, subject, capability) if self.params.reputation else 0.5
+
+    def _tell(self, name: str, kind: str, text: str, ref: str | None = None) -> None:
+        self.inbox[name].append(Event(self.cycle, kind, text, ref))
+
+    def _stat(self, name: str, key: str, n: int = 1) -> None:
+        self._stats[name][key] += n
+
+    def _stage(self, c: Contract, stage: str, **kw) -> None:
+        self.hub.emit("contract.stage", self.cycle, id=c.id, capability=c.capability, prime=c.prime,
+                      winner=c.winner, stage=stage, price=c.price, max_price=c.max_price, bids=dict(c.bids), **kw)
 
     def _send(self, c: Community, msg: Message) -> bool:
         try:
@@ -155,46 +198,29 @@ class World:
         except RateLimited:
             return False
 
-    def _view(self, c: Community) -> _View:
-        return _View(self, c)
-
-    def _stat(self, name: str, key: str, n: int = 1) -> None:
-        self._cycle_stats[name][key] += n
-
-    def _charge(self, c: Community, amount: int, memo: str) -> bool:
-        try:
-            self.meter.charge(c.name, amount, cycle=self.cycle, memo=memo)
-            return True
-        except InsufficientFunds:
-            return False
-
-    def _pay(self, src: Community, dst: Community, amount: int, memo: str) -> bool:
-        try:
-            self.ledger.transfer(purse(src.name), purse(dst.name), amount, cycle=self.cycle, kind="contract", memo=memo)
-            return True
-        except InsufficientFunds:
-            return False
-
     def _active(self) -> list[Community]:
         return [c for c in self.communities.values() if c.active]
 
     # ── the cycle ──────────────────────────────────────────────
     def step(self) -> None:
         self.cycle += 1
+        self.rep.cycle = self.cycle
         self.bus.begin_cycle(self.cycle)
-        self._cycle_stats = {n: {"won": 0, "ok": 0, "earned": 0} for n in self.communities}
-        start = {n: self.ledger.balance(purse(n)) for n in self.communities}
-
+        self._stats = {n: Counter() for n in self.communities}
         self._floor()
         self._upkeep()
-        for job_caps in self._market():
-            self._run_job(*job_caps)
-        self._knowledge()
+        self._deadlines()
+        self._post_jobs()
+        order = self._active()
+        self.rng.shuffle(order)  # turn order must not decide who wins
+        for c in order:
+            self._turn(c)
         if self.cycle % self.params.gossip_every == 0:
             self._gossip()
         self.rep.tick()
         self.bus.compact()
-        self._record(start)
+        self._prune()
+        self._record()
 
     def run(self, cycles: int) -> World:
         for _ in range(cycles):
@@ -202,166 +228,254 @@ class World:
         return self
 
     def _floor(self) -> None:
+        """The basic budget tops up poor purses only: enough to think, not enough to coast.
+        A community that never wakes can't bank handouts, and a rich one doesn't need them."""
+        p = self.params
         for c in self.communities.values():
-            if self.ledger.balance("treasury") < self.params.basic_budget:
+            if self.ledger.balance(purse(c.name)) >= p.floor_cap:
+                continue
+            if self.ledger.balance("treasury") < p.basic_budget:
                 return
-            self.ledger.transfer("treasury", purse(c.name), self.params.basic_budget, cycle=self.cycle, kind="floor")
+            self.ledger.transfer("treasury", purse(c.name), p.basic_budget, cycle=self.cycle, kind="floor")
 
     def _upkeep(self) -> None:
-        """Fund as many members as the purse allows. None funded means silence."""
+        """Each community decides how many members to wake, and pays for them. Thinking is the
+        cost of doing business, so it is a choice; none awake means silence this cycle."""
+        p = self.params
         for c in self.communities.values():
-            c.thinking = min(c.members, self.ledger.balance(purse(c.name)) // self.params.upkeep)
-            if c.thinking and not self._charge(c, c.thinking * self.params.upkeep, "upkeep"):
-                c.thinking = 0
+            c.capacity = 0
+            want = c.strategy.wake(self.observe(c))
+            c.thinking = max(0, min(c.members, int(want), self.ledger.balance(purse(c.name)) // p.upkeep))
+            if c.thinking:
+                try:
+                    self.meter.charge(c.name, c.thinking * p.upkeep, cycle=self.cycle, memo="upkeep")
+                except InsufficientFunds:
+                    c.thinking = 0
             c.active = c.thinking > 0
-            c.capacity = c.thinking * self.params.actions_per_member
+            c.capacity = c.thinking * p.actions_per_member
 
-    def _market(self) -> list[tuple[Community, tuple[str, str], int]]:
-        taken = []
-        for _ in range(self.params.jobs_per_cycle):
-            caps = tuple(self.rng.sample(CAPABILITIES, 2))
-            takers = [
-                c for c in self._active()
-                if c.capacity and c.strategy.take_market_job(c, caps, self.params.job_reward, self.params.sub_share, self._view(c))
-            ]
-            if takers:
-                prime = self.rng.choice(takers)
-                prime.capacity -= 1
-                taken.append((prime, caps, self.params.job_reward))
-        return taken
+    def _post_jobs(self) -> None:
+        p = self.params
+        for _ in range(p.jobs_per_cycle):
+            self._job_seq += 1
+            job = generate_job(self.rng, f"J{self._job_seq}", self.cycle, p.job_reward, p.board_ttl, p.parts_per_job)
+            self.jobs[job.id] = job
+            self.hub.emit("market.job", self.cycle, id=job.id, stage="posted", caps=sorted(job.parts), reward=job.reward)
 
-    def _run_job(self, prime: Community, caps: tuple[str, str], reward: int) -> None:
-        job_id = hashlib.sha256(f"{self.cycle}:{self.rng.random()}".encode()).hexdigest()[:12]
-        cites: list[str] = []
-        ok = True
-        # secure the parts we can't do before spending on the parts we can
-        for cap in sorted(caps, key=prime.can):
-            if prime.can(cap):
-                work = prime.strategy.work(prime, cap, self._view(prime))
-                if not self._charge(prime, work.cost, f"work {job_id}"):
-                    ok = False
-                    break
-                ok = ok and work.quality >= 0.5
-                if ok:
-                    prime.deliveries[cap] = prime.deliveries.get(cap, 0) + 1
-                cites += work.cites
-            else:
-                done, sub_cites = self._subcontract(prime, Job(f"{job_id}.{cap}", cap, round(reward * self.params.sub_share), self.params.advance_frac))
-                ok = ok and done
-                cites += sub_cites
-            if not ok:
-                break
+    def _turn(self, c: Community) -> None:
+        obs = self.observe(c)
+        self.inbox[c.name].clear()
+        c.strategy.turn(obs, Actions(self, c))
 
-        if not ok:
-            self.jobs_failed += 1
-            self.hub.emit("market.job", self.cycle, id=job_id, prime=prime.name, caps=list(caps), reward=reward, status="failed")
+    # ── deadlines ──────────────────────────────────────────────
+    def _deadlines(self) -> None:
+        now = self.cycle
+        for job in self.jobs.values():
+            if job.status == "open" and now > job.deadline:
+                job.status = "expired"
+                self.jobs_expired += 1
+                self.hub.emit("market.job", now, id=job.id, stage="expired", caps=sorted(job.parts), reward=job.reward)
+            elif job.status == "claimed" and now > job.deadline:
+                self._fail_job(job, "missed its deadline")
+        for c in list(self.contracts.values()):
+            if c.deadline >= now:
+                continue
+            if c.status == OPEN:
+                self._close(c, "expired")
+                self._tell(c.prime, "expired", f"{c.id} closed with no award", c.id)
+            elif c.status == AWARDED:
+                # non-delivery is objective: the substrate files the prime's complaint for it
+                self._close(c, "failed")
+                self.rep.attest(c.prime, c.winner, c.capability, 0.0)
+                self._tell(c.prime, "failed", f"{c.winner} never delivered {c.id}", c.id)
+                self._tell(c.winner, "failed", f"you missed the delivery deadline on {c.id}", c.id)
+            elif c.status == DELIVERED:
+                if self.pay_remainder(c):
+                    self.close_review(c, True, "accepted by default: the prime didn't review in time")
+                else:
+                    self._close(c, "defaulted")
+                    self.rep.attest(c.winner, c.prime, c.capability, 0.0)
+                    c.winner_attested = True
+                    self._tell(c.winner, "defaulted", f"{c.prime} never paid for {c.id}", c.id)
+
+    def _close(self, c: Contract, status: str) -> None:
+        c.status, c.closed = status, self.cycle
+        self._stage(c, status)
+
+    def _prune(self) -> None:
+        """Drop closed jobs and contracts after a while, so memory stays flat on long runs."""
+        cutoff = self.cycle - self.params.retain
+        for k in [k for k, j in self.jobs.items() if j.status not in ("open", "claimed") and j.deadline < cutoff]:
+            del self.jobs[k]
+        for k in [k for k, c in self.contracts.items() if c.closed is not None and c.closed < cutoff]:
+            del self.contracts[k]
+
+    # ── called by the actions executor ────────────────────────
+    def contracts_for(self, job_id: str, capability: str, statuses: tuple[str, ...]) -> list[Contract]:
+        return [c for c in self.contracts.values()
+                if c.job_id == job_id and c.capability == capability and c.status in statuses]
+
+    def open_contract(self, cid: str, job: MarketJob, capability: str, prime: str, max_price: int, advance_frac: float) -> None:
+        part = job.parts[capability]
+        c = Contract(cid, job.id, capability, prime, part.spec, part.rubric, max_price, advance_frac,
+                     announced=self.cycle, deadline=self.cycle + self.params.bid_window)
+        self.contracts[cid] = c
+        self._stage(c, OPEN)
+
+    def award_contract(self, c: Contract, bidder: str, price: int, advance: int) -> None:
+        c.status, c.winner, c.price, c.advance = AWARDED, bidder, price, advance
+        c.deadline = self.cycle + self.params.deliver_ttl
+        self._stat(bidder, "won")
+        self._stat(bidder, "earned", advance)
+        self._tell(bidder, "awarded", f"you won {c.id} at {price}; advance {advance} paid; deliver by cycle {c.deadline}", c.id)
+        for loser in c.bids:
+            if loser != bidder:
+                self._tell(loser, "bid_lost", f"{c.id} went to another bidder", c.id)
+        self._stage(c, AWARDED)
+
+    def deliver_contract(self, c: Contract, artifact: str, cites: tuple[str, ...]) -> None:
+        c.status, c.artifact, c.cites = DELIVERED, artifact, cites
+        c.deadline = self.cycle + self.params.review_ttl
+        self._tell(c.prime, "delivered", f"{c.winner} delivered {c.id}; review by cycle {c.deadline}", c.id)
+        self._stage(c, DELIVERED)
+
+    def pay_remainder(self, c: Contract) -> bool:
+        owed = c.price - c.advance
+        try:
+            self.ledger.transfer(purse(c.prime), purse(c.winner), owed, cycle=self.cycle, kind="contract", memo=f"settle {c.id}")
+        except InsufficientFunds:
+            return False
+        self._stat(c.winner, "earned", owed)
+        return True
+
+    def close_review(self, c: Contract, accept: bool, reason: str) -> None:
+        c.reason = reason
+        self._close(c, "accepted" if accept else "rejected")
+        self.rep.attest(c.prime, c.winner, c.capability, 1.0 if accept else 0.0)
+        if accept:
+            self._stat(c.winner, "ok")
+            track = self.communities[c.winner].deliveries
+            track[c.capability] = track.get(c.capability, 0) + 1
+            self._tell(c.winner, "accepted", f"{c.prime} accepted {c.id} and paid {c.price - c.advance}", c.id)
+            job = self.jobs.get(c.job_id)
+            if job and job.status == "claimed" and job.parts[c.capability].artifact is None:
+                part = job.parts[c.capability]
+                part.artifact, part.source, part.cites = c.artifact, c.id, c.cites
+                self.maybe_submit(job)
+        else:
+            self._tell(c.winner, "rejected", f"{c.prime} rejected {c.id}: {reason or 'no reason given'}", c.id)
+
+    def maybe_submit(self, job: MarketJob) -> None:
+        """A complete job goes to the grader. Every part must pass for the market to pay."""
+        if not job.complete or job.status != "claimed":
             return
+        for cap, part in job.parts.items():
+            g = self.grader.grade(part.spec, part.rubric, part.artifact)
+            job.scores[cap] = g.score
+            if g.cost:
+                # the commons pays for grading; when it can't, the prime whose job it is does
+                payer = "treasury" if self.ledger.balance("treasury") >= g.cost else purse(job.prime)
+                try:
+                    self.ledger.transfer(payer, "compute", g.cost, cycle=self.cycle, kind="grading", memo=job.id)
+                except InsufficientFunds:
+                    self._fail_job(job, "no one could pay for grading")
+                    return
+            self.hub.emit("grader.grade", self.cycle, job=job.id, part=cap, score=g.score, cost=g.cost)
+        if min(job.scores.values()) < self.params.pass_score:
+            self._fail_job(job, f"a part failed grading ({', '.join(f'{k} {v:.2f}' for k, v in job.scores.items())})")
+            return
+        self._pay_job(job)
+
+    def _pay_job(self, job: MarketJob) -> None:
+        prime = job.prime
+        weights: Counter[str] = Counter()
+        for part in job.parts.values():
+            for pid in part.cites:
+                pb = self.library.get(pid)
+                if pb and pb.author != prime:
+                    weights[pb.author] += 1
+                    pb.uses += 1
+        # the commons takes only what it needs: no treasury share while the treasury is at its reserve
+        tax = self.ledger.balance("treasury") < self.params.treasury_reserve
+        split = self.ledger.settle_revenue(prime, job.reward, cycle=self.cycle, royalties=dict(weights), memo=job.id, tax=tax)
+        share = job.reward * (70 if tax else 90) // 100
+        job.status = "paid"
         self.jobs_done += 1
-        royalties: dict[str, int] = {}
-        for pid in cites:
-            pb = self._playbook(pid)
-            if pb and pb.author != prime.name:
-                royalties[pb.author] = royalties.get(pb.author, 0) + 1
-                pb.uses += 1
-        split = self.ledger.settle_revenue(prime.name, reward, cycle=self.cycle, royalties=royalties, memo=job_id)
-        self._stat(prime.name, "earned", reward * 70 // 100)
+        self._stat(prime, "earned", share)
+        track = self.communities[prime].deliveries
+        for cap, part in job.parts.items():
+            if part.source == "self":
+                track[cap] = track.get(cap, 0) + 1
+        self._tell(prime, "job_paid", f"{job.id} passed grading; you received {share}", job.id)
         for author, amount in split.items():
             self._stat(author, "earned", amount)
             self.royalties_paid[author] = self.royalties_paid.get(author, 0) + amount
-        self.hub.emit("market.job", self.cycle, id=job_id, prime=prime.name, caps=list(caps), reward=reward,
-                      status="paid", royalties=split)
+            self._tell(author, "royalty", f"your playbook was used in {job.id}: {amount}", job.id)
+        self.hub.emit("market.job", self.cycle, id=job.id, stage="paid", prime=prime, caps=sorted(job.parts),
+                      reward=job.reward, scores=job.scores, royalties=split, taxed=tax)
 
-    def _contract_event(self, prime: Community, job: Job, stage: str, bids: list[tuple[str, int]] = (), **kw) -> None:
-        self.hub.emit("contract.closed", self.cycle, id=job.job_id, capability=job.capability, prime=prime.name,
-                      max_price=job.reward, bids=dict(bids), stage=stage, **kw)
+    def _fail_job(self, job: MarketJob, why: str) -> None:
+        job.status = "failed"
+        self.jobs_failed += 1
+        for c in self.contracts.values():
+            if c.job_id == job.id and c.status == OPEN:
+                self._close(c, "withdrawn")
+        self._tell(job.prime, "job_failed", f"{job.id} failed: {why}", job.id)
+        self.hub.emit("market.job", self.cycle, id=job.id, stage="failed", prime=job.prime, caps=sorted(job.parts),
+                      reward=job.reward, why=why)
 
-    def _subcontract(self, prime: Community, job: Job) -> tuple[bool, list[str]]:
-        if not self._send(prime, Announce(job_id=job.job_id, capability=job.capability,
-                                          reward=job.reward, advance_frac=self.params.advance_frac)):
-            self._contract_event(prime, job, "rate_limited")
-            return False, []
+    def add_playbook(self, pid: str, author: str, capability: str, title: str, text: str) -> None:
+        self.library[pid] = Playbook(pid, author, capability, title, text)
+        self.hub.emit("knowledge.publish", self.cycle, id=pid, author=author, capability=capability, title=title)
 
-        bids: list[tuple[str, int]] = []
-        bidders = self._active()
-        self.rng.shuffle(bidders)  # arrival order must not decide ties
-        for c in bidders:
-            if c is prime or not c.capacity:
-                continue
-            price = c.strategy.bid(c, job, self._view(c))
-            if price and price <= job.reward and self._send(c, Bid(job_id=job.job_id, price=price)):
-                c.capacity -= 1
-                bids.append((c.name, price))
+    # ── what a community sees ──────────────────────────────────
+    def observe(self, me: Community) -> Observation:
+        name, p = me.name, self.params
+        pending = {(c.job_id, c.capability): c.status for c in self.contracts.values() if c.status in LIVE}
 
-        winner_name = prime.strategy.choose(prime, job, bids, self._view(prime))
-        for bidder, _ in bids:
-            c = self.communities[bidder]
-            c.strategy.on_bid_result(c, bidder == winner_name)
-        if winner_name is None:
-            self._contract_event(prime, job, "no_award", bids)
-            return False, []
-        winner = self.communities[winner_name]
-        price = dict(bids)[winner_name]
-        advance = round(price * self.params.advance_frac)
-        if not self._pay(prime, winner, advance, f"advance {job.job_id}"):
-            self._contract_event(prime, job, "unfunded", bids, winner=winner_name, price=price)
-            return False, []
-        self._send(prime, Award(job_id=job.job_id, winner=winner.name, price=price, advance=advance))
-        self._stat(winner.name, "won")
-        self._stat(winner.name, "earned", advance)
+        def job_view(j: MarketJob) -> JobView:
+            return JobView(j.id, j.title, j.reward, tuple(
+                PartView(cap, part.spec, part.rubric, part.artifact is not None, part.source, pending.get((j.id, cap)))
+                for cap, part in sorted(j.parts.items())), j.deadline)
 
-        work = winner.strategy.work(winner, job.capability, self._view(winner))
-        if not self._charge(winner, work.cost, f"work {job.job_id}"):
-            work = type(work)(quality=0.0, cost=0)  # couldn't afford to think: nothing delivered
-        self._send(winner, Deliver(job_id=job.job_id, artifact={"quality": round(work.quality, 3)},
-                                   cites=list(work.cites)))
-        for pid in work.cites:
-            self._send(winner, Cite(playbook_id=pid, job_id=job.job_id))
+        def contract_view(c: Contract, as_prime: bool) -> ContractView:
+            bids = tuple(BidView(b, price, round(self._trust(name, b, c.capability), 3), round(self._standing(b), 3))
+                         for b, price in sorted(c.bids.items())) if as_prime else ()
+            show = as_prime and c.status != OPEN or c.winner == name
+            return ContractView(c.id, c.job_id, c.capability, c.prime, c.spec, c.rubric, c.max_price, c.advance_frac,
+                                c.announced, bids, c.bids.get(name), c.winner, c.price,
+                                c.artifact if show else None, c.deadline, c.status)
 
-        accepted = prime.strategy.accept(prime, work.quality)
-        paid = 0
-        if accepted and self._pay(prime, winner, price - advance, f"settle {job.job_id}"):
-            paid = price - advance
-            self._stat(winner.name, "ok")
-            self._stat(winner.name, "earned", paid)
-            winner.deliveries[job.capability] = winner.deliveries.get(job.capability, 0) + 1
-        elif accepted:
-            accepted = False  # prime couldn't pay; the job fails and the winner will say so
-        self._send(prime, Settle(job_id=job.job_id, accepted=accepted, paid=paid))
-        self._contract_event(prime, job, "accepted" if accepted else "rejected", bids, winner=winner.name,
-                             price=price, advance=advance, paid=paid, quality=round(work.quality, 3), cites=list(work.cites))
+        cs = self.contracts.values()
+        return Observation(
+            cycle=self.cycle, name=name, charter=me.charter, capabilities=tuple(sorted(me.capabilities)),
+            members=me.members, funded=me.thinking, capacity=me.capacity,
+            purse=self.ledger.balance(purse(name)), standing=round(self._standing(name), 3),
+            board=tuple(job_view(j) for j in self.jobs.values() if j.status == "open"),
+            my_jobs=tuple(job_view(j) for j in self.jobs.values() if j.status == "claimed" and j.prime == name),
+            open_contracts=tuple(contract_view(c, False) for c in cs if c.status == OPEN and c.prime != name),
+            my_announcements=tuple(contract_view(c, True) for c in cs if c.status == OPEN and c.prime == name),
+            to_deliver=tuple(contract_view(c, False) for c in cs if c.status == AWARDED and c.winner == name),
+            to_review=tuple(contract_view(c, True) for c in cs if c.status == DELIVERED and c.prime == name),
+            to_attest=tuple(contract_view(c, False) for c in cs
+                            if c.winner == name and c.closed is not None and c.status in ("accepted", "rejected", "failed")
+                            and not c.winner_attested),
+            peers=tuple(PeerView(o.name, tuple(sorted(o.capabilities)), o.members, round(self._standing(o.name), 3),
+                                 {cap: round(self._trust(name, o.name, cap), 3) for cap in sorted(o.capabilities)})
+                        for o in self.communities.values() if o.name != name),
+            library=tuple(PlaybookView(pb.id, pb.capability, pb.author, pb.title, pb.uses) for pb in self.library.values()),
+            events=tuple(self.inbox[name]),
+            journal=tuple(self.journal[name]),
+            params={"sub_share": p.sub_share, "work_cost": p.work_cost, "advance_frac": p.advance_frac, "publish_cost": p.publish_cost,
+                    "upkeep": p.upkeep, "actions_per_member": p.actions_per_member, "job_ttl": p.job_ttl, "pass_score": p.pass_score},
+            track=dict(me.deliveries),
+            owed=sum(c.price - c.advance for c in cs if c.prime == name and c.status in (AWARDED, DELIVERED)),
+        )
 
-        self._attest(prime, winner, job, prime.strategy.attest(prime, 1.0 if work.quality >= 0.5 else 0.0))
-        self._attest(winner, prime, job, winner.strategy.attest(winner, 1.0 if paid or work.quality < 0.5 else 0.0))
-        return accepted, list(work.cites)
-
-    def _attest(self, observer: Community, subject: Community, job: Job, outcome: float) -> None:
-        self._send(observer, Attest(job_id=job.job_id, subject=subject.name, capability=job.capability, outcome=outcome))
-        self.rep.attest(observer.name, subject.name, job.capability, outcome)
-
-    def _playbook(self, pid: str) -> Playbook | None:
-        for pbs in self.library.values():
-            for pb in pbs:
-                if pb.id == pid:
-                    return pb
-        return None
-
-    def _knowledge(self) -> None:
-        for c in self._active():
-            cap = c.strategy.publish(c, self._view(c))
-            if cap is None or not self.meter.can_afford(c.name, self.params.publish_cost):
-                continue
-            pid = hashlib.sha256(f"{c.name}:{cap}".encode()).hexdigest()[:10]
-            if not self._send(c, Publish(playbook_id=pid, capability=cap, title=f"{c.name} on {cap}", content_hash=pid)):
-                continue
-            self._charge(c, self.params.publish_cost, f"publish {pid}")
-            self.library.setdefault(cap, []).append(Playbook(pid, c.name, cap))
-            self.hub.emit("knowledge.publish", self.cycle, id=pid, author=c.name, capability=cap)
-            if c.workspace:
-                c.workspace.write(f"playbooks/{pid}.md", f"# {c.name} on {cap}\n")
-
+    # ── gossip and records ─────────────────────────────────────
     def _gossip(self) -> None:
         for c in self._active():
-            if not c.strategy.gossips(c):
+            if not c.strategy.gossips:
                 continue
             beliefs = sorted(self.rep.beliefs(c.name), key=lambda b: -b[3])[: self.params.gossip_fanout]
             for subject, cap, score, n in beliefs:
@@ -376,24 +490,22 @@ class World:
                     heard += 1
         self.hub.emit("reputation.gossip", self.cycle, heard=heard)
 
-    def _record(self, start: dict[str, int]) -> None:
+    def _record(self) -> None:
         for name, c in self.communities.items():
-            s = self._cycle_stats[name]
+            s = self._stats[name]
             self.history[name].append(Snapshot(
-                cycle=self.cycle,
-                purse=self.ledger.balance(purse(name)),
-                standing=self._standing(name),
-                allowance=self.bus.allowance(name),
-                active=c.active,
-                thinking=c.thinking,
-                won=s["won"],
-                delivered_ok=s["ok"],
-                earned=s["earned"],
+                cycle=self.cycle, purse=self.ledger.balance(purse(name)), standing=self._standing(name),
+                allowance=self.bus.allowance(name), active=c.active, thinking=c.thinking,
+                won=s["won"], delivered_ok=s["ok"], earned=s["earned"],
             ))
+        pipeline = Counter(c.status for c in self.contracts.values() if c.status in LIVE)
         self.hub.emit(
             "world.cycle", self.cycle,
             treasury=self.ledger.balance("treasury"),
-            jobs_done=self.jobs_done, jobs_failed=self.jobs_failed,
+            jobs_done=self.jobs_done, jobs_failed=self.jobs_failed, jobs_expired=self.jobs_expired,
+            board=sum(j.status == "open" for j in self.jobs.values()),
+            in_progress=sum(j.status == "claimed" for j in self.jobs.values()),
+            pipeline=dict(pipeline),
             bus_sent=dict(self.bus.sent),
             communities={
                 n: {"purse": h[-1].purse, "standing": round(h[-1].standing, 4), "allowance": h[-1].allowance,
@@ -405,7 +517,7 @@ class World:
 
 
 def summary(world: World, window: int = 50) -> str:
-    rows = [f"{'community':<10} {'strategy':<11} {'purse $':>9} {'standing':>8} {'allow':>5} {'active%':>7} {'won':>5} {'ok':>5}"]
+    rows = [f"{'community':<10} {'strategy':<11} {'purse cr':>9} {'standing':>8} {'allow':>5} {'active%':>7} {'won':>5} {'ok':>5}"]
     for name, hist in world.history.items():
         c = world.communities[name]
         tail = hist[-window:]
@@ -414,6 +526,7 @@ def summary(world: World, window: int = 50) -> str:
             f"{hist[-1].allowance:>5} {100 * sum(s.active for s in tail) / len(tail):>6.0f}% "
             f"{sum(s.won for s in hist):>5} {sum(s.delivered_ok for s in hist):>5}"
         )
-    rows.append(f"jobs done {world.jobs_done}, failed {world.jobs_failed}, treasury ${world.ledger.balance('treasury') / 1e6:.3f}, "
-                f"playbooks {sum(len(v) for v in world.library.values())}")
+    rows.append(f"jobs paid {world.jobs_done}, failed {world.jobs_failed}, expired on board {world.jobs_expired}, "
+                f"treasury {world.ledger.balance('treasury') / 1e6:.3f} cr, playbooks {len(world.library)}, "
+                f"royalties {sum(world.royalties_paid.values()) / 1e6:.3f} cr")
     return "\n".join(rows)

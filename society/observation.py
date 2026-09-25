@@ -37,6 +37,7 @@ class PartView:
     rubric: str
     done: bool
     source: str | None  # "self" or a contract id
+    pending: str | None = None  # status of the contract in flight for this part: open | awarded | delivered
 
 
 @dataclass(frozen=True)
@@ -75,8 +76,9 @@ class ContractView:
     my_bid: int | None = None
     winner: str | None = None
     price: int | None = None
-    artifact: str | None = None  # visible to the prime once delivered
+    artifact: str | None = None  # visible to the prime once delivered, and to the contractor
     deadline: int | None = None
+    status: str = "open"  # open | awarded | delivered | accepted | rejected | failed | defaulted | expired | withdrawn
 
 
 @dataclass(frozen=True)
@@ -119,6 +121,8 @@ class Observation:
     library: tuple[PlaybookView, ...]
     events: tuple[Event, ...]
     journal: tuple[str, ...] = ()
+    track: dict[str, int] = field(default_factory=dict)  # capability -> work of mine that was paid for
+    owed: int = 0  # remainders I still owe on contracts I awarded
     params: dict[str, int | float] = field(default_factory=dict)
 
 

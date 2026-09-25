@@ -105,8 +105,12 @@ def tagged(quality: float, body: str = "") -> str:
 
 
 class StubGrader:
-    """Reads the quality a scripted artifact declares. Untagged text scores zero."""
+    """Reads the quality a scripted artifact declares. Untagged text scores zero. `cost` stands
+    in for what a real grading call would charge the treasury."""
+
+    def __init__(self, cost: int = 0):
+        self.cost = cost
 
     def grade(self, spec: str, rubric: str, artifact: str) -> Grade:
         m = _TAG.search(artifact or "")
-        return Grade(min(1.0, max(0.0, float(m.group(1)))) if m else 0.0)
+        return Grade(min(1.0, max(0.0, float(m.group(1)))) if m else 0.0, self.cost)

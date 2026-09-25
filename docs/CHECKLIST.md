@@ -167,13 +167,39 @@ kill-switch.
 ### 1.1 Turn-based engine (prerequisite for LLM agents)
 - [x] Mock market board, parts and rubrics, `StubGrader` (`sim/market.py`)
 - [x] Observation / Outcome / `ActionsAPI` types (`society/observation.py`)
-- [x] Actions executor (`sim/actions.py`), written against the engine API it expects; not wired up yet
-- [ ] Each cycle, each active community takes one turn: `policy.turn(observation, actions)`
-- [ ] Contract-net spans cycles: announce → bid → award → deliver → review; expiry on every stage
-- [ ] Market board: jobs posted with parts per capability; claim, do parts, submit
-- [ ] Actions executor: validates, enforces capacity and funds, returns outcomes the agent can read
-- [ ] Port cooperator / defector / free-rider to turn policies; Phase 0 acceptance passes on the new engine
-- [ ] Retune the mock market so the treasury doesn't balloon (Phase 0 finding)
+- [x] Each cycle, each active community takes one turn: `strategy.turn(observation, actions)`, in random order
+- [x] Contract-net spans cycles: announce → bid → award → deliver → review; expiry on every stage
+      (open → expired; awarded → failed, with the prime's complaint filed; delivered → accepted by
+      default, or defaulted with the contractor's complaint if the prime can't pay)
+- [x] Market board: jobs posted with parts per capability; claim, do parts, auto-submit; graded per part
+- [x] Actions executor: validates, enforces capacity and funds, returns outcomes the agent can read
+- [x] Port cooperator / defector / free-rider to turn policies; Phase 0 acceptance passes on the new engine
+      (5 seeds), plus `tests/test_turns.py` for deadlines, visibility, determinism and pruning
+- [x] Retune the mock market so the treasury doesn't balloon: the reserve rule below keeps it flat at 2M cr
+      over 10k cycles. 10k cycles take 35 s with signature checks and grow RSS about 59 MB
+
+#### 1.1 findings
+Moving from one-shot contracts to contracts that span cycles broke the economy first. Each fix is a mechanism:
+- **Working capital.** Once work spans cycles, a community has to fund promises it made earlier.
+  Primes over-committed and defaulted, and broke contractors won bids they couldn't afford to deliver. Fix:
+  strategies count committed funds (`free()` = purse − remainders owed − work won − rest of own jobs)
+  before claiming, bidding or awarding.
+- **Upkeep is now a choice.** Paying every member every cycle drained money reserved for promises.
+  Each community now `wake()`s as many members as its work needs, the way an LLM steward will decide
+  how many members to commission.
+- **The basic budget only tops up poor purses** (below `floor_cap`, and it is less than one member's
+  upkeep). A community that never wakes can't bank handouts, and the free-rider still starves.
+- **Contractors lost money on every contract** at Phase 0 prices (work 25k vs a ~40k price over two
+  cycles of upkeep). Rebalanced: upkeep 4k, work 10k, reward 80k, 2 jobs/cycle, grading 2k/part.
+- **Treasury reserve rule:** the commons takes its 20% only while the treasury is below
+  `treasury_reserve`; above it, the earner gets 90%. Grading is paid by the treasury, or by the prime
+  when the treasury is empty.
+- **Open: cooperators get very rich** (120–200M cr each after 10k cycles). Wealth now builds up in
+  purses instead of the treasury. 1.2's spawn, fork and learn are the natural sinks; revisit prices
+  in 1.5 against measured token cost.
+- **Open: supply is capacity-bound.** About 30% of posted jobs expire unclaimed, because each
+  community holds at most 2 jobs. Spawning (more members) is the intended answer.
+- **Still open: redundant niches.** coop-b, whose capabilities overlap the other two, ends poorest.
 
 ### 1.2 Population and knowledge mechanics
 - [ ] `spawn` (fee to treasury, needs a second from a different community within N cycles), `retire`
@@ -184,9 +210,10 @@ kill-switch.
 - [ ] Dispute → paid audit by the grader; a false rejection costs the prime
 
 ### 1.3 Mock market and grader
-- [ ] Job generator: short, cheap, gradeable tasks, with one part per capability and a rubric per part
-- [ ] `Grader` interface: `StubGrader` for scripted runs, `LLMGrader` (structured output) for live runs
-- [ ] Grading cost metered and charged to the treasury
+- [x] Job generator: short, cheap, gradeable tasks, with one part per capability and a rubric per part
+- [x] `Grader` interface and `StubGrader` for scripted runs
+- [ ] `LLMGrader` (structured output) for live runs
+- [x] Grading cost charged to the treasury (notional 2k/part in scripted runs; the prime pays if the treasury is empty)
 
 ### 1.4 LLM agent runtime
 - [ ] Frozen protocol preamble + per-community charter, cached; tools sorted and stable

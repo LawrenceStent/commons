@@ -213,18 +213,21 @@ function render(s) {
 
   const C = s.contracts;
   $("contracts-window").textContent = `last ${C.window} closed`;
-  const stageOrder = ["accepted", "rejected", "no_award", "unfunded", "rate_limited"];
-  $("contracts").innerHTML = (C.window ? hbars(stageOrder.map(k => [k, C.stages[k] || 0]), v => v) : empty("No contracts yet.")) +
+  const stageOrder = ["accepted", "rejected", "failed", "defaulted", "expired", "withdrawn"];
+  const live = ["open", "awarded", "delivered"].map(k => `${k} ${C.live[k] || 0}`).join(" → ");
+  $("contracts").innerHTML = `<p class="mono">in flight: ${live}</p>` +
+    (C.window ? hbars(stageOrder.map(k => [k, C.stages[k] || 0]), v => v) : empty("No contracts closed yet.")) +
     (C.recent.length ? table(["cycle", "capability", "prime", "winner", "#bids", "#price", "#quality", "stage"],
       C.recent.map(c => `<tr><td class="num">${c.cycle}</td><td>${esc(c.capability)}</td><td>${esc(c.prime)}</td><td>${esc(c.winner || "–")}</td>
         <td class="num">${Object.keys(c.bids).length}</td><td class="num">${c.price != null ? amt(c.price) : "–"}</td>
         <td class="num">${c.quality ?? "–"}</td><td class="${c.stage === "accepted" ? "good" : c.stage === "rejected" ? "bad" : "warn"}">${esc(c.stage)}</td></tr>`)) : "");
 
   const M = s.market;
-  $("market").innerHTML = `<p class="mono">paid ${M.done.toLocaleString()} · failed ${M.failed.toLocaleString()}</p>` +
-    (M.recent.length ? table(["cycle", "prime", "parts", "#reward", "status"], M.recent.map(j =>
-      `<tr><td class="num">${j.cycle}</td><td>${esc(j.prime)}</td><td class="muted">${esc(j.caps.join("+"))}</td><td class="num">${amt(j.reward)}</td>
-       <td class="${j.status === "paid" ? "good" : "bad"}">${esc(j.status)}</td></tr>`)) : empty("No jobs yet."));
+  $("market").innerHTML = `<p class="mono">board ${M.board} · in progress ${M.in_progress} · reward ${amt(M.reward)}</p>` +
+    `<p class="mono">paid ${M.done.toLocaleString()} · failed ${M.failed.toLocaleString()} · expired unclaimed ${M.expired.toLocaleString()}</p>` +
+    (M.recent.length ? table(["cycle", "job", "prime", "parts", "stage"], M.recent.map(j =>
+      `<tr><td class="num">${j.cycle}</td><td class="mono">${esc(j.id)}</td><td>${esc(j.prime || "–")}</td><td class="muted">${esc(j.caps.join("+"))}</td>
+       <td class="${j.stage === "paid" ? "good" : j.stage === "failed" ? "bad" : "muted"}">${esc(j.stage)}${j.why ? ": " + esc(j.why) : ""}</td></tr>`)) : empty("No jobs yet."));
 
   const L = s.ledger;
   $("ledger-window").textContent = `last ${L.window} entries`;
@@ -274,6 +277,9 @@ async function drill(name) {
   const d = await (await fetch("/api/community/" + encodeURIComponent(name))).json();
   $("drill").innerHTML = `<div class="bar"><h1>${esc(d.name)}</h1><span style="flex:1"></span><button id="close">close</button></div>
     <p class="muted">${esc(d.charter)} · purse ${amt(d.purse)}</p>
+    <h2>Journal</h2>${d.journal.length ? `<pre>${esc(d.journal.join("\n"))}</pre>` : empty("No notes yet. Scripted communities don't keep a journal.")}
+    <h2 style="margin-top:12px">Waiting for its next turn</h2>${d.inbox.length ? `<pre>${d.inbox.map(e => `${String(e.cycle).padStart(6)} ${esc(e.kind).padEnd(10)} ${esc(e.text)}`).join("\n")}</pre>` : empty("Nothing new.")}
+    <h2 style="margin-top:12px">Recent activity</h2>
     <pre>${d.events.map(e => `${String(e.cycle ?? "").padStart(6)} ${esc(e.kind).padEnd(18)} ${esc(JSON.stringify(Object.fromEntries(Object.entries(e).filter(([k]) => !["seq", "kind", "cycle"].includes(k))))).slice(0, 160)}`).join("\n") || "(nothing recent)"}</pre>`;
   $("drill").className = "on";
   $("close").onclick = () => $("drill").className = "";

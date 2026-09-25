@@ -141,8 +141,10 @@ class Ledger:
         royalties: dict[str, int] | None = None,
         memo: str = "",
         source: str | None = None,
+        tax: bool = True,
     ) -> dict[str, int]:
-        """Revenue: 70% to the earner, 20% to the treasury, 10% to cited authors.
+        """Revenue: 70% to the earner, 20% to the treasury, 10% to cited authors. With
+        `tax=False` the treasury's 20% goes to the earner instead (90/0/10).
 
         `source` is where the money comes from: the mock `market` in a SIM ledger, a real
         payment processor such as `ext:stripe` in a USD one. `royalties` maps author
@@ -151,7 +153,7 @@ class Ledger:
         source = source or ("market" if self.currency == SIM else None)
         if source is None:
             raise WrongCurrency("real revenue needs a real source, e.g. source='ext:stripe'")
-        to_earner = amount * 70 // 100
+        to_earner = amount * (70 if tax else 90) // 100
         pool = amount * 10 // 100
         to_treasury = amount - to_earner - pool
         legs = [(source, -amount), (purse(earner), to_earner)]
