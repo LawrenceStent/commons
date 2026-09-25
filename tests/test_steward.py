@@ -206,7 +206,8 @@ def test_a_prose_reply_gets_one_reminder_then_the_turn_ends():
     w.step()
     steward_calls = [c for c in backend.chats if c[2] is not None]
     assert len(steward_calls) == 2  # the reply, one reminder, then stop
-    assert "without calling any tool" in steward_calls[1][1][-1]["text"]
+    reminders = [m for m in steward_calls[1][1] if m["role"] == "user" and "without calling any tool" in m["text"]]
+    assert len(reminders) == 1
     assert w.hub.recent("llm.turn")[-1].fields["tools"] == 0
 
 
