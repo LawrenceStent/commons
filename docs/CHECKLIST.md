@@ -202,12 +202,37 @@ Moving from one-shot contracts to contracts that span cycles broke the economy f
 - **Still open: redundant niches.** coop-b, whose capabilities overlap the other two, ends poorest.
 
 ### 1.2 Population and knowledge mechanics
-- [ ] `spawn` (fee to treasury, needs a second from a different community within N cycles), `retire`
-- [ ] `fork`: walk out with members, a pro-rata purse share, and discounted reputation
-- [ ] `learn`: acquire a capability at a cost (the pivot out of a redundant niche)
-- [ ] `merge` (both sides agree)
-- [ ] Playbooks carry real text; using one cites it structurally; royalties flow on revenue
-- [ ] Dispute → paid audit by the grader; a false rejection costs the prime
+- [x] `spawn` (fee to treasury, needs a second from a different community within N cycles), `retire`;
+      7 members at most
+- [x] `fork`: walk out with members, a pro-rata share of the purse net of debts, a subset of capabilities,
+      and the parent's record with good evidence halved and bad evidence kept in full (no laundering);
+      12 communities at most
+- [x] `learn`: acquire a capability at a cost that doubles per capability beyond the third; 40% off when
+      learning from a playbook, whose author earns 10% of the base cost
+- [x] `merge` (both sides agree; the joiner must have nothing in flight; purse, members, capabilities and
+      playbook authorship move; the joiner dissolves but its history and keys remain)
+- [x] Playbooks carry real text; using one cites it structurally; royalties flow on revenue and on learning
+- [x] Dispute → paid audit by the grader; a false rejection costs the prime (remainder + audit fee, and the
+      audit files evidence against it); a fair one costs the disputer the fee and standing
+- [x] Scripted cooperators second trusted peers' spawns, spawn when there's more work than members, fork
+      when full, learn only to escape a crowded niche, and dispute only rejections of work that passed.
+      `tests/test_population.py` covers every rule, including merge and disputes, which the scripted
+      characters never trigger
+
+#### 1.2 findings
+- **Cheap learning ended trade.** Rich cooperators learned every capability, stopped needing each
+  other, and contracts dried up. Fixes: generalism gets expensive (the doubling price), and the scripted
+  cooperator only pivots out of a crowded niche. **Watch for this with LLM agents:** vertical
+  integration is rational for one community and fatal for the commons.
+- **Without trade, honest records drifted to distrusted.** Phase 0 made bad evidence fade 4× slower.
+  With no fresh evidence, an honest community's rare mistakes outlived its good record. Now only records
+  that are mostly bad forget slowly; a mostly good record fades evenly and keeps its ratio. The defector
+  still stays refused.
+- **Growth absorbs wealth.** With spawn and fork, cooperators end 2,000 cycles at 5–20M cr instead of
+  about 35M, the society grows to its 12-community limit, and unclaimed jobs fall from about 30% to about 1%.
+- **Cost:** the acceptance suite now takes about 30 s (12 communities instead of 5).
+- **Not yet exercised by any strategy:** merge and disputes (tested directly). Those are the first
+  things to watch for when LLM agents take over.
 
 ### 1.3 Mock market and grader
 - [x] Job generator: short, cheap, gradeable tasks, with one part per capability and a rubric per part

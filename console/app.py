@@ -39,7 +39,7 @@ def _downsample(xs: list, n: int = SERIES_POINTS) -> list:
 
 
 def _ev(e) -> dict:
-    return {"seq": e.seq, "kind": e.kind, "cycle": e.cycle, **e.fields}
+    return {**e.fields, "seq": e.seq, "kind": e.kind, "cycle": e.cycle}
 
 
 def snapshot(state: dict) -> dict:
@@ -60,7 +60,9 @@ def snapshot(state: dict) -> dict:
             "compute": w.meter.by_community.get(name, 0),
             "rate_limited": w.bus.rejected.get(name, 0),
             "royalties": w.royalties_paid.get(name, 0),
-            "purse_series": _downsample([[e.cycle, e.fields["communities"][name]["purse"]] for e in cycles]),
+            "purse_series": _downsample([[e.cycle, e.fields["communities"][name]["purse"]] for e in cycles
+                                         if name in e.fields["communities"]]),
+            "parent": c.parent, "dissolved": c.dissolved,
         })
 
     names = list(w.communities)
@@ -72,7 +74,7 @@ def snapshot(state: dict) -> dict:
     flows: Counter[str] = Counter()
     for p in posts:
         if p["currency"] == w.ledger.currency:  # never add real dollars and credits together
-            flows[p["kind"]] += sum(n for _, n in p["legs"] if n > 0)
+            flows[p["type"]] += sum(n for _, n in p["legs"] if n > 0)
 
     llm = [_ev(e) for e in hub.recent("llm.call", n=hub.ring)]
     grades = [_ev(e) for e in hub.recent("grader.grade", n=hub.ring)]
@@ -108,6 +110,14 @@ def snapshot(state: dict) -> dict:
             "last_cycle": {f: n - prev["bus_sent"].get(f, 0) for f, n in last["bus_sent"].items()},
             "rate_limited": dict(w.bus.rejected),
             "tail": [_ev(e) for e in hub.recent("bus.publish", n=20)][::-1],
+        },
+        "population": {
+            "recent": [_ev(e) for e in hub.recent("population.", n=15)][::-1],
+            "open": [{"id": x.id, "kind": x.kind, "proposer": x.proposer, "detail": x.role or x.target, "deadline": x.deadline}
+                     for x in w.proposals.values() if x.status == "open"],
+            "living": sum(not c.dissolved for c in w.communities.values()),
+            "members": sum(c.members for c in w.communities.values()),
+            "limits": {"members": w.params.max_members, "communities": w.params.max_communities},
         },
         "knowledge": [{"id": pb.id, "author": pb.author, "capability": pb.capability, "title": pb.title, "uses": pb.uses}
                       for pb in w.library.values()],

@@ -125,7 +125,7 @@ class Ledger:
             self.db.execute("ROLLBACK")
             raise
         self._balances.update({(a, cur): n for a, n in after.items()})
-        self.hub.emit("ledger.post", cycle, entry=entry, currency=cur, kind=kind, memo=memo, legs=legs)
+        self.hub.emit("ledger.post", cycle, entry=entry, currency=cur, type=kind, memo=memo, legs=legs)
         return entry
 
     def transfer(self, src: str, dst: str, amount: int, *, cycle: int, kind: str, memo: str = "",

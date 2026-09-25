@@ -36,6 +36,12 @@ class Defector(Strategy):
     def publish(self, obs, act) -> None:
         return
 
+    def grow(self, obs, act) -> None:
+        return
+
+    def dispute(self, obs, act, c) -> None:
+        return
+
 
 class FreeRider(Strategy):
     """Takes the basic budget and contributes nothing: no market jobs, no bids, no playbooks."""

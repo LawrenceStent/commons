@@ -31,9 +31,10 @@ from protocol import Envelope, Message
 from protocol.reputation import Gossip
 from sim.actions import Actions
 from sim.market import CAPABILITIES, Grader, MarketJob, StubGrader, generate_job
+from sim.population import Proposal, expire_proposals
 from society.community import Community
 from society.observation import (
-    BidView, ContractView, Event, JobView, Observation, PartView, PeerView, PlaybookView,
+    BidView, ContractView, Event, JobView, Observation, Outcome, PartView, PeerView, PlaybookView, ProposalView,
 )
 from society.strategies import Cooperator, Defector, FreeRider
 from substrate.bus import MemoryBus, RateLimited
@@ -82,6 +83,19 @@ class Params:
     journal_keep: int = 20
     events_keep: int = 50
     retain: int = 20  # cycles a closed job or contract stays visible before it's dropped
+    # population and capabilities (sim/population.py)
+    max_members: int = 7
+    max_communities: int = 12
+    spawn_fee: int = 300_000
+    spawn_window: int = 3
+    merge_window: int = 3
+    fork_good_keep: float = 0.5  # share of a parent's good record a fork inherits (bad is kept in full)
+    learn_cost: int = 500_000
+    learn_playbook_discount: float = 0.4
+    learn_royalty: float = 0.1  # of learn_cost, to the author of the playbook learned from
+    # disputes
+    audit_cost: int = 6_000  # paid by the disputing contractor; refunded by the prime if the audit finds for them
+    dispute_window: int = 3
 
 
 def default_population() -> list[Community]:
@@ -127,6 +141,7 @@ class Contract:
     reason: str = ""
     winner_attested: bool = False
     closed: int | None = None
+    disputed: bool = False
 
 
 @dataclass
@@ -165,7 +180,9 @@ class World:
         self.history: dict[str, list[Snapshot]] = {n: [] for n in self.communities}
         self.jobs_done = self.jobs_failed = self.jobs_expired = 0
         self.royalties_paid: dict[str, int] = {}
-        self._job_seq = 0
+        self.proposals: dict[str, Proposal] = {}
+        self.known_capabilities = set(CAPABILITIES).union(*(c.capabilities for c in self.communities.values()))
+        self._job_seq = self._proposal_seq = 0
         self._stats: dict[str, Counter] = {}
 
         self.ledger.transfer("genesis", "treasury", p.treasury_seed, cycle=0, kind="genesis")
@@ -173,6 +190,16 @@ class World:
             c.strategy.rng = random.Random(f"{p.seed}:{c.name}")
             self.registry.register(c.name, c.identity.public, sorted(c.capabilities), c.charter)
             self.ledger.transfer("genesis", purse(c.name), p.purse_seed, cycle=0, kind="genesis")
+
+    def _add_community(self, c: Community) -> None:
+        """A community born mid-run (a fork). Its history starts empty, not back-filled."""
+        p = self.params
+        self.communities[c.name] = c
+        self.registry.register(c.name, c.identity.public, sorted(c.capabilities), c.charter)
+        self.journal[c.name] = deque(maxlen=p.journal_keep)
+        self.inbox[c.name] = deque(maxlen=p.events_keep)
+        self.history[c.name] = []
+        self._stats[c.name] = Counter()
 
     # ── helpers ────────────────────────────────────────────────
     def _standing(self, name: str) -> float:
@@ -199,7 +226,10 @@ class World:
             return False
 
     def _active(self) -> list[Community]:
-        return [c for c in self.communities.values() if c.active]
+        return [c for c in self.communities.values() if c.active and not c.dissolved]
+
+    def _living(self) -> list[Community]:
+        return [c for c in self.communities.values() if not c.dissolved]
 
     # ── the cycle ──────────────────────────────────────────────
     def step(self) -> None:
@@ -210,6 +240,7 @@ class World:
         self._floor()
         self._upkeep()
         self._deadlines()
+        expire_proposals(self)
         self._post_jobs()
         order = self._active()
         self.rng.shuffle(order)  # turn order must not decide who wins
@@ -231,7 +262,7 @@ class World:
         """The basic budget tops up poor purses only: enough to think, not enough to coast.
         A community that never wakes can't bank handouts, and a rich one doesn't need them."""
         p = self.params
-        for c in self.communities.values():
+        for c in self._living():
             if self.ledger.balance(purse(c.name)) >= p.floor_cap:
                 continue
             if self.ledger.balance("treasury") < p.basic_budget:
@@ -242,8 +273,11 @@ class World:
         """Each community decides how many members to wake, and pays for them. Thinking is the
         cost of doing business, so it is a choice; none awake means silence this cycle."""
         p = self.params
-        for c in self.communities.values():
+        for c in list(self.communities.values()):
             c.capacity = 0
+            if c.dissolved:
+                c.thinking, c.active = 0, False
+                continue
             want = c.strategy.wake(self.observe(c))
             c.thinking = max(0, min(c.members, int(want), self.ledger.balance(purse(c.name)) // p.upkeep))
             if c.thinking:
@@ -365,6 +399,48 @@ class World:
         else:
             self._tell(c.winner, "rejected", f"{c.prime} rejected {c.id}: {reason or 'no reason given'}", c.id)
 
+    def audit(self, c: Contract, reason: str) -> Outcome:
+        """Grade a disputed delivery. The commons ("audit") files its own first-hand evidence,
+        so the verdict moves standing, not any one community's private view."""
+        p = self.params
+        c.disputed = True
+        g = self.grader.grade(c.spec, c.rubric, c.artifact or "")
+        if g.cost:
+            self.ledger.transfer("treasury", "compute", min(g.cost, self.ledger.balance("treasury")), cycle=self.cycle,
+                                 kind="grading", memo=f"audit {c.id}")
+        self.hub.emit("grader.grade", self.cycle, job=c.job_id, part=c.capability, score=g.score, cost=g.cost, audit=c.id)
+        if g.score < p.pass_score:
+            self.rep.attest("audit", c.winner, c.capability, 0.0)
+            self._stage(c, "audit_upheld", score=g.score)
+            self._tell(c.prime, "audit", f"the audit upheld your rejection of {c.id} ({g.score:.2f})", c.id)
+            return Outcome(False, f"the audit upheld the rejection: your delivery scored {g.score:.2f}; the fee is gone")
+        owed = c.price - c.advance
+        try:
+            # the treasury keeps the fee (it paid for the audit); the prime reimburses the contractor
+            self.ledger.transfer(purse(c.prime), purse(c.winner), owed + p.audit_cost,
+                                 cycle=self.cycle, kind="audit", memo=f"overturned {c.id}")
+            paid = True
+        except InsufficientFunds:
+            paid = False
+        self.rep.attest("audit", c.prime, c.capability, 0.0)
+        self.rep.attest("audit", c.winner, c.capability, 1.0)
+        if not paid:
+            self._close(c, "defaulted")
+            self._tell(c.winner, "audit", f"the audit found for you on {c.id}, but {c.prime} can't pay", c.id)
+            return Outcome(True, f"the audit found for you ({g.score:.2f}), but {c.prime} can't pay; it is recorded as a default")
+        self._stat(c.winner, "earned", owed + p.audit_cost)
+        self._stat(c.winner, "ok")
+        c.reason = f"overturned on audit ({g.score:.2f}): {reason}"
+        self._close(c, "accepted")
+        self._stage(c, "audit_overturned", score=g.score)
+        self._tell(c.prime, "audit", f"the audit overturned your rejection of {c.id}; you paid {owed} plus the {p.audit_cost} fee", c.id)
+        job = self.jobs.get(c.job_id)
+        if job and job.status == "claimed" and job.parts[c.capability].artifact is None:
+            part = job.parts[c.capability]
+            part.artifact, part.source, part.cites = c.artifact, c.id, c.cites
+            self.maybe_submit(job)
+        return Outcome(True, f"the audit found for you ({g.score:.2f}): {c.prime} paid {owed} plus your {p.audit_cost} fee")
+
     def maybe_submit(self, job: MarketJob) -> None:
         """A complete job goes to the grader. Every part must pass for the market to pay."""
         if not job.complete or job.status != "claimed":
@@ -462,11 +538,25 @@ class World:
                             and not c.winner_attested),
             peers=tuple(PeerView(o.name, tuple(sorted(o.capabilities)), o.members, round(self._standing(o.name), 3),
                                  {cap: round(self._trust(name, o.name, cap), 3) for cap in sorted(o.capabilities)})
-                        for o in self.communities.values() if o.name != name),
+                        for o in self._living() if o.name != name),
+            spawn_requests=tuple(ProposalView(x.id, x.kind, x.proposer, x.deadline, x.role, round(self._standing(x.proposer), 3))
+                                 for x in self.proposals.values()
+                                 if x.kind == "spawn" and x.status == "open" and x.proposer != name),
+            merge_offers=tuple(ProposalView(x.id, x.kind, x.proposer, x.deadline, "", round(self._standing(x.proposer), 3))
+                               for x in self.proposals.values()
+                               if x.kind == "merge" and x.status == "open" and x.target == name),
+            my_proposals=tuple(ProposalView(x.id, x.kind, x.proposer, x.deadline, x.role or x.target, 0.0)
+                               for x in self.proposals.values() if x.proposer == name and x.status == "open"),
+            to_dispute=tuple(contract_view(c, False) for c in cs
+                             if c.winner == name and c.status == "rejected" and not c.disputed
+                             and self.cycle <= c.closed + p.dispute_window),
             library=tuple(PlaybookView(pb.id, pb.capability, pb.author, pb.title, pb.uses) for pb in self.library.values()),
             events=tuple(self.inbox[name]),
             journal=tuple(self.journal[name]),
             params={"sub_share": p.sub_share, "work_cost": p.work_cost, "advance_frac": p.advance_frac, "publish_cost": p.publish_cost,
+                    "spawn_fee": p.spawn_fee, "learn_cost": p.learn_cost, "audit_cost": p.audit_cost,
+                    "max_members": p.max_members, "pass_score": p.pass_score, "max_communities": p.max_communities,
+                    "communities": len(self._living()),
                     "upkeep": p.upkeep, "actions_per_member": p.actions_per_member, "job_ttl": p.job_ttl, "pass_score": p.pass_score},
             track=dict(me.deliveries),
             owed=sum(c.price - c.advance for c in cs if c.prime == name and c.status in (AWARDED, DELIVERED)),

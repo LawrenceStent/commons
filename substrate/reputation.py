@@ -58,10 +58,24 @@ class Reputation:
         n = min(evidence, 10.0) * weight
         self.indirect[(listener, subject, capability)][source] = Evidence(n * score, n * (1 - score))
 
+    def inherit(self, parent: str, child: str, capabilities, good: float, bad: float = 1.0) -> None:
+        """A fork starts from its parent's record in the capabilities it takes: every
+        observer's good evidence scaled by `good`, bad evidence by `bad` (keep it all by
+        default, so splitting off can't launder a bad record)."""
+        caps = set(capabilities)
+        for (o, s, c), e in list(self.direct.items()):
+            if s == parent and c in caps and o != child:
+                self.direct[(o, child, c)] = Evidence(e.good * good, e.bad * bad)
+        self.hub.emit("reputation.inherit", self.cycle, parent=parent, child=child, capabilities=sorted(caps))
+
     def tick(self) -> None:
+        # Slow forgetting applies only to records that are mostly bad. Applied to every record,
+        # it made an honest community that stopped trading drift below neutral as its good
+        # evidence faded and its rare mistakes didn't. A mostly good record fades evenly and
+        # keeps its ratio.
         for e in self._all_evidence():
             e.good *= self.decay
-            e.bad *= self.bad_decay
+            e.bad *= self.bad_decay if e.bad > e.good else self.decay
 
     def _all_evidence(self):
         yield from self.direct.values()

@@ -47,6 +47,8 @@ class Strategy:
             self.review(obs, act, c)
         for c in obs.to_deliver:
             self.deliver(obs, act, c)
+        for c in obs.to_dispute:
+            self.dispute(obs, act, c)
         for c in obs.to_attest:
             self.rate(obs, act, c)
         for c in obs.my_announcements:
@@ -57,6 +59,7 @@ class Strategy:
         for c in obs.open_contracts:
             self.bid(obs, act, c)
         self.publish(obs, act)
+        self.grow(obs, act)
 
     def wake(self, obs: Observation) -> int:
         """How many members to pay to think this cycle: enough for the work in hand plus a
@@ -113,7 +116,7 @@ class Strategy:
 
     def claim(self, obs: Observation, act: ActionsAPI) -> None:
         """Take a job only if we can do part of it and finance all of it from the purse."""
-        if len(obs.my_jobs) >= self.max_jobs or obs.capacity < 2:
+        if len(obs.my_jobs) >= max(self.max_jobs, obs.funded) or obs.capacity < 2:
             return
         sub_share = obs.params.get("sub_share", 0.4)
         for job in obs.board:
@@ -156,6 +159,46 @@ class Strategy:
             if obs.track.get(cap, 0) >= self.publish_after and cap not in mine:
                 act.publish(cap, f"{obs.name} on {cap}", f"How {obs.name} does {cap}: check the rubric line by line before sending.")
                 return
+
+    def dispute(self, obs: Observation, act: ActionsAPI, c: ContractView) -> None:
+        """Contest a rejection only when we know the work was good: a lost audit costs the fee and standing."""
+        if quality_of(c.artifact) >= obs.params.get("pass_score", 0.5) and obs.purse >= obs.params.get("audit_cost", 0):
+            act.dispute(c.id, "the delivery meets the rubric")
+
+    def grow(self, obs: Observation, act: ActionsAPI) -> None:
+        """Vouch for trusted peers; add members while there's more work than hands; pivot
+        into thin markets; split off once full. All only from money that isn't promised."""
+        for r in obs.spawn_requests:
+            if r.standing >= 0.6:
+                act.second_spawn(r.id)
+        for m in obs.merge_offers:
+            if m.standing >= 0.6:
+                act.accept_merge(m.id)
+        p, free = obs.params, self.free(obs)
+        upkeep = int(p.get("upkeep", 4_000))
+        busy = len(obs.my_jobs) >= max(self.max_jobs, obs.funded) and len(obs.board) >= 2
+        if (busy and obs.members < p.get("max_members", 7) and not obs.my_proposals
+                and free >= p.get("spawn_fee", 300_000) + 50 * upkeep):
+            act.propose_spawn("worker")
+            return
+        # pivot out of a crowded niche; don't collect capabilities (that ends trade)
+        thin = self.thin_market(obs) if len(obs.capabilities) < 3 else None
+        if thin and free >= 3 * p.get("learn_cost", 500_000):
+            act.learn(thin, self.playbook(obs, thin))
+            return
+        if (obs.members >= p.get("max_members", 7) and p.get("communities", 0) < p.get("max_communities", 12)
+                and free >= 4 * p.get("spawn_fee", 300_000)):
+            n = 1 + sum(peer.name.startswith(obs.name + "-") for peer in obs.peers)
+            act.fork(f"{obs.name}-{n}", obs.members // 2, obs.capabilities, f"split from {obs.name}")
+
+    def thin_market(self, obs: Observation) -> str | None:
+        """A capability we lack that at most one trusted peer offers, when ours are crowded."""
+        providers = lambda c: sum(c in peer.capabilities and peer.standing >= 0.6 for peer in obs.peers)
+        if min((providers(c) for c in obs.capabilities), default=0) < 2:
+            return None  # our niche isn't crowded
+        known = {c for peer in obs.peers for c in peer.capabilities} - set(obs.capabilities)
+        thin = {c: providers(c) for c in known if providers(c) <= 1}
+        return min(sorted(thin), key=thin.get) if thin else None
 
     # ── money ──────────────────────────────────────────────────
     def free(self, obs: Observation) -> int:

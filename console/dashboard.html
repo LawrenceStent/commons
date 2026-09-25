@@ -111,9 +111,10 @@ pre { margin:0; font:12px/1.55 ui-monospace,Menlo,monospace; white-space:pre-wra
   <section class="w4"><h2>Ledger flows <small id="ledger-window"></small></h2><div id="ledger"></div></section>
   <section class="w4"><h2>Bus</h2><div id="bus"></div></section>
 
-  <section class="w4"><h2>Knowledge</h2><div id="knowledge"></div></section>
-  <section class="w4"><h2>LLM calls</h2><div id="llm"></div></section>
-  <section class="w4"><h2>Grader &amp; gate</h2><div id="grader"></div></section>
+  <section class="w6"><h2>Population <small>spawn · fork · merge · learn</small></h2><div id="population"></div></section>
+  <section class="w6"><h2>Knowledge</h2><div id="knowledge"></div></section>
+  <section class="w6"><h2>LLM calls</h2><div id="llm"></div></section>
+  <section class="w6"><h2>Grader &amp; gate</h2><div id="grader"></div></section>
 
   <section class="w6"><h2>Host</h2><div id="host"></div></section>
   <section class="w6"><h2>Telemetry <small>events since start, by kind</small></h2><div id="events"></div></section>
@@ -187,7 +188,7 @@ function render(s) {
   $("communities").innerHTML = table(
     ["community", "strategy", "capabilities", "#thinking", "#purse", "purse, recent", "#standing", "#bus/cycle", "#won", "#delivered", "#compute", "#royalties", "#rate-limited"],
     s.communities.map((c, i) => `<tr>
-      <td><a class="c" data-c="${esc(c.name)}">${esc(c.name)}</a></td><td class="muted">${esc(c.strategy)}</td>
+      <td><a class="c" data-c="${esc(c.name)}">${esc(c.name)}</a>${c.parent ? ` <span class="muted">↳ ${esc(c.parent)}</span>` : ""}${c.dissolved ? ' <span class="muted">merged</span>' : ""}</td><td class="muted">${esc(c.strategy)}</td>
       <td class="muted">${esc(c.capabilities.join(", "))}</td>
       <td class="num">${c.thinking ?? "–"}/${c.members}${c.active === false ? ' <span class="warn">silent</span>' : ""}</td>
       <td class="num">${c.purse != null ? amt(c.purse) : "–"}</td>
@@ -213,7 +214,7 @@ function render(s) {
 
   const C = s.contracts;
   $("contracts-window").textContent = `last ${C.window} closed`;
-  const stageOrder = ["accepted", "rejected", "failed", "defaulted", "expired", "withdrawn"];
+  const stageOrder = ["accepted", "rejected", "failed", "defaulted", "expired", "withdrawn", "audit_overturned", "audit_upheld"];
   const live = ["open", "awarded", "delivered"].map(k => `${k} ${C.live[k] || 0}`).join(" → ");
   $("contracts").innerHTML = `<p class="mono">in flight: ${live}</p>` +
     (C.window ? hbars(stageOrder.map(k => [k, C.stages[k] || 0]), v => v) : empty("No contracts closed yet.")) +
@@ -233,7 +234,7 @@ function render(s) {
   $("ledger-window").textContent = `last ${L.window} entries`;
   $("ledger").innerHTML = hbars(Object.entries(L.flows).sort((a, b) => b[1] - a[1]), usd) +
     `<p class="mono muted">market paid out ${amt(-L.market)} · compute burned ${amt(-L.compute)}</p>` +
-    `<pre>${L.recent.slice(0, 8).map(p => `${String(p.cycle).padStart(6)} ${esc(p.kind).padEnd(9)} ${esc(p.memo).slice(0, 24)}`).join("\n")}</pre>`;
+    `<pre>${L.recent.slice(0, 8).map(p => `${String(p.cycle).padStart(6)} ${esc(p.type).padEnd(9)} ${esc(p.memo).slice(0, 24)}`).join("\n")}</pre>`;
 
   const B = s.bus;
   $("bus").innerHTML = table(["family", "#last cycle", "#total"], Object.entries(B.sent).map(([f, n]) =>
@@ -241,6 +242,18 @@ function render(s) {
     `<p class="muted" style="margin:8px 0 0">Rate-limited: ${Object.entries(B.rate_limited).map(([k, v]) => `${esc(k)} ${v}`).join(" · ") || "nobody"}</p>`;
   $("tail").innerHTML = `<pre>${B.tail.map(e => `${String(e.cycle).padStart(6)}  ${esc(e.sender).padEnd(10)} ${esc(e.family + "." + e.verb).padEnd(22)} ${esc(Object.entries(e.body).map(([k, v]) => `${k}=${typeof v === "object" ? JSON.stringify(v) : v}`).join(", ")).slice(0, 140)}`).join("\n") || "(quiet)"}</pre>`;
 
+  const P = s.population;
+  const popText = e => ({
+    "population.spawn": `${e.community} +1 member (${e.role}), seconded by ${e.seconded_by}`,
+    "population.fork": `${e.child} forked from ${e.parent}: ${e.members} members, ${(e.capabilities || []).join("+")}`,
+    "population.merge": `${e.joiner} merged into ${e.target}`,
+    "population.learn": `${e.community} learned ${e.capability}${e.playbook ? " from " + e.playbook : ""}`,
+    "population.retire": `${e.community} retired ${e.agent}`,
+    "population.proposal": `${e.proposer} proposed a ${e.type}${e.target ? " into " + e.target : ""}`,
+  }[e.kind] || e.kind);
+  $("population").innerHTML = `<p class="mono">${P.living} communities (limit ${P.limits.communities}) · ${P.members} members (≤ ${P.limits.members} each)</p>` +
+    (P.open.length ? `<p class="mono muted">waiting: ${P.open.map(x => `${esc(x.id)} ${esc(x.kind)} by ${esc(x.proposer)} until ${x.deadline}`).join(" · ")}</p>` : "") +
+    (P.recent.length ? `<pre>${P.recent.map(e => `${String(e.cycle).padStart(6)}  ${esc(popText(e))}`).join("\n")}</pre>` : empty("No population changes yet."));
   $("knowledge").innerHTML = s.knowledge.length ? table(["playbook", "author", "capability", "#uses"], s.knowledge.map(p =>
     `<tr><td class="mono">${esc(p.id)}</td><td>${esc(p.author)}</td><td>${esc(p.capability)}</td><td class="num">${p.uses}</td></tr>`)) : empty("No playbooks published yet.");
 

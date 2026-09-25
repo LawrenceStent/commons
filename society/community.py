@@ -25,6 +25,8 @@ class Community:
     thinking: int = 0  # members funded this cycle
     capacity: int = 0  # actions (bids, prime jobs) left this cycle
     deliveries: dict[str, int] = field(default_factory=dict)  # successful deliveries per capability
+    parent: str | None = None  # the community this one forked from
+    dissolved: bool = False  # merged into another; kept so its history and signatures still resolve
 
     def __post_init__(self):
         self.identity = Identity(self.name)

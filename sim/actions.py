@@ -14,7 +14,8 @@ from typing import TYPE_CHECKING
 from protocol import Envelope, Message
 from protocol.contract import Announce, Award, Bid, Deliver
 from protocol.knowledge import Cite, Publish
-from protocol.reputation import Attest
+from protocol.reputation import Attest, Dispute
+from sim import population
 from society.observation import Outcome
 from substrate.bus import RateLimited
 from substrate.ledger import InsufficientFunds, purse
@@ -178,6 +179,57 @@ class Actions:
         self.w.rep.attest(self.me.name, c.prime, c.capability, outcome)
         c.winner_attested = True
         return Outcome(True, f"rated {c.prime} {outcome:.2f} on {contract_id}")
+
+    def dispute(self, contract_id: str, reason: str) -> Outcome:
+        """Take a rejection to audit. The grader judges the delivery against the part's rubric.
+        Found for you: the prime pays what it owed plus your audit fee, and the audit counts
+        against it. Found against you: you lose the fee, and the audit counts against you."""
+        w, p = self.w, self.w.params
+        c = self._contract(contract_id)
+        if c is not None and c.winner == self.me.name and c.disputed:
+            return Outcome(False, f"{contract_id} has already been audited")
+        if c is None or c.winner != self.me.name or c.status != "rejected":
+            return Outcome(False, f"you have no rejected delivery {contract_id} to dispute")
+        if w.cycle > c.closed + p.dispute_window:
+            return Outcome(False, f"too late: disputes must be filed within {p.dispute_window} cycles of the rejection")
+        try:
+            w.ledger.transfer(purse(self.me.name), "treasury", p.audit_cost, cycle=w.cycle, kind="audit", memo=f"dispute {contract_id}")
+        except InsufficientFunds:
+            return Outcome(False, f"an audit costs {p.audit_cost}; you can't afford it")
+        if not self._send(Dispute(job_id=contract_id, subject=c.prime, reason=reason[:300])):
+            w.ledger.transfer("treasury", purse(self.me.name), p.audit_cost, cycle=w.cycle, kind="audit", memo=f"refund {contract_id}")
+            return Outcome(False, "rate-limited: your standing caps how much you can post per cycle")
+        return w.audit(c, reason[:300])
+
+    # ── population ─────────────────────────────────────────────
+    def propose_spawn(self, role: str) -> Outcome:
+        if err := self._use_capacity():
+            return err
+        return population.propose_spawn(self.w, self.me, role)
+
+    def second_spawn(self, proposal_id: str) -> Outcome:
+        return population.second_spawn(self.w, self.me, proposal_id)
+
+    def retire(self) -> Outcome:
+        return population.retire(self.w, self.me)
+
+    def fork(self, name: str, members: int, capabilities: tuple[str, ...], charter: str = "") -> Outcome:
+        if err := self._use_capacity():
+            return err
+        return population.fork(self.w, self.me, name, int(members), tuple(capabilities), charter)
+
+    def propose_merge(self, target: str) -> Outcome:
+        if err := self._use_capacity():
+            return err
+        return population.propose_merge(self.w, self.me, target)
+
+    def accept_merge(self, proposal_id: str) -> Outcome:
+        return population.accept_merge(self.w, self.me, proposal_id)
+
+    def learn(self, capability: str, playbook_id: str | None = None) -> Outcome:
+        if err := self._use_capacity():
+            return err
+        return population.learn(self.w, self.me, capability, playbook_id)
 
     # ── knowledge ──────────────────────────────────────────────
     def publish(self, capability: str, title: str, text: str) -> Outcome:
