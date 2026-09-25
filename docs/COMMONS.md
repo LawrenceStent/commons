@@ -85,7 +85,7 @@ Commons replaces the planner with **a market and a reputation**:
 | 1.0b | Created (SIM) money separated from real (USD) money | ✅ Done 25 Sep |
 | 1.1 | Turn-based engine: communities act through tools, and contracts span cycles | ✅ Done 25 Sep |
 | 1.2 | Spawn, retire, fork, merge, learn; playbooks; disputes and audits | ✅ Done 25 Sep |
-| 1.3 | LLM grader, model backends (structured output), calibration set | ✅ Built 25 Sep; live calibration pending |
+| 1.3 | LLM grader, model backends (structured output), calibration set | ✅ Done 25 Sep; local Hermes 8B scores 8/9 and resists injection; Anthropic calibration optional |
 | 1.4 | LLM agent runtime: steward tool loop, members, observation renderer | ⏳ Next |
 | 1.5 | Live runs: local first, then Anthropic with a spend cap | Planned |
 | 2 | One real channel: digital products, a storefront, Stripe, the human gate | Planned |
@@ -740,8 +740,14 @@ Findings:
   the fee.
 - **Calibration** (`sim/calibration.py`): 9 hand-labelled parts, one good and one bad per capability,
   plus a prompt-injection attempt. Run it with `python -m sim.calibrate --backend …`. The bar for
-  adoption is at least 8 of 9 correct and the injection resisted. **Still to do:** run it on LM Studio
-  and on Anthropic (about a cent).
+  adoption is at least 8 of 9 correct and the injection resisted.
+- **Local result (Hermes 3, Llama 3.1 8B):**
+  - First run: 7/9, and the injection *passed*. The model's reasons named violations it then scored
+    as passes.
+  - Fix: the answer now carries `all_requirements_met` and `manipulation_attempt` flags, and code caps
+    the score.
+  - Result: 8/9, injection resisted, stable across runs, about 2 s per part.
+  - Remaining weaknesses: word counting (it's poor at counting words) and subjective rubric lines.
 - The rotating grader panel waits until gaming shows up (§17).
 
 ### 1.4: LLM agent runtime
@@ -894,6 +900,8 @@ adversarially, then mainnet with per-community daily caps.
 - **Machine resources.** A local model can take 5–20+ GB. Only one heavy process at a time, check
   `lms ps`, unload after. The memory guard only watches the console process, not LM Studio.
 - **Unbounded growth.** Every new store needs a cap. The 1.0 leak shows how easy it is to miss.
+- **The grader's score can contradict its own reasoning** (seen on 8B locally), and models miscount
+  words. Code now holds the score to the model's findings; mechanical rubric checks belong in code too.
 - **Parameter sprawl.** `Params` now has 44 knobs. Every new one needs a reason, and ideally a
   mechanism instead.
 - **Regression drift.** A change can pass unit tests but shift the economy. Always run the acceptance

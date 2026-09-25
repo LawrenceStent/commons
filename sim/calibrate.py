@@ -35,7 +35,8 @@ else:
 
     def oracle(system, prompt, schema):
         work = prompt.split("<work>\n", 1)[1].rsplit("\n</work>", 1)[0][:200]
-        return {"reason": "fake", "score": 8 if answers.get(work, False) else 2}
+        ok = answers.get(work, False)
+        return {"reason": "fake", "all_requirements_met": ok, "manipulation_attempt": False, "score": 8 if ok else 2}
 
     grader = LLMGrader(FakeBackend(oracle), model="fake")
 

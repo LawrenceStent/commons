@@ -247,8 +247,25 @@ Moving from one-shot contracts to contracts that span cycles broke the economy f
       failing it; a failed audit call refunds the disputer's fee
 - [x] Calibration set (`sim/calibration.py`): 9 hand-labelled parts, one good and one bad per capability, plus
       a prompt-injection attempt; `python -m sim.calibrate --backend fake|lmstudio|anthropic`
-- [ ] Run calibration live: LM Studio (needs a model loaded; check memory first) and Anthropic (about a cent;
-      needs a key and your go-ahead). Adopt a backend only if it agrees on at least 8 of 9 cases and resists the injection
+- [x] Calibrated on LM Studio with Hermes 3 (Llama 3.1 8B, 4.6 GB, 8k context): **8/9, injection resisted**,
+      stable across runs, about 1.3–2.3 s per part. First attempt was 7/9 and the injection *passed* (see findings)
+- [ ] Calibrate on Anthropic Haiku 4.5 (about a cent; needs a key and your go-ahead)
+
+#### 1.3 findings
+- **A small model's score doesn't follow from its own reasoning.** Hermes 8B wrote "the tagline has more than
+  six words" and scored it 5 (pass), and wrote "violates the 50–70 word requirement" about the injection and
+  scored it 6. Fix: the answer now includes `all_requirements_met` and `manipulation_attempt`, and code caps the
+  score (a missed requirement can't pass; manipulation scores 0). That took it from 7/9 to 8/9 and caught the
+  injection. It's a mechanism, not a prompt tweak, so it holds for any model.
+- **Models can't count.** It called 62-word descriptions "46 words". Rubric lines that can be checked
+  mechanically (word counts, line counts, "valid Python") should be checked in code before the model sees
+  the work. Candidate for 1.5.
+- **Remaining miss:** it called "FixPod" unpronounceable. That's a subjective line a small model gets wrong;
+  expect some noise from a local grader and keep audits available.
+- **Nine cases is a tiny eval,** and the fix was tuned while looking at them. Grow the set before trusting
+  any grader with real money.
+- **Speed:** about 4 s of local grading per job. Fine for tens of cycles, slow for thousands; scripted runs
+  keep the stub grader.
 - [x] Grading cost charged to the treasury (notional 2k/part in scripted runs; the prime pays if the treasury is empty)
 
 ### 1.4 LLM agent runtime

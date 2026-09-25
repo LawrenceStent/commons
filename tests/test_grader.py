@@ -14,8 +14,13 @@ from society.strategies import Strategy
 from substrate.ledger import USD, purse
 
 
-def fixed(score, reason="because"):
-    return FakeBackend(lambda s, p, sch: {"reason": reason, "score": score})
+def answer(score, reason="because", met=None, manipulation=False):
+    return {"reason": reason, "all_requirements_met": score >= 5 if met is None else met,
+            "manipulation_attempt": manipulation, "score": score}
+
+
+def fixed(score, reason="because", **kw):
+    return FakeBackend(lambda s, p, sch: answer(score, reason, **kw))
 
 
 # ── the grader ─────────────────────────────────────────────────
@@ -45,7 +50,15 @@ def test_backend_failures_become_grading_errors():
 
 
 def test_schema_is_strict_enough_for_structured_outputs():
-    assert SCHEMA["additionalProperties"] is False and set(SCHEMA["required"]) == {"reason", "score"}
+    assert SCHEMA["additionalProperties"] is False
+    assert set(SCHEMA["required"]) == {"reason", "all_requirements_met", "manipulation_attempt", "score"}
+
+
+def test_code_holds_the_score_to_the_models_own_findings():
+    # a model that says a requirement was missed can't still pass the part
+    assert LLMGrader(fixed(6, met=False)).grade("t", "r", "w").score == 0.4
+    # and anything that tries to steer the grader scores zero
+    assert LLMGrader(fixed(10, met=True, manipulation=True)).grade("t", "r", "w").score == 0.0
 
 
 # ── backends without the network ───────────────────────────────
@@ -54,7 +67,7 @@ class _Usage:
 
 
 class _Block:
-    type, text = "text", json.dumps({"reason": "meets every line", "score": 9})
+    type, text = "text", json.dumps({"reason": "meets every line", "all_requirements_met": True, "manipulation_attempt": False, "score": 9})
 
 
 class _Resp:
@@ -121,7 +134,7 @@ def finish_a_job(w: World):
 
 
 def test_a_real_grader_books_usd_and_shows_on_the_dashboard():
-    w = world(LLMGrader(FakeBackend(lambda *a: {"reason": "good", "score": 8}, real=True)))
+    w = world(LLMGrader(FakeBackend(lambda *a: answer(8, "good"), real=True)))
     job = finish_a_job(w)
     assert job.status == "paid"
     real = w.ledger.real()
@@ -145,7 +158,7 @@ def test_an_unavailable_grader_delays_the_job_instead_of_failing_it():
     state = {"down": True}
 
     def flaky(*a):
-        return ModelError("503") if state["down"] else {"reason": "ok", "score": 8}
+        return ModelError("503") if state["down"] else answer(8, "ok")
 
     w = world(LLMGrader(FakeBackend(flaky)))
     job = finish_a_job(w)
@@ -168,7 +181,7 @@ def test_a_grader_that_stays_down_fails_the_job_after_retries():
 def test_real_grading_respects_the_real_kill_switch():
     from substrate.meter import KillSwitch
 
-    w = world(LLMGrader(FakeBackend(lambda *a: {"reason": "ok", "score": 8}, real=True)))
+    w = world(LLMGrader(FakeBackend(lambda *a: answer(8, "ok"), real=True)))
     w.meter.real_ceiling = 1
     with pytest.raises(KillSwitch):
         finish_a_job(w)
