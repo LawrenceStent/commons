@@ -8,7 +8,10 @@ Companion documents:
   doesn't replace it.
 - `docs/FRAMEWORK.md` (26 Sep 2026) plans the next step: extracting a domain-agnostic kernel so many
   societies can run on it (earn online, trading, tech-for-good, OSINT), founded from a brief. It also
-  sets the principle of effectiveness and efficiency, not speed.
+  sets the principle of effectiveness and efficiency, not speed; mission scorecards for non-profit
+  societies; and a staged path to small real-money trading.
+- `docs/DASHBOARD.md` (26 Sep 2026): ideas for a cyberpunk redesign of the dashboard and more
+  creative views of the data.
 - `docs/CHECKLIST.md` is the working build checklist. It records what is ticked and the findings
   from each step.
 - This guide is the long-form explanation that ties them together.

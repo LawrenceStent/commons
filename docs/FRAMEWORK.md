@@ -10,6 +10,7 @@
 3. [Kernel vs pack: what stays, what varies](#3-kernel-vs-pack-what-stays-what-varies)
 4. [The pack interfaces](#4-the-pack-interfaces)
 5. [Passing in context and spawning co-ops](#5-passing-in-context-and-spawning-co-ops)
+   - [5b. Measuring success beyond money](#5b-measuring-success-beyond-money)
 6. [Principle: effectiveness and efficiency, not speed](#6-principle-effectiveness-and-efficiency-not-speed)
 7. [Four societies, sketched](#7-four-societies-sketched)
 8. [Running several societies](#8-running-several-societies)
@@ -148,6 +149,10 @@ policy:
 params:                             # overrides of kernel defaults
   job_reward: 60000
   deliver_ttl: 6
+scorecard:                          # mission metrics: the headline of this society (§5b)
+  - {name: useful_assessments, by: human_sample, target: rising}
+  - {name: evidence_quality, by: code+grader, target: ">= 0.8"}
+  - {name: cost_per_useful_assessment, by: code, target: falling}
 dashboard:
   kpis: [assessments_accepted, avg_impact_score, cost_per_accepted_assessment]
 ```
@@ -252,6 +257,64 @@ principle (no orchestrator, no root agent) intact.
 
 ---
 
+## 5b. Measuring success beyond money
+
+*Added 26 Sep at your request: tech-for-good and OSINT societies need measures of success other than money.*
+
+### Fuel and mission are different things
+
+In every society, **credits are fuel**: they pay for thinking, and they drive selection (a co-op that
+wastes them goes quiet). But for a society whose purpose isn't profit, credits say nothing about
+whether it is *succeeding*. So each pack declares a **scorecard**: the mission metrics that define
+success for that society.
+
+- The scorecard is the **headline** of that society's dashboard. Credits sit below it, as operations.
+- The scorecard also **feeds the evaluator.** What a piece of work earns is set by how much it moves the
+  scorecard. That keeps fuel and mission pointing the same way. If credits and the scorecard diverge,
+  agents will chase credits (Goodhart's law), so the link is structural, not a hope.
+- Some metrics are **measured by code** (citation validity, duplicates, costs), some by **graders**
+  (quality against a rubric), and some **only by you** (usefulness, whether you acted on it). Metrics
+  you rate are sampled, so reviewing stays light.
+- Each metric states its direction, its target, and whether it's a **hard floor** (for example, zero
+  ethics violations) rather than something to maximise.
+
+### Tech-for-good scorecard (proposal)
+
+| Metric | What it measures | Measured by |
+|---|---|---|
+| Useful assessments | Assessments you rate "useful" or better | You (sampled) |
+| Acted on | Findings that led to a real follow-up (you contacted, funded, shared, built) | You |
+| Evidence quality | Share of claims backed by a cited, checkable source | Code + grader |
+| Feasibility realism | Cost, time and risk estimates judged plausible | Grader panel |
+| Who benefits | Clarity and size of the benefiting group, with the estimate's basis | Grader panel |
+| Coverage | Distinct problem areas and regions covered, not the same thing repeated | Code |
+| Novelty | Share of initiatives not already in the library (no duplicates) | Code |
+| Follow-up accuracy | When revisited later, did the initiative look as assessed? | Grader + you |
+| Cost per useful assessment | Credits of thinking per assessment you rated useful | Code |
+| Harms flagged | Risks and downsides identified, not just upside | Grader panel |
+
+### OSINT scorecard (proposal)
+
+| Metric | What it measures | Measured by |
+|---|---|---|
+| Verified claims | Share of claims independently verified by the verify co-op | Code + verify co-op |
+| Citation validity | Cited sources exist, are reachable, and say what's claimed | Code + grader |
+| Source independence | Claims corroborated by independent sources, not one source repeated | Grader |
+| Confidence calibration | Stated confidence matches later outcomes (Brier score over resolved claims) | Code |
+| Corrections | Claims later retracted or corrected (lower is better; honesty about it is rewarded) | Code |
+| Questions answered | Investigation questions answered fully, partly, or not | You + grader |
+| Usefulness | Findings you rate useful | You (sampled) |
+| Cost per verified claim | Credits of thinking per verified claim | Code |
+| **Ethics violations** | Any targeting of a private individual, personal-data aggregation, non-passive collection | Tool layer + audit. **Hard floor: must be zero; any violation pauses the society** |
+
+### General metrics, every society
+
+Efficiency (value per unit of thought), waste (calls with no action, refused tool calls, unused
+drafts), cooperation health (share of work done through contracts, royalties crossing co-ops) and
+concentration (how much work flows to the top co-op; the plan's Failure 2).
+
+---
+
 ## 6. Principle: effectiveness and efficiency, not speed
 
 The current engine rewards being first in several ways. The plan removes each, and adds
@@ -312,12 +375,31 @@ Because no one is racing:
   converted to credits, which pay for its thinking. A strategy that loses runs out of thinking budget
   and goes quiet. Selection happens by construction.
 - **Tools:** market data feed (prices, fundamentals), paper broker (orders, positions), news search.
-- **Hard rules:**
-  - **Paper trading only.** Any live brokerage is a separate, explicit decision, behind the gate, with
-    hard caps, and not part of this plan.
+- **The path to real money** (your aim: real trading after extensive testing, with very low amounts
+  and stop-losses). Each stage has to be passed before the next, and any stage can send a strategy back:
+
+  | Stage | What runs | Money | Graduates when |
+  |---|---|---|---|
+  | 1. Paper, forward | Paper broker, live prices, modelled fees and slippage | SIM credits | A strategy beats its benchmark after costs, risk-adjusted, over a long window you set in advance (for example 3 months), with drawdown inside its limit |
+  | 2. Shadow | Every order it would place is logged and priced against real fills, still on paper | SIM credits | Shadow and paper results agree within a tolerance; the risk limits never fired unexpectedly |
+  | 3. Micro-live | A real broker account, behind the gate, with **very small amounts** | USD | Kept only while it stays inside every limit below; any breach sends it back to paper |
+
+- **Limits for micro-live, enforced by code in the execution tool and the broker account itself, never
+  by prompts:**
+  - a **stop-loss on every position**, placed with the order, not afterwards
+  - a small **per-position size cap** and **per-co-op capital cap** (tens of dollars, not hundreds, to start)
+  - **daily and total loss limits** per co-op and for the society; hitting one closes positions and
+    pauses trading
+  - **no leverage, no margin, no shorting, no derivatives** at first
+  - the **real-dollar kill-switch** covers trading losses as well as API spend
+  - every order in stage 3 goes through the **gate**; batch approval is fine, silent autonomy isn't
+  - a **kill criterion decided before going live** (for example: stop if down 20% of allocated capital
+    or behind the benchmark after N months)
+- **Other hard rules:**
   - **Forward testing only, no LLM backtests.** Models have read history. A "backtest" on past data
     tests the model's memory, not the strategy. Evaluate only on data after the run starts.
-  - Not financial advice, and for your own study only.
+  - Your own account and money only. Check the tax and regulatory side before stage 3.
+  - Not financial advice.
 
 ### 7.3 Tech-for-good
 - **Capabilities:** `scout` (find initiatives, gaps, needs), `assess` (evidence, feasibility,
@@ -380,9 +462,9 @@ are, before building the harder ones.
 | **K1** Kernel/pack split | Move the market, capabilities, job templates, grader choice, preamble market section, seed population and param defaults into `packs/earn-online/`. Add `Pack`, `WorkSource`, `Evaluator` interfaces and a `Society` object that builds a `World` from a pack | Every existing test passes with pack 0 loaded; `grep` finds no domain words in the kernel |
 | **K2** Tempo and efficiency | Proposals-then-allocation with a claim bond (fixes hoarding); value scaled by quality; deferred settlement with escrow; efficiency metrics in the observation and dashboard; pack-set deadlines | The acceptance suite still passes; a test shows hoarding is unprofitable; the efficiency panel is live |
 | **K3** Context and founding | Brief and charter/doctrine as cached system blocks; the archive and `read_archive`; `commons found` with blueprint drafting and approval; per-society isolation and `runs/` layout | A society is founded from a brief file and runs, with blueprints approved by you |
-| **K4** Second pack: tech-for-good | Grant economy; brief-based work source; composite evaluator with a panel and a human sample; calibration set | Runs alongside earn-online (not at the same time) with no kernel changes beyond bug fixes |
+| **K4** Second pack: tech-for-good | Grant economy; brief-based work source; composite evaluator with a panel and a human sample; the **scorecard** (§5b) as the dashboard headline and an input to the evaluator; calibration set | Runs alongside earn-online (not at the same time) with no kernel changes beyond bug fixes |
 | **K5** Member tools and the gate | Tool-using members (web search/fetch, archive), with the gate enforced in the tool layer plus an egress allowlist; batch approval in the console | A gated tool can't run without approval, proven by test |
-| **K6** Trading pack | Paper broker; market data; deterministic, deferred, risk-adjusted evaluator; capital economy; doctrine per co-op | 30+ forward cycles on paper, with performance settled per horizon |
+| **K6** Trading pack | Paper broker; market data; deterministic, deferred, risk-adjusted evaluator; capital economy; doctrine per co-op; stop-losses and loss limits in the execution tool from day one | Stage 1 running: 30+ forward cycles on paper, with performance settled per horizon. Stages 2–3 (shadow, micro-live) are separate decisions after the graduation criteria are met |
 | **K7** OSINT pack | Sourcing-first evaluator; `verify` as a separate co-op; policy with forbidden-target rules enforced in tools | Red-team test: a brief targeting a private individual is refused at founding, and a tool call aimed at one is blocked |
 | **K8** Many societies | Registry, CLI, dashboard picker, per-society and total spend caps, a scheduler for slow cadences | Two societies run on alternate schedules on one machine within the guardrails |
 
@@ -452,9 +534,12 @@ can be met in any pack.
    needs your choice between Qwen 35B locally (22 GB, over the guardrail) and Anthropic (real spend).
 3. **Founding: model-drafted blueprints with your approval, or hand-written only?** I recommend
    drafted and approved: fast, and you remain the constitution.
-4. **Trading scope.** Paper-only, forward-only, as written? Which markets (equities, crypto, FX), and
-   what data source?
-5. **OSINT scope.** The forbidden-target rules in §7.4 are my proposal. What subjects do you actually
+4. **Trading scope.** *Partly answered 26 Sep:* real money eventually, after extensive testing, with very
+   small amounts and stop-losses (the staged path in §7.2). Still open: which markets (equities, crypto,
+   FX), which data source and broker, the graduation window, and the exact caps.
+5. **Scorecards.** The tech-for-good and OSINT scorecards in §5b are proposals. Which metrics matter
+   most to you, and how much rating are you willing to do (the "you" rows)?
+6. **OSINT scope.** The forbidden-target rules in §7.4 are my proposal. What subjects do you actually
    want investigated? This decides the allowlists and the evaluator.
-6. **Tempo.** What cadence feels right for a real society: a cycle an hour, a day? This drives batch
+7. **Tempo.** What cadence feels right for a real society: a cycle an hour, a day? This drives batch
    usage and cost.

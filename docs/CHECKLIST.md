@@ -137,6 +137,8 @@ host process), and a run can be paused from it.
 - [ ] Drill-down: journal, contract detail and LLM transcript (needs 1.1 / 1.4)
 - [x] Controls: pause / resume / step, speed, kill-switch; RSS guard (2 GB default) trips a visible pause
 - [ ] Runs attach to the dashboard or replay from a `runs/<id>.sqlite` file
+- [ ] Redesign (ideas in `docs/DASHBOARD.md`, 26 Sep): cyberpunk theme with a plain toggle, then the thought
+      trace, efficiency quadrant, money flow, society network, and the rest. Not urgent
 - [x] Test: panels render against a real world, snapshot size stays flat as a run grows
 - [x] Found and fixed a Phase 0 leak: MemoryBus kept every contract/knowledge envelope forever
       (nobody consumes those families). Streams are now capped like Redis MAXLEN; 3k-cycle RSS
