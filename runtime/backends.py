@@ -219,9 +219,8 @@ class LMStudioBackend:
     real = False
 
     def __init__(self, base_url: str = "http://localhost:1234/v1", price_as: str = "claude-haiku-4-5",
-                 timeout: float = 180.0, no_think: str = "/no_think"):
+                 timeout: float = 180.0):
         self.base_url, self.price_as, self.timeout = base_url.rstrip("/"), price_as, timeout
-        self.no_think = no_think  # appended to the last message when reasoning is off ("" to disable)
         self._tool_capable: dict[str, bool] = {}
 
     def supports_tools(self, model: str) -> bool:
@@ -275,11 +274,11 @@ class LMStudioBackend:
                 wire.append(msg)
             else:
                 wire += [{"role": "tool", "tool_call_id": r.call_id, "content": r.content} for r in m["results"]]
-        if not reasoning and self.no_think:
-            # Qwen-style soft switch: the model answers without a reasoning phase
-            last = next(m for m in reversed(wire) if m["role"] in ("user", "tool"))
-            last["content"] = f"{last['content']}\n\n{self.no_think}"
         body: dict[str, Any] = {"model": model, "messages": wire, "max_tokens": max_tokens, "temperature": 0.3}
+        if not reasoning:
+            # Tested 26 Sep on Qwen 3.5 35B-A3B: only reasoning_effort "none" works. "/no_think",
+            # chat_template_kwargs and reasoning_effort "low" all still reason until the allowance runs out.
+            body["reasoning_effort"] = "none"
         if tools:
             body["tools"] = [{"type": "function", "function": {"name": t["name"], "description": t["description"],
                                                                "parameters": t["input_schema"]}} for t in tools]

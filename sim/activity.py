@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import time
 from collections import deque
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
@@ -35,6 +36,7 @@ class Entry:
     ok: bool | None = None
     args: dict[str, Any] = field(default_factory=dict)
     why: str = ""
+    at: float = 0.0  # wall-clock time, for measuring how long cycles and turns take
 
 
 def _short(v: Any, limit: int = 160) -> Any:
@@ -88,7 +90,8 @@ class ActivityLog:
 
     def add(self, cycle, community, actor, kind, name, text, ok=None, args=None, why="") -> Entry:
         self._seq += 1
-        e = Entry(self._seq, cycle, community, actor, kind, name, text[:500], ok, _short(args or {}), (why or "")[:300])
+        e = Entry(self._seq, cycle, community, actor, kind, name, text[:500], ok, _short(args or {}), (why or "")[:300],
+                  round(time.time(), 3))
         self.ring.append(e)
         if self._file:
             self._file.write(json.dumps(asdict(e)) + "\n")

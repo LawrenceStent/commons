@@ -290,6 +290,11 @@ class Actions:
                         said=sum(e["kind"] == "say" for e in entries), errors=[e["text"] for e in entries if e["kind"] == "error"],
                         entries=entries[-80:])
 
+    def record_member_work(self, args: dict, out: Outcome) -> None:
+        """A member's commissioned work: part of the action log even though it runs in the runtime."""
+        why, self.why = self.why, ""
+        self.w.activity.add(self.w.cycle, self.me.name, "member", "action", "commission", out.message, out.ok, args, why)
+
     def record_decision(self, text: str) -> None:
         """What the steward said while deciding: the decision log's words, next to its actions."""
         if text.strip():

@@ -229,6 +229,8 @@ def test_every_action_decision_and_change_is_logged():
     assert any(e.kind == "decision" and "finish alone" in e.text for e in entries)
     assert any(e.actor == "scripted" and e.kind == "action" for e in entries)  # scripted agents are logged too
     assert any(e.kind == "change" and e.name == "job.paid" for e in entries)
+    assert any(e.name == "commission" and e.actor == "member" and e.ok for e in entries)
+    assert all(e.at > 0 for e in entries)
     parts = [e for e in entries if e.name == "do_part"]
     assert parts and all("chars)" in e.args["artifact"] for e in parts)  # work text isn't copied into the log
 

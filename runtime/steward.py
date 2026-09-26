@@ -127,8 +127,10 @@ class LLMStrategy(Strategy):
         try:
             match call.name:
                 case "commission":
-                    return self.commission(obs, act, str(a["ref"]), str(a["capability"]), str(a.get("instructions", "")),
-                                           a.get("playbook_id") or None)
+                    out = self.commission(obs, act, str(a["ref"]), str(a["capability"]), str(a.get("instructions", "")),
+                                          a.get("playbook_id") or None)
+                    act.record_member_work(a, out)
+                    return out
                 case "do_part":
                     d = self.drafts.get(str(a["draft_id"]))
                     if d is None:

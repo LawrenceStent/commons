@@ -315,7 +315,43 @@ Moving from one-shot contracts to contracts that span cycles broke the economy f
     work cost 40k, fees scaled to match, and longer deadlines (board 5, job 12, bids 4, deliver 5, review 3).
     Scripted runs keep their defaults, so the regression suite is unchanged. Steward reasoning capped at
     6,000 tokens a call.
-- [ ] Rerun with Qwen on the fixes (in progress 26 Sep)
+- [x] Rerun with Qwen on the fixes (26 Sep): 10 cycles in 20 minutes; results below
+- [x] Parallel turns (`Params.parallel_turns`, on for `sim.live`): stewards think at once, actions apply one at a
+      time under the world's lock; the dashboard updates mid-cycle. Not yet measured on a live run
+- [x] `runs/live.pid` is a lock: a second live run refuses to start (a dry run had overwritten and deleted the
+      real run's pid file). Member commissions are now in the activity log; every entry has a timestamp
+
+#### 1.5 Qwen rerun results (26 Sep, after the fixes)
+Qwen 3.5 35B-A3B for steward, member and grader; the calibrated live economy; sequential turns.
+- **Speed:** 10 cycles in about 20 minutes (about 2 minutes a cycle, down from about 5), because members no
+  longer reason and steward reasoning is capped.
+- **Members work now:** 16 of 22 commissions produced drafts. The 6 refusals were stewards commissioning work for
+  contracts they hadn't won yet, not members failing.
+- **Protocol use:** 47 of 75 steward tool calls succeeded. announce 9/9, bid 7/7, deliver 3/3, attest 3/3,
+  award 8/10, review 6/7. The misses: claim 5/20 (15 hit the two-job cap, and the stewards kept retrying),
+  do_part 5/14 (re-submitting parts already done).
+- **Trade between LLMs and others:** lab sold research to coop-b twice (both accepted, both jobs paid); studio
+  sold writing to lab (accepted). 4 jobs were paid in all, every one with a scripted prime.
+- **No LLM-prime job was paid.** Lab's J1 failed grading because studio's write part invented a statistic
+  ("thousands of…"), which the grader caught (0.30). The grader did its job.
+- **LLM primes kept hiring the defector:** 5 awards to it, even as its standing fell to 0.17. They rejected every
+  junk delivery correctly, but paid the advances each time. **The stewards don't weigh trust when awarding.**
+  Scripted primes refuse below 0.35 in code. To decide: show trust more prominently, warn on low-standing bids,
+  or let the substrate refuse (that would be a rule, not a prompt).
+- **The first audit by the market went against an LLM:** lab rejected good design work from coop-b; coop-b
+  disputed, the audit overturned it (0.81), and lab, unable to pay the remainder, defaulted. The mechanism
+  worked as designed.
+- **Decision log is rich:** 29 steward statements and 65 actions with a `why` (for example, "Claim sourdough
+  starter kit job - write part matches our capabilities, can outsource build"). **Goals and ideas: not used
+  at all.** Qwen ignored the new tools.
+- **Money:** studio spent 405,884 µcr on 58 model calls and lab 416,157 on 59 (about 7,000 per call). They
+  earned 100,000 and 300,000 in contracts. Thinking still costs about 4× what they earn: studio ended broke,
+  and lab with 86,803. Standing: studio 0.83, lab 0.71.
+- **Next:**
+  1. make trust visible where awards are decided
+  2. cut wasted calls (retrying refused claims and done parts)
+  3. measure parallel turns
+  4. revisit the price of thinking: calls are cheaper than before, but a steward still makes about 6 per turn
 - [x] **Activity log** (`sim/activity.py`): every action through the executor (scripted and LLM), every steward
   decision (its words, and an optional `why` on any tool call) and every world change (jobs, contracts, grades,
   audits, population, playbooks, kill-switches) in one timeline. A bounded ring in memory (2,000 entries); live

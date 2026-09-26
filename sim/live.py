@@ -78,12 +78,22 @@ population = [
 ]
 Path("runs").mkdir(exist_ok=True)
 ledger = f"runs/live-{a.backend}-{time.strftime('%Y%m%d-%H%M%S')}.sqlite"
-# this process's own pid: `uv run` wraps us, and a signal sent to the wrapper doesn't reach the world
+# runs/live.pid is both this process's real pid (`uv run` wraps us, and a signal sent to the wrapper
+# doesn't reach the world) and a lock: one live run at a time, per the resource guardrails. A second run
+# once overwrote and then deleted the first run's pid file; now it refuses to start.
 import atexit
 import os
 
-Path("runs/live.pid").write_text(str(os.getpid()))
-atexit.register(lambda: Path("runs/live.pid").unlink(missing_ok=True))
+PID = Path("runs/live.pid")
+if PID.exists():
+    try:
+        other = int(PID.read_text())
+        os.kill(other, 0)
+        sys.exit(f"another live run is active (pid {other}); stop it first: kill -INT {other}")
+    except (ValueError, ProcessLookupError, PermissionError):
+        pass  # a stale file from a run that died
+PID.write_text(str(os.getpid()))
+atexit.register(lambda: PID.read_text() == str(os.getpid()) and PID.unlink())
 # The live economy, calibrated on the 1.5 local runs (26 Sep): a steward call costs about 4,500 µcr
 # (about 10,000 when the model reasons), a member call a few thousand, and handling one job takes a
 # few turns plus contractors. At the scripted defaults (reward 80k) thinking bankrupted every LLM
