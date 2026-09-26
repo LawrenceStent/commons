@@ -372,6 +372,8 @@ Same seed (same market) as run 2, so differences come from the changes.
 - **Speed:** turns took 22.3 minutes in total, against 40.8 if back to back (**1.8× faster**). Normal cycles
   take 45–90 s. Cycles 7 and 8 took about 9 and 3.5 minutes because audits ran the grader, with no token cap,
   **while holding the world's lock**, so every action waited. **Fix next: grade outside the lock.**
+  *Fixed 26 Sep (b5fbae4):* jobs are queued for grading and disputes file audits; `settle_grading` runs after the
+  turns, makes the model calls without the lock, and applies verdicts under it. Payment lands at cycle end.
 - **Wasted calls:** 69 of 97 calls succeeded (71%, up from 63%). The world rules removed both big sources:
   refusals at the claim limit and re-submitted parts went from 24 to 0. What remains is mostly the **race that
   parallel turns created**: 13 refusals were claims on jobs another steward took first, or announcements for
