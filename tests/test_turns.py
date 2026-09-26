@@ -151,4 +151,4 @@ def test_a_community_cannot_hoard_jobs():
     act(w, "prime").me.capacity = 10
     assert act(w, "prime").claim(ids[0]) and act(w, "prime").claim(ids[1])
     out = act(w, "prime").claim(ids[2])
-    assert not out and "one per awake member" in out.message
+    assert not out and "finish one first" in out.message
