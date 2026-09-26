@@ -130,6 +130,7 @@ def finish_a_job(w: World):
     for cap in job.parts:
         job.parts[cap].artifact, job.parts[cap].source = f"real {cap} work", "self"
     w.maybe_submit(job)
+    w.settle_grading()
     return job
 
 
@@ -207,3 +208,29 @@ def test_calibration_report_flags_a_grader_that_falls_for_injection():
     results = calibration.run(LLMGrader(fixed(10)))
     text = calibration.report(results)
     assert "NOT resisted" in text and "agreement 4/9" in text
+
+
+def test_grading_runs_outside_the_worlds_lock():
+    import threading
+
+    started, release = threading.Event(), threading.Event()
+
+    def slow(*a):
+        started.set()
+        release.wait(5)
+        return answer(8, "ok")
+
+    w = world(LLMGrader(FakeBackend(slow)))
+    job = MarketJob("T2", "kit", 80_000, {"research": Part("research", "r", "r")}, posted=w.cycle, deadline=w.cycle + 3)
+    w.jobs[job.id] = job
+    job.prime, job.status = "solo", "claimed"
+    job.parts["research"].artifact, job.parts["research"].source = "work", "self"
+    w.maybe_submit(job)
+    t = threading.Thread(target=w.settle_grading)
+    t.start()
+    assert started.wait(5)
+    assert w.lock.acquire(timeout=1), "another community must be able to act while the grader thinks"
+    w.lock.release()
+    release.set()
+    t.join(5)
+    assert job.status == "paid"

@@ -81,6 +81,8 @@ def test_accepted_delivery_completes_the_job_and_the_market_pays():
     before = w.ledger.balance(purse("prime"))
     act(w, "prime").do_part(job.id, "research", tagged(0.9, " research"))
     assert act(w, "prime").review(c.id, True)
+    assert job.status == "claimed" and job.id in w.awaiting_grade  # submitted; graded after the turns
+    w.settle_grading()
     assert job.status == "paid" and w.jobs_done == 1
     assert w.ledger.balance(purse("prime")) > before
     assert w.rep.score("prime", "sub", "build") > 0.5
@@ -94,6 +96,7 @@ def test_a_bad_part_fails_grading_and_nobody_is_paid_for_the_job():
     act(w, "sub").deliver(c.id, tagged(0.9, " build"))
     act(w, "prime").review(c.id, True)
     act(w, "prime").do_part(job.id, "research", tagged(0.2, " sloppy"))
+    w.settle_grading()
     assert job.status == "failed" and w.jobs_done == 0
 
 

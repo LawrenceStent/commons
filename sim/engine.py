@@ -208,7 +208,9 @@ class World:
         self.jobs_done = self.jobs_failed = self.jobs_expired = 0
         self.royalties_paid: dict[str, int] = {}
         self.proposals: dict[str, Proposal] = {}
-        self.awaiting_grade: dict[str, int] = {}  # job id -> failed grading attempts
+        # grading happens after the turns, outside the lock (see settle_grading)
+        self.awaiting_grade: dict[str, int] = {}  # submitted job id -> failed grading attempts so far
+        self.pending_audits: dict[str, dict] = {}  # contract id -> {reason, attempts}
         self.transcripts: defaultdict[str, deque] = defaultdict(lambda: deque(maxlen=2))  # LLM turns, newest last
         self.plans: defaultdict[str, Plans] = defaultdict(Plans)  # ideas and goals per community
         self._plan_seq = 0
@@ -300,6 +302,7 @@ class World:
             with self.lock:
                 for c in order:
                     self._turn(c)
+        self.settle_grading()
         with self.lock:
             if self.cycle % self.params.gossip_every == 0:
                 self._gossip()
@@ -367,15 +370,6 @@ class World:
                 self.hub.emit("market.job", now, id=job.id, stage="expired", caps=sorted(job.parts), reward=job.reward)
             elif job.status == "claimed" and now > job.deadline and job.id not in self.awaiting_grade:
                 self._fail_job(job, "missed its deadline")
-        for jid in list(self.awaiting_grade):
-            job = self.jobs.get(jid)
-            if job is None or job.status != "claimed":
-                self.awaiting_grade.pop(jid, None)
-            elif self.awaiting_grade[jid] >= self.params.grade_retries:
-                self.awaiting_grade.pop(jid)
-                self._fail_job(job, "the grader was unavailable")
-            else:
-                self.maybe_submit(job)
         for c in list(self.contracts.values()):
             if c.deadline >= now:
                 continue
@@ -465,21 +459,24 @@ class World:
             self._tell(c.winner, "rejected", f"{c.prime} rejected {c.id}: {reason or 'no reason given'}", c.id)
 
     def audit(self, c: Contract, reason: str) -> Outcome:
-        """Grade a disputed delivery. The commons ("audit") files its own first-hand evidence,
-        so the verdict moves standing, not any one community's private view."""
-        p = self.params
-        try:
-            g = self._grade(c.spec, c.rubric, c.artifact or "", job=c.job_id, part=c.capability,
-                            payers=("treasury", purse(c.winner)), audit=c.id)
-        except GradingError as e:
-            self.ledger.transfer("treasury", purse(c.winner), p.audit_cost, cycle=self.cycle, kind="audit", memo=f"refund {c.id}")
-            return Outcome(False, f"the grader is unavailable ({e}); your fee was refunded, try again next turn")
+        """File a dispute. The grader decides at the end of this cycle, outside the world's lock, so an
+        audit never holds up other communities (in the third Qwen run one stalled a cycle for 9 minutes)."""
         c.disputed = True
+        self.pending_audits[c.id] = {"reason": reason, "attempts": 0}
+        self._stage(c, "audit_filed")
+        self._tell(c.prime, "audit_filed", f"{c.winner} disputed your rejection of {c.id}; the grader decides this cycle", c.id)
+        return Outcome(True, f"audit of {c.id} filed; the grader decides at the end of this cycle")
+
+    def _apply_audit(self, c: Contract, g, reason: str) -> None:
+        """The verdict, under the lock. The commons ("audit") files its own first-hand evidence, so the
+        verdict moves standing, not any one community's private view."""
+        p = self.params
         if g.score < p.pass_score:
             self.rep.attest("audit", c.winner, c.capability, 0.0)
             self._stage(c, "audit_upheld", score=g.score)
             self._tell(c.prime, "audit", f"the audit upheld your rejection of {c.id} ({g.score:.2f})", c.id)
-            return Outcome(False, f"the audit upheld the rejection: your delivery scored {g.score:.2f}; the fee is gone")
+            self._tell(c.winner, "audit", f"the audit upheld the rejection of {c.id}: your delivery scored {g.score:.2f}; the fee is gone", c.id)
+            return
         owed = c.price - c.advance
         try:
             # the treasury keeps the fee (it paid for the audit); the prime reimburses the contractor
@@ -493,7 +490,7 @@ class World:
         if not paid:
             self._close(c, "defaulted")
             self._tell(c.winner, "audit", f"the audit found for you on {c.id}, but {c.prime} can't pay", c.id)
-            return Outcome(True, f"the audit found for you ({g.score:.2f}), but {c.prime} can't pay; it is recorded as a default")
+            return
         self._stat(c.winner, "earned", owed + p.audit_cost)
         self._stat(c.winner, "ok")
         c.reason = f"overturned on audit ({g.score:.2f}): {reason}"
@@ -505,32 +502,99 @@ class World:
             part = job.parts[c.capability]
             part.artifact, part.source, part.cites = c.artifact, c.id, c.cites
             self.maybe_submit(job)
-        return Outcome(True, f"the audit found for you ({g.score:.2f}): {c.prime} paid {owed} plus your {p.audit_cost} fee")
+        self._tell(c.winner, "audit", f"the audit found for you on {c.id} ({g.score:.2f}): {c.prime} paid {owed} plus your {p.audit_cost} fee", c.id)
 
     def maybe_submit(self, job: MarketJob) -> None:
-        """A complete job goes to the grader. Every part must pass for the market to pay."""
-        if not job.complete or job.status != "claimed":
+        """A complete job is submitted for grading at the end of this cycle. Every part must pass for the
+        market to pay."""
+        if not job.complete or job.status != "claimed" or job.id in self.awaiting_grade:
             return
-        for cap, part in job.parts.items():
-            if cap in job.scores:
-                continue  # graded on an earlier attempt
+        self.awaiting_grade[job.id] = 0
+        self._tell(job.prime, "submitted", f"{job.id} is complete and goes to the grader at the end of this cycle", job.id)
+
+    def settle_grading(self) -> None:
+        """Grade every submitted job and every filed audit. Model calls run outside the world's lock;
+        verdicts and money are applied under it. An unavailable grader is retried next cycle, up to
+        `grade_retries` times."""
+        with self.lock:
+            jobs = []
+            for jid in list(self.awaiting_grade):
+                job = self.jobs.get(jid)
+                if job is None or job.status != "claimed":
+                    self.awaiting_grade.pop(jid, None)
+                    continue
+                jobs.append((jid, [(cap, p.spec, p.rubric, p.artifact) for cap, p in sorted(job.parts.items())
+                                   if cap not in job.scores]))
+            audits = [(cid, c.spec, c.rubric, c.artifact or "") for cid in list(self.pending_audits)
+                      if (c := self.contracts.get(cid)) is not None]
+        verdicts: dict[tuple[str, str], object] = {}
+        for jid, parts in jobs:
+            for cap, spec, rubric, artifact in parts:
+                verdicts[(jid, cap)] = self._try_grade(spec, rubric, artifact)
+        for cid, spec, rubric, artifact in audits:
+            verdicts[("audit", cid)] = self._try_grade(spec, rubric, artifact)
+        with self.lock:
+            for jid, parts in jobs:
+                self._apply_job_grades(jid, [(cap, verdicts[(jid, cap)]) for cap, *_ in parts])
+            for cid, *_ in audits:
+                self._settle_audit(cid, verdicts[("audit", cid)])
+
+    def _try_grade(self, spec: str, rubric: str, artifact: str):
+        try:
+            return self.grader.grade(spec, rubric, artifact)
+        except GradingError as e:
+            return e
+
+    def _apply_job_grades(self, jid: str, graded: list) -> None:
+        job = self.jobs.get(jid)
+        if job is None or job.status != "claimed":
+            self.awaiting_grade.pop(jid, None)
+            return
+        errors = []
+        for cap, g in graded:
+            if isinstance(g, GradingError):
+                errors.append(str(g))
+                continue
             try:
                 # the commons pays for grading; when it can't, the prime whose job it is does
-                g = self._grade(part.spec, part.rubric, part.artifact, job=job.id, part=cap,
-                                payers=("treasury", purse(job.prime)))
-            except GradingError as e:
-                self.awaiting_grade[job.id] = self.awaiting_grade.get(job.id, 0) + 1
-                self._tell(job.prime, "grading_delayed", f"{job.id} is waiting for the grader: {e}", job.id)
-                return
+                self._charge_grade(g, job=jid, part=cap, payers=("treasury", purse(job.prime)))
             except InsufficientFunds:
+                self.awaiting_grade.pop(jid, None)
                 self._fail_job(job, "no one could pay for grading")
                 return
             job.scores[cap] = g.score
-        self.awaiting_grade.pop(job.id, None)
+        if errors:
+            self.awaiting_grade[jid] += 1
+            if self.awaiting_grade[jid] >= self.params.grade_retries:
+                self.awaiting_grade.pop(jid)
+                self._fail_job(job, "the grader was unavailable")
+            else:
+                self._tell(job.prime, "grading_delayed", f"{jid} is waiting for the grader: {errors[0]}", jid)
+            return
+        self.awaiting_grade.pop(jid, None)
         if min(job.scores.values()) < self.params.pass_score:
             self._fail_job(job, f"a part failed grading ({', '.join(f'{k} {v:.2f}' for k, v in job.scores.items())})")
             return
         self._pay_job(job)
+
+    def _settle_audit(self, cid: str, g) -> None:
+        entry = self.pending_audits[cid]
+        c = self.contracts.get(cid)
+        if c is None:
+            self.pending_audits.pop(cid)
+            return
+        if isinstance(g, GradingError):
+            entry["attempts"] += 1
+            if entry["attempts"] >= self.params.grade_retries:
+                self.pending_audits.pop(cid)
+                c.disputed = False  # it may be filed again
+                self.ledger.transfer("treasury", purse(c.winner), self.params.audit_cost, cycle=self.cycle, kind="audit",
+                                     memo=f"refund {cid}")
+                self._tell(c.winner, "audit", f"the grader was unavailable for the audit of {cid}; your fee was refunded", cid)
+            return
+        self.pending_audits.pop(cid)
+        self._charge_grade(g, job=c.job_id, part=c.capability, payers=("treasury", purse(c.winner)), audit=cid)
+        self._apply_audit(c, g, entry["reason"])
 
     def _appraise_ventures(self) -> None:
         """Appraise waiting ventures outside the lock (a model call must never stall other communities),
@@ -590,11 +654,9 @@ class World:
                       score=v.score, reward=v.reward, reason=v.reason, job=job.id)
         self.hub.emit("market.job", self.cycle, id=job.id, stage="venture", prime=v.proposer, caps=sorted(job.parts), reward=v.reward)
 
-    def _grade(self, spec: str, rubric: str, artifact: str, *, job: str, part: str, payers: tuple[str, ...],
-               audit: str | None = None) -> Grade:
-        """Grade one part and pay for it: the notional cost from the first payer that can
-        afford it, and, if a billed model did the work, the real bill in USD as well."""
-        g = self.grader.grade(spec, rubric, artifact)
+    def _charge_grade(self, g: Grade, *, job: str, part: str, payers: tuple[str, ...], audit: str | None = None) -> Grade:
+        """Pay for one grade: the notional cost from the first payer that can afford it, and, if a billed
+        model did the work, the real bill in USD as well. Under the lock."""
         if g.cost:
             payer = next((a for a in payers if self.ledger.balance(a) >= g.cost), payers[-1])
             self.ledger.transfer(payer, "compute", g.cost, cycle=self.cycle, kind="grading", memo=audit or job)
