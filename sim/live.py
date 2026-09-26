@@ -60,7 +60,9 @@ else:
     steward = member = grader = "fake"
 
 
-room = {"max_tokens": 12000, "member_max_tokens": 6000} if a.reasoning else {}
+# Reasoning models think before answering, and thinking counts against max_tokens: give stewards room,
+# but a cap (thinking is charged). Members never reason (see runtime/steward.py), so they need little.
+room = {"max_tokens": 6000, "member_max_tokens": 2500} if a.reasoning else {}
 grader_tokens = 6000 if a.reasoning else 400
 
 
@@ -82,7 +84,18 @@ import os
 
 Path("runs/live.pid").write_text(str(os.getpid()))
 atexit.register(lambda: Path("runs/live.pid").unlink(missing_ok=True))
-world = World(Params(seed=a.seed, ledger_path=ledger), population=population,
+# The live economy, calibrated on the 1.5 local runs (26 Sep): a steward call costs about 4,500 µcr
+# (about 10,000 when the model reasons), a member call a few thousand, and handling one job takes a
+# few turns plus contractors. At the scripted defaults (reward 80k) thinking bankrupted every LLM
+# community within three cycles. A 400k reward covers a job's thinking and its contractors with a
+# margin, so good work pays and waste still hurts. Tokens are now the main cost of thinking, so upkeep
+# falls; deadlines lengthen (effectiveness, not speed); fees and scripted work costs scale with rewards.
+LIVE = dict(job_reward=400_000, purse_seed=400_000, treasury_seed=10_000_000, treasury_reserve=10_000_000,
+            upkeep=2_000, basic_budget=1_500, floor_cap=4_000, work_cost=40_000, publish_cost=60_000,
+            spawn_fee=1_500_000, learn_cost=2_500_000, audit_cost=20_000,
+            board_ttl=5, job_ttl=12, bid_window=4, deliver_ttl=5, review_ttl=3, dispute_window=4)
+world = World(Params(seed=a.seed, ledger_path=ledger,
+                     activity_path=ledger.replace(".sqlite", ".activity.jsonl"), **LIVE), population=population,
               grader=HybridGrader(LLMGrader(backend, model=grader, max_tokens=grader_tokens)))
 world.meter.real_ceiling = round(a.real_ceiling * 1e6)
 
@@ -140,4 +153,4 @@ if turns:
     total = sum(e.fields["tools"] for e in turns)
     print(f"turns {len(turns)}: {acted} used tools · tool calls {total} ({ok} succeeded) · "
           f"most used {Counter(n for e in turns for n in e.fields['names']).most_common(6)}")
-print(f"ledger: {ledger} · turns: {turns_path}")
+print(f"ledger: {ledger} · turns: {turns_path} · activity: {ledger.replace('.sqlite', '.activity.jsonl')}")

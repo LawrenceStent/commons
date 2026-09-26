@@ -18,6 +18,7 @@ import contextlib
 import json
 import threading
 from collections import Counter
+from dataclasses import asdict
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -119,6 +120,22 @@ def snapshot(state: dict) -> dict:
             "living": sum(not c.dissolved for c in w.communities.values()),
             "members": sum(c.members for c in w.communities.values()),
             "limits": {"members": w.params.max_members, "communities": w.params.max_communities},
+        },
+        "activity": [asdict(e) for e in w.activity.recent(150)][::-1],
+        "plans": {
+            "goals": [{"community": n, "id": g.id, "title": g.title, "status": g.status, "progress": round(g.progress, 3),
+                       "created": g.created, "updated": g.updated, "outcome": g.outcome,
+                       "steps": [{"text": s.text, "done": s.done, "note": s.note} for s in g.steps]}
+                      for n, p in w.plans.items() for g in sorted(p.goals.values(), key=lambda g: (g.status != "active", -g.updated))],
+            "ideas": [{"community": n, **asdict(i)} for n, p in w.plans.items() for i in p.ideas][-40:][::-1],
+            "jobs": [{"id": j.id, "title": j.title, "prime": j.prime, "deadline": j.deadline, "reward": j.reward,
+                      "awaiting_grade": j.id in w.awaiting_grade,
+                      "parts": [{"capability": cap, "done": part.artifact is not None,
+                                 "state": "done" if part.artifact is not None else next(
+                                     (c.status for c in w.contracts.values()
+                                      if c.job_id == j.id and c.capability == cap and c.status in ("open", "awarded", "delivered")), "open")}
+                                for cap, part in sorted(j.parts.items())]}
+                     for j in w.jobs.values() if j.status == "claimed"],
         },
         "knowledge": [{"id": pb.id, "author": pb.author, "capability": pb.capability, "title": pb.title, "uses": pb.uses}
                       for pb in w.library.values()],
@@ -223,6 +240,7 @@ def create_app(world: World | None = None, cycles_per_second: float = 4.0, autos
                     "strategy": c.strategy.name,
                     "journal": list(w.journal[name]), "inbox": [e.__dict__ for e in w.inbox[name]],
                     "transcripts": list(w.transcripts.get(name, [])),
+                    "activity": [asdict(e) for e in w.activity.recent(80, community=name)][::-1],
                     "events": community_detail(w, name)}
 
         return await asyncio.to_thread(locked, detail)

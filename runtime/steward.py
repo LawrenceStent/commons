@@ -65,6 +65,7 @@ class LLMStrategy(Strategy):
 
     # ── the turn ───────────────────────────────────────────────
     def turn(self, obs: Observation, act: ActionsAPI) -> None:
+        act.actor = "steward"
         system = [PREAMBLE, community_block(obs)]
         messages: list[dict[str, Any]] = [{"role": "user", "text": render(obs)}]
         log: list[dict[str, Any]] = []
@@ -87,6 +88,7 @@ class LLMStrategy(Strategy):
             messages.append(t.as_message())
             if t.text.strip():
                 log.append({"kind": "say", "text": t.text.strip()[:1000]})
+                act.record_decision(t.text[:1000])
             if not t.tool_calls:
                 if nudged or t.stop == "max_tokens":
                     break
@@ -118,7 +120,8 @@ class LLMStrategy(Strategy):
 
     # ── tools ──────────────────────────────────────────────────
     def dispatch(self, obs: Observation, act: ActionsAPI, call: ToolCall) -> Outcome:
-        a = call.input
+        a = dict(call.input)
+        act.why = str(a.pop("why", "") or "")[:300]
         if call.name not in NAMES:
             return Outcome(False, f"there is no tool called {call.name}")
         try:
@@ -150,6 +153,12 @@ class LLMStrategy(Strategy):
                     return act.learn(str(a["capability"]), a.get("playbook_id") or None)
                 case "retire":
                     return act.retire()
+                case "set_goal":
+                    return act.set_goal(str(a["title"]), [str(x) for x in a["steps"]], a.get("idea_id") or None)
+                case "update_goal":
+                    return act.update_goal(str(a["goal_id"]), int(a["step"]) if a.get("step") is not None else None,
+                                           bool(a["done"]) if a.get("done") is not None else None, str(a.get("note", "")),
+                                           a.get("status") or None)
                 case _:
                     return getattr(act, call.name)(**{k: v for k, v in a.items()})
         except (KeyError, TypeError, ValueError) as e:
@@ -181,7 +190,8 @@ class LLMStrategy(Strategy):
             method = f"\n\nMethod from the library (reference only):\n<untrusted>{pb.message[:2000]}</untrusted>"
         prompt = f"Spec:\n{spec}\n\nRubric:\n{rubric}\n\nSteward's instructions:\n{instructions[:1000]}{method}"
         try:
-            t = self.backend.chat(model=self.member_model, system=[MEMBER_SYSTEM],
+            # members write; they don't plan. Reasoning here only burned the allowance and returned nothing.
+            t = self.backend.chat(model=self.member_model, system=[MEMBER_SYSTEM], reasoning=False,
                                   messages=[{"role": "user", "text": prompt}], max_tokens=self.member_max_tokens)
         except ModelError as e:
             return Outcome(False, f"the member couldn't do it: {e}")
@@ -192,7 +202,8 @@ class LLMStrategy(Strategy):
         self._commissions += 1
         text = strip_tags(t.text).strip()
         if not text:
-            return Outcome(False, "the member returned nothing")
+            why = " (it spent its whole allowance reasoning)" if t.stop == "max_tokens" else ""
+            return Outcome(False, f"the member returned nothing{why}; the call was still charged")
         self._seq += 1
         d = Draft(f"D{self._seq}", capability, text, (playbook_id,) if playbook_id else ())
         self.drafts[d.id] = d

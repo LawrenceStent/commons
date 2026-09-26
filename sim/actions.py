@@ -16,6 +16,8 @@ from protocol.contract import Announce, Award, Bid, Deliver
 from protocol.knowledge import Cite, Publish
 from protocol.reputation import Attest, Dispute
 from sim import population
+from sim.activity import logged
+from sim.goals import MAX_ACTIVE_GOALS, MAX_STEPS, Goal, Idea, Step
 from society.observation import Outcome
 from substrate.bus import RateLimited
 from substrate.ledger import InsufficientFunds, purse
@@ -29,6 +31,9 @@ MAX_NOTE = 500
 
 
 class Actions:
+    actor = "scripted"  # the LLM runtime sets "steward"
+    why = ""  # a rationale the runtime attaches to the next action, for the decision log
+
     def __init__(self, world: World, me: Community):
         self.w = world
         self.me = me
@@ -285,6 +290,57 @@ class Actions:
                         said=sum(e["kind"] == "say" for e in entries), errors=[e["text"] for e in entries if e["kind"] == "error"],
                         entries=entries[-80:])
 
+    def record_decision(self, text: str) -> None:
+        """What the steward said while deciding: the decision log's words, next to its actions."""
+        if text.strip():
+            self.w.activity.add(self.w.cycle, self.me.name, self.actor, "decision", "said", text.strip())
+
+    # ── ideas and goals ────────────────────────────────────────
+    def idea(self, title: str, detail: str = "") -> Outcome:
+        plans = self.w.plans[self.me.name]
+        self.w._plan_seq += 1
+        i = Idea(f"I{self.w._plan_seq}", title[:120], detail[:600], self.w.cycle)
+        plans.ideas.append(i)
+        plans.trim()
+        return Outcome(True, f"idea {i.id} recorded", i.id)
+
+    def set_goal(self, title: str, steps: list[str], idea_id: str | None = None) -> Outcome:
+        plans = self.w.plans[self.me.name]
+        if len(plans.active()) >= MAX_ACTIVE_GOALS:
+            return Outcome(False, f"you already have {MAX_ACTIVE_GOALS} active goals; finish or drop one first")
+        steps = [str(s)[:200] for s in steps if str(s).strip()][:MAX_STEPS]
+        if not steps:
+            return Outcome(False, "a goal needs at least one step")
+        self.w._plan_seq += 1
+        g = Goal(f"G{self.w._plan_seq}", title[:120], [Step(s) for s in steps], self.w.cycle, self.w.cycle, idea_id=idea_id)
+        plans.goals[g.id] = g
+        for i in plans.ideas:
+            if i.id == idea_id:
+                i.status, i.goal_id = "adopted", g.id
+        return Outcome(True, f"goal {g.id} set with {len(steps)} steps", g.id)
+
+    def update_goal(self, goal_id: str, step: int | None = None, done: bool | None = None, note: str = "",
+                    status: str | None = None) -> Outcome:
+        g = self.w.plans[self.me.name].goals.get(goal_id)
+        if g is None:
+            return Outcome(False, f"no goal {goal_id}")
+        if step is not None:
+            if not 1 <= int(step) <= len(g.steps):
+                return Outcome(False, f"goal {goal_id} has steps 1 to {len(g.steps)}")
+            s = g.steps[int(step) - 1]
+            if done is not None:
+                s.done = bool(done)
+            if note:
+                s.note = note[:200]
+        if status is not None:
+            if status not in ("active", "done", "dropped"):
+                return Outcome(False, "status is active, done or dropped")
+            g.status = status
+            g.outcome = note[:300] if note and step is None else g.outcome
+        g.updated = self.w.cycle
+        self.w.plans[self.me.name].trim()
+        return Outcome(True, f"goal {goal_id}: {sum(s.done for s in g.steps)}/{len(g.steps)} steps done, {g.status}")
+
     # ── self ───────────────────────────────────────────────────
     def note(self, text: str) -> Outcome:
         self.w.journal[self.me.name].append(f"[cycle {self.w.cycle}] {text[:MAX_NOTE]}")
@@ -296,3 +352,10 @@ class Actions:
             return Outcome(True, f"spent {amount}")
         except InsufficientFunds:
             return Outcome(False, f"can't afford {amount}")
+
+
+# Every action an agent can take lands in the activity log (runtime hooks don't).
+for _name in ("claim", "do_part", "announce", "bid", "award", "deliver", "review", "attest", "dispute",
+              "propose_spawn", "second_spawn", "retire", "fork", "propose_merge", "accept_merge", "learn",
+              "publish", "read_playbook", "note", "idea", "set_goal", "update_goal"):
+    setattr(Actions, _name, logged(_name, getattr(Actions, _name)))

@@ -215,3 +215,79 @@ def test_the_observation_ends_by_saying_it_is_not_a_question():
     w, _ = llm_world()
     w.step()
     assert render(w.observe(w.communities["llm-a"])).rstrip().endswith("call end_turn when you are done.")
+
+
+# ── the activity log, ideas and goals ──────────────────────────
+def test_every_action_decision_and_change_is_logged():
+    w, _ = llm_world()
+    w.run(3)
+    entries = list(w.activity.ring)
+    kinds = {e.kind for e in entries}
+    assert kinds == {"action", "decision", "change"}
+    claim = next(e for e in entries if e.kind == "action" and e.name == "claim" and e.community == "llm-a")
+    assert claim.actor == "steward" and claim.ok and claim.why == "we have every capability it needs"
+    assert any(e.kind == "decision" and "finish alone" in e.text for e in entries)
+    assert any(e.actor == "scripted" and e.kind == "action" for e in entries)  # scripted agents are logged too
+    assert any(e.kind == "change" and e.name == "job.paid" for e in entries)
+    parts = [e for e in entries if e.name == "do_part"]
+    assert parts and all("chars)" in e.args["artifact"] for e in parts)  # work text isn't copied into the log
+
+
+def test_goals_are_set_ticked_and_shown_back():
+    w, _ = llm_world()
+    w.run(2)
+    goals = list(w.plans["llm-a"].goals.values())
+    assert goals and goals[0].progress == 1.0
+    text = render(w.observe(w.communities["llm-a"]))
+    assert "YOUR GOALS" in text and "[x]" in text
+
+
+def test_goal_and_idea_limits_and_errors():
+    from sim.actions import Actions
+
+    w, _ = llm_world()
+    w.step()
+    act = Actions(w, w.communities["llm-a"])
+    i = act.idea("Sell templates", "starter kits for podcasts").id
+    g = act.set_goal("Try templates", ["research demand", "write one"], idea_id=i).id
+    assert w.plans["llm-a"].ideas[-1].status == "adopted"
+    assert "steps 1 to 2" in act.update_goal(g, step=3, done=True).message
+    assert "at least one step" in act.set_goal("empty", []).message
+    assert act.update_goal(g, status="dropped", note="no demand")
+    assert w.plans["llm-a"].goals[g].outcome == "no demand"
+
+
+def test_the_log_is_bounded_and_can_stream_to_disk(tmp_path):
+    import json
+
+    path = tmp_path / "activity.jsonl"
+    w, _ = llm_world(activity_keep=50, activity_path=str(path))
+    w.run(5)
+    assert len(w.activity.ring) == 50
+    on_disk = [json.loads(l) for l in path.read_text().splitlines()]
+    assert len(on_disk) > 50 and {e["kind"] for e in on_disk} == {"action", "decision", "change"}
+
+
+def test_members_are_asked_not_to_reason():
+    w, backend = llm_world()
+    w.run(2)
+    member_calls = [r for (s, m, t), r in zip(backend.chats, backend.reasoning) if t is None]
+    steward_calls = [r for (s, m, t), r in zip(backend.chats, backend.reasoning) if t is not None]
+    assert member_calls and not any(member_calls) and all(steward_calls)
+
+
+def test_lmstudio_no_think_goes_on_the_last_message_only_when_asked():
+    b = LMStudioBackend()
+    b._tool_capable["m"] = True
+    sent = []
+    b._post = lambda body: (sent.append(body) or {"choices": [{"finish_reason": "stop", "message": {"content": "ok"}}]}, 1)
+    b.chat(model="m", system=["s"], messages=[{"role": "user", "text": "write it"}], reasoning=False)
+    b.chat(model="m", system=["s"], messages=[{"role": "user", "text": "plan it"}])
+    assert sent[0]["messages"][-1]["content"].endswith("/no_think")
+    assert "/no_think" not in sent[1]["messages"][-1]["content"]
+
+
+def test_a_reply_that_is_all_reasoning_reads_as_out_of_tokens():
+    b = LMStudioBackend()
+    b._post = lambda body: ({"choices": [{"finish_reason": "stop", "message": {"content": "", "reasoning_content": "hmm…"}}]}, 1)
+    assert b.chat(model="m", system=["s"], messages=[{"role": "user", "text": "x"}]).stop == "max_tokens"

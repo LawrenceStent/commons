@@ -100,7 +100,8 @@ class ModelBackend(Protocol):
                    max_tokens: int = 1024) -> Completion: ...
 
     def chat(self, *, model: str, system: list[str], messages: list[dict[str, Any]],
-             tools: list[dict[str, Any]] | None = None, max_tokens: int = 4096) -> Turn: ...
+             tools: list[dict[str, Any]] | None = None, max_tokens: int = 4096, reasoning: bool = True) -> Turn: ...
+    # reasoning=False asks the model to answer without thinking first (members write; they don't plan)
 
 
 def _check(data: Any, schema: dict[str, Any]) -> dict[str, Any]:
@@ -164,7 +165,7 @@ class AnthropicBackend:
         return Completion(_check(data, schema), usage, r.model, model, True, ms, text)
 
 
-    def chat(self, *, model, system, messages, tools=None, max_tokens=4096) -> Turn:
+    def chat(self, *, model, system, messages, tools=None, max_tokens=4096, reasoning=True) -> Turn:
         """`system` is a list of blocks; every block is marked cacheable (at most 4 breakpoints),
         so a frozen preamble followed by a per-community charter caches in two layers."""
         import anthropic
@@ -186,6 +187,8 @@ class AnthropicBackend:
         kw: dict[str, Any] = {}
         if tools:
             kw["tools"] = tools
+        if not reasoning:
+            kw["thinking"] = {"type": "disabled"}
         t = time.perf_counter()
         try:
             r = self.client.messages.create(
@@ -216,8 +219,9 @@ class LMStudioBackend:
     real = False
 
     def __init__(self, base_url: str = "http://localhost:1234/v1", price_as: str = "claude-haiku-4-5",
-                 timeout: float = 180.0):
+                 timeout: float = 180.0, no_think: str = "/no_think"):
         self.base_url, self.price_as, self.timeout = base_url.rstrip("/"), price_as, timeout
+        self.no_think = no_think  # appended to the last message when reasoning is off ("" to disable)
         self._tool_capable: dict[str, bool] = {}
 
     def supports_tools(self, model: str) -> bool:
@@ -254,7 +258,7 @@ class LMStudioBackend:
         usage = Usage(input_tokens=u.get("prompt_tokens", 0), output_tokens=u.get("completion_tokens", 0))
         return Completion(_check(data, schema), usage, r.get("model", model), self.price_as, False, ms, text)
 
-    def chat(self, *, model, system, messages, tools=None, max_tokens=4096) -> Turn:
+    def chat(self, *, model, system, messages, tools=None, max_tokens=4096, reasoning=True) -> Turn:
         if tools and not self.supports_tools(model):
             raise ModelError(f"LM Studio doesn't give {model} tool use, so it can't act. Load a tool-capable model "
                              f"(`curl localhost:1234/api/v0/models` lists capabilities)")
@@ -271,6 +275,10 @@ class LMStudioBackend:
                 wire.append(msg)
             else:
                 wire += [{"role": "tool", "tool_call_id": r.call_id, "content": r.content} for r in m["results"]]
+        if not reasoning and self.no_think:
+            # Qwen-style soft switch: the model answers without a reasoning phase
+            last = next(m for m in reversed(wire) if m["role"] in ("user", "tool"))
+            last["content"] = f"{last['content']}\n\n{self.no_think}"
         body: dict[str, Any] = {"model": model, "messages": wire, "max_tokens": max_tokens, "temperature": 0.3}
         if tools:
             body["tools"] = [{"type": "function", "function": {"name": t["name"], "description": t["description"],
@@ -289,6 +297,8 @@ class LMStudioBackend:
                 args = {"_unparseable": c["function"].get("arguments", "")[:200]}
             calls.append(ToolCall(c.get("id") or f"call_{i}", c["function"]["name"], args if isinstance(args, dict) else {}))
         stop = {"tool_calls": "tool_use", "length": "max_tokens"}.get(choice.get("finish_reason"), "end_turn")
+        if msg.get("reasoning_content") and not (msg.get("content") or "").strip() and not calls:
+            stop = "max_tokens"  # it spent the whole allowance reasoning and never answered
         if calls:
             stop = "tool_use"
         u = r.get("usage") or {}
@@ -324,6 +334,7 @@ class FakeBackend:
     name: str = "fake"
     calls: list[tuple[str, str]] = field(default_factory=list)
     chats: list[tuple] = field(default_factory=list)
+    reasoning: list[bool] = field(default_factory=list)
 
     def structured(self, *, model, system, prompt, schema, max_tokens=1024) -> Completion:
         self.calls.append((system, prompt))
@@ -334,8 +345,9 @@ class FakeBackend:
         usage = Usage(input_tokens=(len(system) + len(prompt)) // 4, output_tokens=len(text) // 4)
         return Completion(_check(data, schema), usage, model, self.price_as, self.real, 1, text)
 
-    def chat(self, *, model, system, messages, tools=None, max_tokens=4096) -> Turn:
+    def chat(self, *, model, system, messages, tools=None, max_tokens=4096, reasoning=True) -> Turn:
         self.chats.append((system, messages, tools))
+        self.reasoning.append(reasoning)
         out = self.converse(system, messages, tools)
         if isinstance(out, Exception):
             raise out

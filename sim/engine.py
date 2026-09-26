@@ -30,12 +30,15 @@ from dataclasses import dataclass, field
 from protocol import Envelope, Message
 from protocol.reputation import Gossip
 from sim.actions import Actions
+from sim.activity import ActivityLog
+from sim.goals import Plans
 from sim.grader import GradingError
 from sim.market import CAPABILITIES, Grade, Grader, MarketJob, StubGrader, generate_job
 from sim.population import Proposal, expire_proposals
 from society.community import Community
 from society.observation import (
-    BidView, ContractView, Event, JobView, Observation, Outcome, PartView, PeerView, PlaybookView, ProposalView,
+    BidView, ContractView, Event, GoalView, IdeaView, JobView, Observation, Outcome, PartView, PeerView, PlaybookView,
+    ProposalView,
 )
 from society.strategies import Cooperator, Defector, FreeRider
 from substrate.bus import MemoryBus, RateLimited
@@ -84,6 +87,8 @@ class Params:
     ledger_path: str = ":memory:"  # a file under runs/ keeps long runs out of RAM
     journal_keep: int = 20
     events_keep: int = 50
+    activity_keep: int = 2000  # entries of the activity log kept in memory
+    activity_path: str | None = None  # also append every entry to this JSONL file
     retain: int = 20  # cycles a closed job or contract stays visible before it's dropped
     # population and capabilities (sim/population.py)
     max_members: int = 7
@@ -185,6 +190,10 @@ class World:
         self.proposals: dict[str, Proposal] = {}
         self.awaiting_grade: dict[str, int] = {}  # job id -> failed grading attempts
         self.transcripts: defaultdict[str, deque] = defaultdict(lambda: deque(maxlen=2))  # LLM turns, newest last
+        self.plans: defaultdict[str, Plans] = defaultdict(Plans)  # ideas and goals per community
+        self._plan_seq = 0
+        self.activity = ActivityLog(p.activity_keep, p.activity_path)
+        self.activity.watch(self.hub)
         self.known_capabilities = set(CAPABILITIES).union(*(c.capabilities for c in self.communities.values()))
         self._job_seq = self._proposal_seq = 0
         self._stats: dict[str, Counter] = {}
@@ -596,6 +605,9 @@ class World:
                     "upkeep": p.upkeep, "actions_per_member": p.actions_per_member, "job_ttl": p.job_ttl, "pass_score": p.pass_score},
             track=dict(me.deliveries),
             owed=sum(c.price - c.advance for c in cs if c.prime == name and c.status in (AWARDED, DELIVERED)),
+            goals=tuple(GoalView(g.id, g.title, g.status, tuple((s.text, s.done, s.note) for s in g.steps), round(g.progress, 2))
+                        for g in self.plans[name].active()),
+            ideas=tuple(IdeaView(i.id, i.title, i.detail, i.cycle, i.status) for i in self.plans[name].ideas[-5:]),
         )
 
     # ── gossip and records ─────────────────────────────────────

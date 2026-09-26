@@ -110,6 +110,24 @@ class ProposalView:
 
 
 @dataclass(frozen=True)
+class GoalView:
+    id: str
+    title: str
+    status: str
+    steps: tuple[tuple[str, bool, str], ...]  # (text, done, note)
+    progress: float
+
+
+@dataclass(frozen=True)
+class IdeaView:
+    id: str
+    title: str
+    detail: str
+    cycle: int
+    status: str
+
+
+@dataclass(frozen=True)
 class Observation:
     cycle: int
     name: str
@@ -137,6 +155,8 @@ class Observation:
     merge_offers: tuple[ProposalView, ...] = ()  # communities offering to join me
     my_proposals: tuple[ProposalView, ...] = ()
     to_dispute: tuple[ContractView, ...] = ()  # my rejected deliveries I can still take to audit
+    goals: tuple[GoalView, ...] = ()  # my active goals
+    ideas: tuple[IdeaView, ...] = ()  # my most recent ideas
     params: dict[str, int | float] = field(default_factory=dict)
 
 
@@ -161,5 +181,9 @@ class ActionsAPI(Protocol):
     def propose_merge(self, target: str) -> Outcome: ...
     def accept_merge(self, proposal_id: str) -> Outcome: ...
     def learn(self, capability: str, playbook_id: str | None = None) -> Outcome: ...
+    def idea(self, title: str, detail: str = "") -> Outcome: ...
+    def set_goal(self, title: str, steps: list[str], idea_id: str | None = None) -> Outcome: ...
+    def update_goal(self, goal_id: str, step: int | None = None, done: bool | None = None, note: str = "",
+                    status: str | None = None) -> Outcome: ...
     def note(self, text: str) -> Outcome: ...
     def spend(self, amount: int, memo: str) -> Outcome: ...

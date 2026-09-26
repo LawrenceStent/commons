@@ -59,6 +59,12 @@ a.c { color:inherit; text-decoration:underline dotted; cursor:pointer; }
 .meter { height:10px; background:var(--rule); position:relative; }
 .meter i { position:absolute; inset:0 auto 0 0; background:var(--series); }
 .meter.hot i { background:var(--bad); }
+.goal { border-left:2px solid var(--rule); padding:4px 10px; margin:6px 0; }
+.goal.done { opacity:.6; } .goal.dropped { opacity:.45; text-decoration:line-through; }
+.step { font-size:12px; } .step.ok { color:var(--good); }
+.prog { display:inline-block; width:90px; height:8px; background:var(--rule); vertical-align:middle; margin:0 6px; }
+.prog i { display:block; height:100%; background:var(--series); }
+.act-decision { color:var(--series); } .act-change { color:var(--muted); } .act-bad { color:var(--bad); }
 td.cell { text-align:center; font-family:ui-monospace,Menlo,monospace; font-size:12px; }
 pre { margin:0; font:12px/1.55 ui-monospace,Menlo,monospace; white-space:pre-wrap; }
 .empty { color:var(--muted); font-style:italic; }
@@ -119,6 +125,13 @@ pre { margin:0; font:12px/1.55 ui-monospace,Menlo,monospace; white-space:pre-wra
   <section class="w6"><h2>Host</h2><div id="host"></div></section>
   <section class="w6"><h2>Telemetry <small>events since start, by kind</small></h2><div id="events"></div></section>
 
+  <section class="w8"><h2>Goals &amp; progress <small>agents' own goals, and every job in progress</small></h2><div id="goals"></div></section>
+  <section class="w4"><h2>Ideas</h2><div id="ideas"></div></section>
+
+  <section class="w12"><h2>Activity log <small>every action, decision and change</small>
+    <span><select id="act-kind"><option value="">all kinds</option><option>action</option><option>decision</option><option>change</option></select>
+    <select id="act-who"><option value="">everyone</option></select></span></h2><div id="activity"></div></section>
+
   <section class="w12"><h2>Bus tail</h2><div id="tail"></div></section>
 </main>
 <aside id="drill"></aside>
@@ -165,7 +178,9 @@ function spark(svg, pts, fmt, xLabel = "cycle") {
   svg.onmouseleave = () => { tip.style.display = "none"; dot.setAttribute("cx", X(xs.at(-1))); dot.setAttribute("cy", Y(ys.at(-1))); };
 }
 
+let last = null;
 function render(s) {
+  last = s;
   const r = s.run;
   const $m = s.money; CUR = $m.currency;
   $("r-capital").textContent = usd($m.real.capital_in);
@@ -286,6 +301,34 @@ function render(s) {
     <svg id="rss-spark" class="spark" width="300" height="30"></svg>` : empty("Waiting for the first sample…");
   if (H.rss) spark($("rss-spark"), H.rss_series, mb, "t");
 
+  const P2 = s.plans;
+  const prog = p => `<span class="prog"><i style="width:${Math.round(100 * p)}%"></i></span>${Math.round(100 * p)}%`;
+  const goalHtml = P2.goals.map(g => `<div class="goal ${g.status}"><b>${esc(g.community)}</b> · <span class="mono">${esc(g.id)}</span> ${esc(g.title)} ${prog(g.progress)}
+      <span class="muted">${esc(g.status)}${g.outcome ? ": " + esc(g.outcome) : ""} · updated cycle ${g.updated}</span>
+      ${g.steps.map((st, i) => `<div class="step ${st.done ? "ok" : ""}">${st.done ? "☑" : "☐"} ${i + 1}. ${esc(st.text)}${st.note ? ` <span class="muted">— ${esc(st.note)}</span>` : ""}</div>`).join("")}</div>`).join("");
+  const jobHtml = P2.jobs.map(j => {
+    const done = j.parts.filter(p => p.done).length;
+    return `<div class="goal"><b>${esc(j.prime)}</b> · job <span class="mono">${esc(j.id)}</span> ${esc(j.title)} ${prog(done / j.parts.length)}
+      <span class="muted">deadline cycle ${j.deadline}${j.awaiting_grade ? " · waiting for the grader" : ""}</span>
+      ${j.parts.map(p => `<div class="step ${p.done ? "ok" : ""}">${p.done ? "☑" : "☐"} ${esc(p.capability)} <span class="muted">${esc(p.state)}</span></div>`).join("")}</div>`;
+  }).join("");
+  $("goals").innerHTML = (goalHtml || empty("No goals set yet. LLM stewards set them with set_goal; scripted characters don't.")) +
+    `<h2 style="margin-top:12px">Jobs in progress</h2>` + (jobHtml || empty("No jobs in progress."));
+  $("ideas").innerHTML = P2.ideas.length ? P2.ideas.map(i => `<div class="goal"><b>${esc(i.community)}</b> <span class="mono">${esc(i.id)}</span>
+      <span class="muted">cycle ${i.cycle} · ${esc(i.status)}${i.goal_id ? " → " + esc(i.goal_id) : ""}</span><div>${esc(i.title)}</div>
+      ${i.detail ? `<div class="muted step">${esc(i.detail)}</div>` : ""}</div>`).join("") : empty("No ideas recorded yet.");
+
+  const who = $("act-who"), names = s.communities.map(c => c.name);
+  if (who.options.length - 1 !== names.length) who.innerHTML = `<option value="">everyone</option>` + names.map(n => `<option>${esc(n)}</option>`).join("");
+  const kind = $("act-kind").value, only = who.value;
+  const rows = s.activity.filter(e => (!kind || e.kind === kind) && (!only || e.community === only)).slice(0, 60);
+  $("activity").innerHTML = rows.length ? `<pre>${rows.map(e => {
+    const cls = e.kind === "decision" ? "act-decision" : e.kind === "change" ? "act-change" : e.ok === false ? "act-bad" : "";
+    const what = e.kind === "action" ? `${e.ok ? "✓" : "✗"} ${e.name}(${esc(Object.entries(e.args).map(([k, v]) => `${k}=${typeof v === "object" ? JSON.stringify(v) : v}`).join(", ")).slice(0, 90)}) → ${esc(e.text)}`
+      : e.kind === "decision" ? `“${esc(e.text).slice(0, 240)}”` : esc(e.text);
+    return `<span class="${cls}">${String(e.cycle ?? "").padStart(5)} ${esc(e.community || "—").padEnd(10)} ${esc(e.actor).padEnd(8)} ${e.kind.padEnd(8)} ${what}${e.why ? `\n${" ".repeat(34)}why: ${esc(e.why)}` : ""}</span>`;
+  }).join("\n")}</pre>` : empty("Nothing matches.");
+
   const byComp = {};
   for (const [k, v] of Object.entries(s.events)) (byComp[k.split(".")[0]] ||= []).push([k, v]);
   $("events").innerHTML = table(["component", "kinds"], Object.entries(byComp).sort().map(([c, ks]) =>
@@ -302,6 +345,9 @@ async function drill(name) {
       d.transcripts.at(-1).entries.map(e => e.kind === "tool"
         ? `${e.ok ? "✓" : "✗"} ${esc(e.name)} ${esc(JSON.stringify(e.input))}\n    → ${esc(e.result)}`
         : e.kind === "say" ? `“${esc(e.text)}”` : `! ${esc(e.text)}`).join("\n")}</pre>` : ""}
+    <h2 style="margin-top:12px">Actions and decisions</h2><pre>${(d.activity || []).filter(e => e.kind !== "change").slice(0, 40).map(e =>
+      e.kind === "decision" ? `${String(e.cycle).padStart(5)} said “${esc(e.text).slice(0, 200)}”`
+        : `${String(e.cycle).padStart(5)} ${e.ok ? "✓" : "✗"} ${esc(e.name)} → ${esc(e.text).slice(0, 120)}${e.why ? ` (why: ${esc(e.why)})` : ""}`).join("\n") || "(none yet)"}</pre>
     <h2 style="margin-top:12px">Recent activity</h2>
     <pre>${d.events.map(e => `${String(e.cycle ?? "").padStart(6)} ${esc(e.kind).padEnd(18)} ${esc(JSON.stringify(Object.fromEntries(Object.entries(e).filter(([k]) => !["seq", "kind", "cycle"].includes(k))))).slice(0, 160)}`).join("\n") || "(nothing recent)"}</pre>`;
   $("drill").className = "on";
@@ -316,6 +362,7 @@ document.addEventListener("click", async e => {
   }
   if (c) drill(c.dataset.c);
 });
+$("act-kind").onchange = $("act-who").onchange = () => last && render(last);
 $("speed").onchange = e => fetch("/control/speed?value=" + e.target.value, {method: "POST"});
 
 function connect() {

@@ -56,6 +56,15 @@ _TOOLS: list[dict[str, Any]] = [
     {"name": "fork", "description": "Split `members` of your members off into a new community called `name` with "
      "the listed capabilities (a subset of yours) and a share of your purse. Uses one capacity.",
      "input_schema": _obj({"name": S, "members": I, "capabilities": IDS, "charter": S}, ["name", "members", "capabilities", "charter"])},
+    {"name": "idea", "description": "Record an idea worth remembering: an opportunity, a method, a partner. Free.",
+     "input_schema": _obj({"title": S, "detail": S}, ["title"])},
+    {"name": "set_goal", "description": "Set a goal with a checklist of steps (at most 12). Optionally the idea it "
+     "came from. Shown to you every turn until done or dropped. Free.",
+     "input_schema": _obj({"title": S, "steps": IDS, "idea_id": S}, ["title", "steps"])},
+    {"name": "update_goal", "description": "Tick a step of a goal done (step is 1-based), add a note, or set the "
+     "goal's status to done or dropped. Free.", "input_schema": _obj(
+        {"goal_id": S, "step": I, "done": B, "note": S, "status": {"type": "string", "enum": ["active", "done", "dropped"]}},
+        ["goal_id"])},
     {"name": "learn", "description": "Buy a capability you lack. Expensive, and more so the more you have. Cheaper "
      "with a playbook_id for that capability, whose author earns a royalty. Uses one capacity.",
      "input_schema": _obj({"capability": S, "playbook_id": S}, ["capability"])},
@@ -77,6 +86,10 @@ _TOOLS: list[dict[str, Any]] = [
     {"name": "second_spawn", "description": "Second another community's spawn request. Free.",
      "input_schema": _obj({"proposal_id": S}, ["proposal_id"])},
 ]
+
+# every tool may carry a short rationale; the runtime strips it and writes it to the decision log
+for _t in _TOOLS:
+    _t["input_schema"]["properties"]["why"] = {"type": "string", "description": "optional: why, in one sentence"}
 
 TOOLS: list[dict[str, Any]] = sorted(_TOOLS, key=lambda t: t["name"])
 NAMES = frozenset(t["name"] for t in TOOLS)

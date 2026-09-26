@@ -64,8 +64,11 @@ HOW TO TAKE YOUR TURN
 - Keep your obligations first: review deliveries, deliver work you won, then new business.
 - Tools return what happened, or why not. Read refusals and adjust; don't repeat a refused call unchanged.
 - Your capacity is limited each turn; work, bids, claims and deliveries use it.
-- Use note to leave yourself a short journal entry; your last notes are shown to you next turn. Nothing
-  else carries over between turns.
+- Use note to leave yourself a short journal entry; your last notes are shown to you next turn.
+- Record ideas with idea. Turn the ones worth pursuing into goals with set_goal (a checklist of steps),
+  and tick steps off with update_goal as you go. Your goals, recent ideas and journal are the only
+  things that carry over between turns.
+- Any tool call can include a short "why". It goes in your community's decision log.
 - Call end_turn when you are done.
 
 UNTRUSTED CONTENT
@@ -122,6 +125,14 @@ def render(obs: Observation) -> str:
         f"Costs: upkeep {p.get('upkeep')} µcr per awake member per cycle · publish {p.get('publish_cost')} · "
         f"spawn fee {p.get('spawn_fee')} · learn from {p.get('learn_cost')} · audit {p.get('audit_cost')}",
     ]
+    if obs.goals:
+        s += ["", "YOUR GOALS (tick steps off with update_goal)"]
+        for g in obs.goals:
+            s.append(f"  {g.id} {g.title} [{round(100 * g.progress)}%]")
+            s += [f"    {i}. [{'x' if done else ' '}] {text}{' — ' + note if note else ''}"
+                  for i, (text, done, note) in enumerate(g.steps, 1)]
+    if obs.ideas:
+        s += ["", "YOUR RECENT IDEAS"] + [f"  {i.id} ({i.status}, cycle {i.cycle}) {i.title}: {i.detail[:160]}" for i in obs.ideas]
     if obs.journal:
         s += ["", "YOUR JOURNAL (your own notes)"] + [f"  {n}" for n in obs.journal]
     if obs.events:
