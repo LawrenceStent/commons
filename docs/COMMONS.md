@@ -228,6 +228,14 @@ Grouped by area. Terms in **bold** are used throughout the code and this guide.
   steward sets for its community (optionally from an idea) and ticks off as it goes. Both are shown back to
   the community every turn and on the dashboard.
 
+### Operator
+
+- **Operator.** You, the person running a society. You give co-ops **directives** (plain-language instructions,
+  read every turn in a trusted part of the steward's prompt), **context** (reference files, capped in size) and
+  **limits** (world rules: forbidden actions, a price cap, a job cap, a thinking budget per turn). They live in an
+  `operator/` folder, re-read every cycle, and can be edited from the dashboard. Directives are guidance a model
+  can misjudge; limits are enforced.
+
 ### Safety and control
 
 - **Gate.** Any action that touches the outside world (publish, post, spend, sign) waits for your

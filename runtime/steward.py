@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from runtime.backends import ModelBackend, ModelError, ToolCall, ToolResult
-from runtime.render import PREAMBLE, community_block, render
+from runtime.render import PREAMBLE, community_block, operator_block, render
 from runtime.tools import NAMES, TOOLS
 from sim.market import strip_tags
 from society.observation import ActionsAPI, Observation, Outcome
@@ -69,22 +69,34 @@ class LLMStrategy(Strategy):
     def turn(self, obs: Observation, act: ActionsAPI) -> None:
         started = time.time()
         act.actor = "steward"
-        system = [PREAMBLE, community_block(obs)]
+        op = act.operator_view()
+        system = [PREAMBLE, community_block(obs)] + ([block] if (block := operator_block(op)) else [])
+        rt = op.runtime  # per-co-op runtime settings from the operator override the defaults for this turn
+        steward_model = rt.get("steward_model", self.steward_model)
+        self._member_model = rt.get("member_model", self.member_model)
+        max_rounds = int(rt.get("max_rounds", self.max_rounds))
+        max_tokens = int(rt.get("max_tokens", self.max_tokens))
+        self._member_max_tokens = int(rt.get("member_max_tokens", self.member_max_tokens))
+        budget = op.limits.thinking_budget
+        cost = 0
         messages: list[dict[str, Any]] = [{"role": "user", "text": render(obs)}]
         log: list[dict[str, Any]] = []
         spent = 0
         nudged = False
         refused: dict[tuple[str, str], str] = {}
         self._commissions = 0
-        for _ in range(self.max_rounds):
+        for _ in range(max_rounds):
+            if budget is not None and cost >= budget:
+                log.append({"kind": "error", "text": f"the operator's thinking budget ({budget} µcr a turn) is spent; turn over"})
+                break
             try:
-                t = self.backend.chat(model=self.steward_model, system=system, messages=messages, tools=TOOLS,
-                                      max_tokens=self.max_tokens)
+                t = self.backend.chat(model=steward_model, system=system, messages=messages, tools=TOOLS,
+                                      max_tokens=max_tokens)
             except ModelError as e:
                 log.append({"kind": "error", "text": f"steward call failed: {e}"})
                 break
             try:
-                act.record_call("steward", t.model, t.price_as, t.usage, t.real, t.ms, t.cache_hit)
+                cost += act.record_call("steward", t.model, t.price_as, t.usage, t.real, t.ms, t.cache_hit)
             except InsufficientFunds:
                 log.append({"kind": "error", "text": "the purse couldn't pay for that thinking; turn over"})
                 break
@@ -135,6 +147,8 @@ class LLMStrategy(Strategy):
         act.why = str(a.pop("why", "") or "")[:300]
         if call.name not in NAMES:
             return Outcome(False, f"there is no tool called {call.name}")
+        if call.name == "commission" and (why := act.operator_refusal("commission", a)):
+            return Outcome(False, why)  # the executor checks the rest; commission runs in the runtime
         try:
             match call.name:
                 case "commission":
@@ -206,8 +220,9 @@ class LLMStrategy(Strategy):
         prompt = f"Spec:\n{spec}\n\nRubric:\n{rubric}\n\nSteward's instructions:\n{instructions[:1000]}{method}"
         try:
             # members write; they don't plan. Reasoning here only burned the allowance and returned nothing.
-            t = self.backend.chat(model=self.member_model, system=[MEMBER_SYSTEM], reasoning=False,
-                                  messages=[{"role": "user", "text": prompt}], max_tokens=self.member_max_tokens)
+            t = self.backend.chat(model=getattr(self, "_member_model", self.member_model), system=[MEMBER_SYSTEM],
+                                  reasoning=False, messages=[{"role": "user", "text": prompt}],
+                                  max_tokens=getattr(self, "_member_max_tokens", self.member_max_tokens))
         except ModelError as e:
             return Outcome(False, f"the member couldn't do it: {e}")
         try:

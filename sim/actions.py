@@ -8,6 +8,7 @@ LLM can see why something didn't happen and try something else.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import time
 from typing import TYPE_CHECKING
@@ -298,6 +299,14 @@ class Actions:
                         said=sum(e["kind"] == "say" for e in entries), errors=[e["text"] for e in entries if e["kind"] == "error"],
                         entries=entries[-80:], started=started, ended=time.time())
 
+    def operator_view(self):
+        """What this co-op's operator has told it: directives, context, limits, runtime settings."""
+        return self.w.operator.view(self.me.name)
+
+    def operator_refusal(self, action: str, args: dict) -> str | None:
+        held = sum(j.prime == self.me.name and j.status == "claimed" for j in self.w.jobs.values())
+        return self.w.operator.check(self.me.name, action, args, held)
+
     def record_member_work(self, args: dict, out: Outcome) -> None:
         """A member's commissioned work: part of the action log even though it runs in the runtime."""
         why, self.why = self.why, ""
@@ -396,11 +405,29 @@ class Actions:
             return Outcome(False, f"can't afford {amount}")
 
 
+def _operated(name, fn):
+    """The operator's limits are world rules: checked before the action, whatever the agent decided."""
+    import inspect
+
+    sig = inspect.signature(fn)
+
+    def wrapper(self, *a, **kw):
+        try:
+            args = {k: v for k, v in sig.bind(self, *a, **kw).arguments.items() if k != "self"}
+        except TypeError:
+            args = {}
+        if why := self.operator_refusal(name, args):
+            return Outcome(False, why)
+        return fn(self, *a, **kw)
+
+    return functools.wraps(fn)(wrapper)  # keeps fn's signature visible to the logging wrapper
+
+
 # Every action an agent can take lands in the activity log (runtime hooks don't).
 for _name in ("claim", "do_part", "announce", "bid", "award", "deliver", "review", "attest", "dispute",
               "propose_spawn", "second_spawn", "retire", "fork", "propose_merge", "accept_merge", "learn",
               "publish", "read_playbook", "note", "idea", "set_goal", "update_goal", "propose_venture"):
-    setattr(Actions, _name, logged(_name, getattr(Actions, _name)))
+    setattr(Actions, _name, logged(_name, _operated(_name, getattr(Actions, _name))))
 
 
 def _locked(fn):

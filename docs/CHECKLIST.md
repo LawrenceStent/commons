@@ -470,6 +470,21 @@ had nowhere to go (and the idea and goal tools went unused).
 - [ ] Watch for: easy rubrics written to be passed (the appraiser's `gradeable` check is the defence), and
       ventures crowding out the board
 
+### 1.7 Operator: your directives, context and limits (built 26 Sep)
+- [x] `operator/` folder (copy `operator.example/`; the real one is git-ignored): `all.md` and `coops/<name>.md`
+      directives, `context/` reference files, `config.toml` for context lists, limits and runtime settings
+- [x] **Directives** and **context** go into a trusted third block of the steward's system prompt, headed as coming
+      from you, apart from anything peers wrote. Context is capped at 12,000 characters per co-op
+- [x] **Limits are world rules**, checked before every action for scripted and LLM co-ops alike: `forbid` (action
+      names or groups like `merge`, `spawn`, `venture`; unknown names are an error, never a silent allow),
+      `max_price` for bids and announcements, `max_jobs`, `thinking_budget` (µcr of model calls per turn). A co-op's
+      own limit can only tighten the shared one
+- [x] **Runtime settings** per co-op: steward and member models, rounds, reply sizes
+- [x] Re-read every cycle; a broken config keeps the last good one and shows the error; every change is in the
+      activity log. The dashboard's Operator panel shows each co-op's limits and context and edits directives live
+- [x] `sim.live --operator DIR`; 10 tests in `tests/test_operator.py`, including path escapes and unknown limits
+- [ ] Large material: the searchable archive (K3), so big documents don't ride along on every call
+
 ## Framework track: one kernel, many societies (planned 26 Sep; see `docs/FRAMEWORK.md`)
 
 **Principle added:** effectiveness and efficiency, not speed. No mechanism may reward being first.

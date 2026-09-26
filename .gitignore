@@ -8,3 +8,4 @@ var/
 *.db-wal
 *.db-shm
 runs/
+operator/

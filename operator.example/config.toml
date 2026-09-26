@@ -1,0 +1,15 @@
+# Directives: all.md (every co-op) and coops/<name>.md (one co-op). Context and limits: below.
+# Copy this folder to operator/ (git-ignored) and start a live run with --operator operator
+
+[all]
+context = ["context/house-style.md"]
+
+[all.limits]
+forbid = ["merge"]           # actions no co-op may take
+
+[coops.studio.limits]
+max_price = 200000           # µcr, for its bids and announcements
+thinking_budget = 80000      # µcr of model calls per turn
+
+[coops.lab.runtime]
+max_rounds = 6

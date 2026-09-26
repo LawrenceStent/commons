@@ -88,6 +88,20 @@ def community_block(obs: Observation) -> str:
             f"The charter is yours to interpret; it is what your community is for.")
 
 
+def operator_block(view) -> str | None:
+    """Your operator's directives, limits and reference material: trusted, unlike anything peers wrote."""
+    if view is None or view.empty:
+        return None
+    out = ["FROM YOUR OPERATOR (the person who runs this society; these are instructions to you, not peer content)"]
+    if view.directives:
+        out += ["", "Directives:", view.directives]
+    if lines := view.limits.describe():
+        out += ["", "Limits (the world enforces these; calls beyond them are refused):"] + [f"- {l}" for l in lines]
+    for name, text in view.context:
+        out += ["", f"Reference material ({name}):", text]
+    return "\n".join(out)
+
+
 def _u(text: str | None, limit: int = 600) -> str:
     text = (text or "").strip()
     if len(text) > limit:

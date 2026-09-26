@@ -82,6 +82,9 @@ def _change(ev: Event) -> tuple[str, str | None, str] | None:
             extra = f", job {f['job']}, reward {f['reward']}" if f.get("job") else ""
             return (f"venture.{f['status']}", f["proposer"],
                     f"venture {f['id']} {f['title']!r} {f['status']} (score {f['score']}{extra}): {f.get('reason', '')}")
+        case "operator.update":
+            err = f" — {f['errors'][0]}" if f.get("errors") else ""
+            return "operator.update", None, f"operator directives, context or limits changed{err}"
         case "meter.kill_switch":
             return "kill_switch", None, f"kill-switch: {f.get('reason')}"
     return None
@@ -139,5 +142,6 @@ def logged(name: str, fn: Callable) -> Callable:
                             out.message, out.ok, args, why)
         return out
 
-    wrapper.__name__, wrapper.__doc__ = fn.__name__, fn.__doc__
-    return wrapper
+    import functools
+
+    return functools.wraps(fn)(wrapper)

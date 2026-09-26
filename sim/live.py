@@ -26,6 +26,7 @@ from runtime.fakes import GOOD_GRADE, competent
 from runtime.steward import LLMStrategy
 from sim.engine import Params, World, summary
 from sim.grader import HybridGrader, LLMGrader
+from sim.operator import Operator
 from sim.ventures import LLMAppraiser
 from society.community import Community
 from society.strategies import Cooperator, Defector
@@ -42,6 +43,7 @@ ap.add_argument("--seed", type=int, default=0)
 ap.add_argument("--real-ceiling", type=float, default=1.00, help="real dollars per day before the kill-switch trips")
 ap.add_argument("--yes-spend", action="store_true", help="required for the anthropic backend")
 ap.add_argument("--serve", action="store_true", help="watch it on the dashboard")
+ap.add_argument("--operator", help="folder of directives, context and limits for the co-ops (see operator.example/)")
 ap.add_argument("--reasoning", action="store_true",
                 help="the local model reasons before answering: give every call more room (thinking counts against max_tokens)")
 a = ap.parse_args()
@@ -115,7 +117,10 @@ LIVE = dict(job_reward=400_000, purse_seed=400_000, treasury_seed=10_000_000, tr
 world = World(Params(seed=a.seed, ledger_path=ledger,
                      activity_path=ledger.replace(".sqlite", ".activity.jsonl"), **LIVE), population=population,
               grader=HybridGrader(LLMGrader(backend, model=grader, max_tokens=grader_tokens)),
-              appraiser=LLMAppraiser(backend, model=grader, max_tokens=grader_tokens))
+              appraiser=LLMAppraiser(backend, model=grader, max_tokens=grader_tokens),
+              operator=Operator(a.operator) if a.operator else None)
+if world.operator.errors:
+    sys.exit(f"the operator folder has a problem: {world.operator.errors[0]}")
 world.meter.real_ceiling = round(a.real_ceiling * 1e6)
 
 # every LLM turn, in full, on disk (the world keeps only the last two per community in memory)

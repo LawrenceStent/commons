@@ -34,6 +34,7 @@ from protocol.reputation import Gossip
 from sim.actions import Actions
 from sim.activity import ActivityLog
 from sim.goals import Plans
+from sim.operator import Operator
 from sim.ventures import AppraisalError, Appraiser, StubAppraiser, Venture, value as venture_value
 from sim.grader import GradingError
 from sim.market import CAPABILITIES, Grade, Grader, MarketJob, StubGrader, generate_job
@@ -182,7 +183,8 @@ class Snapshot:
 
 class World:
     def __init__(self, params: Params | None = None, population: list[Community] | None = None,
-                 hub: Hub | None = None, grader: Grader | None = None, appraiser: Appraiser | None = None):
+                 hub: Hub | None = None, grader: Grader | None = None, appraiser: Appraiser | None = None,
+                 operator: Operator | None = None):
         self.params = p = params or Params()
         self.hub = hub or Hub()
         self.lock = threading.RLock()  # held for every state change; see parallel_turns
@@ -197,6 +199,7 @@ class World:
                              verify=p.verify, hub=self.hub)
         self.grader = grader or StubGrader(cost=p.grade_cost)
         self.appraiser = appraiser or StubAppraiser()
+        self.operator = operator or Operator(None)
         self.ventures: dict[str, Venture] = {}
         self._venture_seq = 0
         self.jobs: dict[str, MarketJob] = {}
@@ -283,6 +286,8 @@ class World:
         with self.lock:
             self.cycle += 1
             self.rep.cycle = self.cycle
+            if self.operator.reload():  # your directives, context and limits, re-read every cycle
+                self.hub.emit("operator.update", self.cycle, coops=sorted(self.operator.views), errors=self.operator.errors)
             self.bus.begin_cycle(self.cycle)
             self._stats = {n: Counter() for n in self.communities}
             self._floor()

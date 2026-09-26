@@ -140,6 +140,14 @@ def snapshot(state: dict) -> dict:
                                 for cap, part in sorted(j.parts.items())]}
                      for j in w.jobs.values() if j.status == "claimed"],
         },
+        "operator": {
+            "enabled": w.operator.root is not None, "folder": str(w.operator.root) if w.operator.root else None,
+            "errors": list(w.operator.errors),
+            "coops": [{"name": n, "directives": v.directives, "own": _own_directives(w, n), "limits": v.limits.describe(),
+                       "context": [name for name, _ in v.context], "runtime": v.runtime}
+                      for n in list(w.communities) for v in [w.operator.view(n)]],
+            "all": _own_directives(w, None),
+        },
         "knowledge": [{"id": pb.id, "author": pb.author, "capability": pb.capability, "title": pb.title, "uses": pb.uses}
                       for pb in w.library.values()],
         "llm": {"recent": llm[-10:][::-1], "calls": hub.counts["llm.call"],
@@ -150,6 +158,14 @@ def snapshot(state: dict) -> dict:
                  "rss_series": _downsample([[round(e.at), e.fields["rss"]] for e in hosts])},
         "events": dict(hub.counts),
     }
+
+
+def _own_directives(w: World, coop: str | None) -> str:
+    """The text of one directives file as written (all.md, or coops/<name>.md), for editing."""
+    if not w.operator.root:
+        return ""
+    p = w.operator.root / ("all.md" if coop is None else f"coops/{coop}.md")
+    return p.read_text() if p.exists() else ""
 
 
 def community_detail(w: World, name: str, n: int = 60) -> list[dict]:
@@ -247,6 +263,24 @@ def create_app(world: World | None = None, cycles_per_second: float = 4.0, autos
                     "events": community_detail(w, name)}
 
         return await asyncio.to_thread(locked, detail)
+
+    @app.post("/api/operator")
+    async def api_operator(request: Request):
+        """Set directives for one co-op (`coop`) or for all (`coop` null). They apply from the next turn."""
+        body = await request.json()
+        w = state["world"]
+        coop = body.get("coop")
+        if coop is not None and coop not in w.communities:
+            return JSONResponse({"error": f"no co-op {coop}"}, status_code=404)
+        try:
+            def apply():
+                w.operator.set_directives(coop, str(body.get("directives", "")))
+                if w.operator.reload():
+                    w.hub.emit("operator.update", w.cycle, coops=sorted(w.operator.views), errors=w.operator.errors)
+            await asyncio.to_thread(locked, apply)
+        except ValueError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        return {"ok": True, "errors": w.operator.errors}
 
     @app.get("/stream")
     async def stream(request: Request, interval: float = 0.5, limit: int | None = None):

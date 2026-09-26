@@ -74,7 +74,10 @@ a.c { color:inherit; text-decoration:underline dotted; cursor:pointer; }
 .step { font-size:12px; } .step.ok { color:var(--good); }
 .prog { display:inline-block; width:90px; height:8px; background:var(--rule); vertical-align:middle; margin:0 6px; }
 .prog i { display:block; height:100%; background:var(--series); }
-.act-decision { color:var(--series); } .act-change { color:var(--muted); } .act-bad { color:var(--bad); }
+.act-decision { color:var(--series); }
+.op-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:12px; }
+.op-card textarea { width:100%; min-height:90px; font:12px/1.5 var(--mono); background:var(--bg); color:var(--fg); border:1px solid var(--rule); padding:6px; }
+.op-card ul { margin:4px 0; padding-left:18px; font-size:12px; } .act-change { color:var(--muted); } .act-bad { color:var(--bad); }
 td.cell { text-align:center; font-family:var(--mono); font-size:12px; }
 pre { margin:0; font:12px/1.55 var(--mono); white-space:pre-wrap; }
 .empty { color:var(--muted); font-style:italic; }
@@ -180,6 +183,8 @@ pre { margin:0; font:12px/1.55 var(--mono); white-space:pre-wrap; }
 
   <section class="w8"><h2>Goals &amp; progress <small>agents' own goals, and every job in progress</small></h2><div id="goals"></div></section>
   <section class="w4"><h2>Ventures &amp; ideas <small>work the co-ops thought up</small></h2><div id="ideas"></div></section>
+
+  <section class="w12"><h2>Operator <small>your directives, context and limits for the co-ops; saved directives apply from the next turn</small></h2><div id="operator"></div></section>
 
   <section class="w12"><h2>Activity log <small>every action, decision and change</small>
     <span><select id="act-kind"><option value="">all kinds</option><option>action</option><option>decision</option><option>change</option></select>
@@ -388,6 +393,21 @@ function render(s) {
     return `<span class="${cls}">${String(e.cycle ?? "").padStart(5)} ${esc(e.community || "—").padEnd(10)} ${esc(e.actor).padEnd(8)} ${e.kind.padEnd(8)} ${what}${e.why ? `\n${" ".repeat(34)}why: ${esc(e.why)}` : ""}</span>`;
   }).join("\n")}</pre>` : empty("Nothing matches.");
 
+  const O = s.operator;
+  const opBox = $("operator");
+  if (!O.enabled) {
+    opBox.innerHTML = empty("No operator folder for this run. Start a live run with --operator DIR (see operator.example/).");
+  } else if (!opBox.contains(document.activeElement)) {  // never re-render under someone typing
+    const card = (key, title, own, c) => `<div class="op-card"><b>${esc(title)}</b>
+      ${c ? `<ul>${c.limits.map(l => `<li>${esc(l)}</li>`).join("")}${c.context.map(f => `<li>context: ${esc(f)}</li>`).join("")}
+        ${Object.keys(c.runtime).length ? `<li>runtime: ${esc(JSON.stringify(c.runtime))}</li>` : ""}</ul>` : ""}
+      <textarea data-op="${esc(key)}" placeholder="Directives in plain language">${esc(own)}</textarea>
+      <button data-op-save="${esc(key)}">save</button></div>`;
+    opBox.innerHTML = (O.errors.length ? `<p class="bad">${O.errors.map(esc).join("<br>")}</p>` : "") +
+      `<p class="muted mono">folder: ${esc(O.folder)}</p><div class="op-grid">` +
+      card("*", "Every co-op (all.md)", O.all, null) + O.coops.map(c => card(c.name, c.name, c.own, c)).join("") + `</div>`;
+  }
+
   const byComp = {};
   for (const [k, v] of Object.entries(s.events)) (byComp[k.split(".")[0]] ||= []).push([k, v]);
   $("events").innerHTML = table(["component", "kinds"], Object.entries(byComp).sort().map(([c, ks]) =>
@@ -420,6 +440,15 @@ document.addEventListener("click", async e => {
     if (!res.ok) alert((await res.json()).error);
   }
   if (c) drill(c.dataset.c);
+  const save = e.target.closest("[data-op-save]");
+  if (save) {
+    const key = save.dataset.opSave, text = document.querySelector(`textarea[data-op="${CSS.escape(key)}"]`).value;
+    const res = await fetch("/api/operator", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({coop: key === "*" ? null : key, directives: text})});
+    const out = await res.json();
+    save.textContent = res.ok ? (out.errors && out.errors.length ? "saved, with errors" : "saved ✓") : "failed: " + out.error;
+    setTimeout(() => { save.textContent = "save"; }, 2500);
+  }
 });
 $("act-kind").onchange = $("act-who").onchange = () => last && render(last);
 const syncTheme = () => { $("theme").textContent = document.documentElement.dataset.theme === "plain" ? "neon" : "plain"; };
