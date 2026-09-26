@@ -1,5 +1,7 @@
 """The steward's tools: the actions executor, described for a model.
 
+`review` and `dispute` are gone: the grader judges every delivery (option B, 26 Sep).
+
 Sorted by name and never generated per turn, so the tool list is byte-identical on every call and
 sits inside the cached prefix. Two tools belong to the runtime rather than the executor:
 `commission` (a member writes a draft) and `end_turn`.
@@ -46,9 +48,6 @@ _TOOLS: list[dict[str, Any]] = [
         {"ref": S, "capability": S, "instructions": S, "playbook_id": S}, ["ref", "capability", "instructions"])},
     {"name": "deliver", "description": "Deliver a draft for a contract you won. Uses one capacity. The prime then "
      "reviews it.", "input_schema": _obj({"contract_id": S, "draft_id": S}, ["contract_id", "draft_id"])},
-    {"name": "dispute", "description": "Take a rejection of your delivery to a paid audit by the grader. If the work "
-     "passes, the prime pays what it owed plus the fee; if not, you lose the fee and standing.",
-     "input_schema": _obj({"contract_id": S, "reason": S}, ["contract_id", "reason"])},
     {"name": "do_part", "description": "Submit a draft as a part of a job you are prime on, for a capability you "
      "have. Uses one capacity. When every part is in, the job goes to the grader.",
      "input_schema": _obj({"job_id": S, "capability": S, "draft_id": S}, ["job_id", "capability", "draft_id"])},
@@ -86,9 +85,6 @@ _TOOLS: list[dict[str, Any]] = [
      "input_schema": _obj({"capability": S, "title": S, "text": S}, ["capability", "title", "text"])},
     {"name": "read_playbook", "description": "Read a playbook's full text. Free.", "input_schema": _obj({"playbook_id": S}, ["playbook_id"])},
     {"name": "retire", "description": "Drop one member. No refund.", "input_schema": _obj({}, [])},
-    {"name": "review", "description": "Review a delivery on your contract: accept pays the remainder; reject pays "
-     "nothing more (the contractor may dispute).", "input_schema": _obj(
-        {"contract_id": S, "accept": B, "reason": S}, ["contract_id", "accept", "reason"])},
     {"name": "second_spawn", "description": "Second another community's spawn request. Free.",
      "input_schema": _obj({"proposal_id": S}, ["proposal_id"])},
 ]

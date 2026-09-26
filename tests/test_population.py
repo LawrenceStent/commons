@@ -155,7 +155,7 @@ def rejected_contract(w: World, quality: float):
 
 
 def test_a_false_rejection_is_overturned_and_costs_the_prime():
-    w = world()
+    w = world(grader_reviews=False)  # the prime-review path, kept as an option
     job, c = rejected_contract(w, 0.9)
     assert any(x.id == c.id for x in w.observe(w.communities["beta"]).to_dispute)
     prime_before, sub_before = w.ledger.balance(purse("alpha")), w.ledger.balance(purse("beta"))
@@ -173,7 +173,7 @@ def test_a_false_rejection_is_overturned_and_costs_the_prime():
 
 
 def test_a_fair_rejection_is_upheld_and_the_disputer_pays():
-    w = world()
+    w = world(grader_reviews=False)
     _, c = rejected_contract(w, 0.2)
     before = w.ledger.balance(purse("beta"))
     assert act(w, "beta").dispute(c.id, "it's fine really")
@@ -183,7 +183,7 @@ def test_a_fair_rejection_is_upheld_and_the_disputer_pays():
 
 
 def test_disputes_close_after_the_window():
-    w = world()
+    w = world(grader_reviews=False)
     _, c = rejected_contract(w, 0.9)
     for _ in range(w.params.dispute_window + 1):
         w.step()

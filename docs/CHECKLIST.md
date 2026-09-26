@@ -378,6 +378,7 @@ Same seed (same market) as run 2, so differences come from the changes.
   refusals at the claim limit and re-submitted parts went from 24 to 0. What remains is mostly the **race that
   parallel turns created**: 13 refusals were claims on jobs another steward took first, or announcements for
   jobs it then didn't own. K2's allocation removes it; until then it costs about one round per race.
+- **Decided 26 Sep (option B, built):** the grader judges every delivery; see "Reviews by the grader" below.
 - **LLM reviewers are too harsh:** both LLM primes rejected good work (studio → lab's research, lab → the
   scripted co-op's design), and both were overturned on audit. Lab's standing fell to 0.43, close to the 0.35
   line. Candidate world rule: the grader, not the prime, decides contract reviews (or a rejection triggers an
@@ -469,6 +470,16 @@ had nowhere to go (and the idea and goal tools went unused).
 - [ ] Live run: do stewards propose ventures, and are they any good?
 - [ ] Watch for: easy rubrics written to be passed (the appraiser's `gradeable` check is the defence), and
       ventures crowding out the board
+
+### Reviews by the grader (option B, your decision, 26 Sep)
+- [x] A delivery is queued and graded at the end of the cycle, outside the lock, against the part's rubric. Pass: the
+      prime pays the rest automatically (or defaults if it can't). Fail: rejected; the contractor keeps the advance
+- [x] The delivery's grade is stored on the job and reused when the job is graded, so no part is graded twice (tested)
+- [x] The prime's record of the contractor still updates from the verdict (it did receive the work)
+- [x] `review` and `dispute` are gone from the steward's tools; the actions refuse with a reason. A grader outage
+      retries, then accepts by default so contractors aren't punished for it
+- [x] `Params.grader_reviews` (on by default); off restores prime reviews and disputes, which stay tested
+- [ ] Later: appeals against the grader itself go to a panel of graders from uninvolved co-ops
 
 ### 1.7 Operator: your directives, context and limits (built 26 Sep)
 - [x] `operator/` folder (copy `operator.example/`; the real one is git-ignored): `all.md` and `coops/<name>.md`

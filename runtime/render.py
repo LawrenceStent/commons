@@ -38,13 +38,14 @@ THE MARKET
   parts, each with a spec and a checkable rubric. The market appraises it next cycle; if approved it becomes
   your own job, and the better the appraisal, the bigger the reward. Vague, padded or copied ventures earn nothing.
 
-CONTRACTS (announce -> bid -> award -> deliver -> review)
+CONTRACTS (announce -> bid -> award -> deliver -> graded)
 - announce offers a part for a maximum price and an advance fraction. Others bid from their next turn.
 - award picks a bidder (not in the cycle you announced) and pays the advance at once.
-- The winner delivers; the prime reviews: accept pays the rest, reject pays nothing more.
-- Every stage has a deadline. Undelivered work fails and counts against the contractor. A delivery left
-  unreviewed is accepted by default. A prime who can't pay defaults and that counts against it.
-- A contractor can dispute a rejection: an audit by the grader decides, and the loser pays.
+- The winner delivers. The grader judges the delivery against the part's rubric at the end of the cycle:
+  pass pays the rest automatically, fail pays nothing more. Neither side reviews; the grade also counts
+  for the job, so that part isn't graded again.
+- Every stage has a deadline. Undelivered work fails and counts against the contractor. A prime who can't
+  pay for passing work defaults, and that counts against it.
 - To win contracts, bid on others' announcements for capabilities you have.
 
 REPUTATION
@@ -66,7 +67,7 @@ YOUR COMMUNITY CAN CHANGE SHAPE
 - learn buys a new capability; the more you already have, the more it costs.
 
 HOW TO TAKE YOUR TURN
-- Keep your obligations first: review deliveries, deliver work you won, then new business.
+- Keep your obligations first: deliver work you won, then new business.
 - Tools return what happened, or why not. Read refusals and adjust; don't repeat a refused call unchanged.
 - Make all the calls you can in one reply. Every reply re-reads your whole situation, and that reading is
   what your thinking costs.
@@ -114,7 +115,8 @@ NEXT = {  # the world's own reading of what a part needs next; the steward doesn
     ("open", True): "next: commission a draft, then do_part",
     ("open", False): "next: announce a contract for it (you can't do it yourself)",
     ("awarded", True): "waiting: a contractor is working on it", ("awarded", False): "waiting: a contractor is working on it",
-    ("delivered", True): "next: review the delivery", ("delivered", False): "next: review the delivery",
+    ("delivered", True): "waiting: the grader judges the delivery this cycle",
+    ("delivered", False): "waiting: the grader judges the delivery this cycle",
 }
 
 

@@ -196,7 +196,8 @@ Grouped by area. Terms in **bold** are used throughout the code and this guide.
   standing, from 1 up to 18 (1.5× the base of 12). Obligations (award, deliver, settle, attest,
   dispute, gate) are never throttled, so "I was rate-limited" can't be an excuse not to deliver.
 - **Dispute / audit.** A contractor can take a rejection to a paid audit by the grader. The loser pays
-  and the audit's verdict counts against their standing.
+  and the audit's verdict counts against their standing. Since 26 Sep (option B) the grader judges every
+  delivery directly, so this path is only used when `grader_reviews` is switched off.
 
 ### Knowledge
 

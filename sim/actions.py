@@ -180,6 +180,8 @@ class Actions:
         return Outcome(True, f"delivered {contract_id}; {c.prime} reviews by cycle {c.deadline}")
 
     def review(self, contract_id: str, accept: bool, reason: str = "") -> Outcome:
+        if self.w.params.grader_reviews:
+            return Outcome(False, "the grader judges deliveries; there is nothing for you to review")
         c = self._contract(contract_id)
         if c is None or c.prime != self.me.name or c.status != "delivered":
             return Outcome(False, f"you have no delivery {contract_id} to review")
@@ -207,6 +209,8 @@ class Actions:
         Found for you: the prime pays what it owed plus your audit fee, and the audit counts
         against it. Found against you: you lose the fee, and the audit counts against you."""
         w, p = self.w, self.w.params
+        if p.grader_reviews:
+            return Outcome(False, "deliveries are judged by the grader, so there is no prime's rejection to dispute")
         c = self._contract(contract_id)
         if c is not None and c.winner == self.me.name and c.disputed:
             return Outcome(False, f"{contract_id} has already been audited")

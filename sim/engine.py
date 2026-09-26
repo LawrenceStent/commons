@@ -72,6 +72,11 @@ class Params:
     parts_per_job: int = 2
     work_cost: int = 10_000  # what a scripted community spends producing one part
     grade_cost: int = 2_000  # notional treasury cost per graded part (StubGrader)
+    # Reviews (your decision, 26 Sep, option B): the grader judges every delivery against the part's rubric.
+    # Pass = the prime pays the rest; fail = rejected. The grade is reused when the job is graded. The prime
+    # had a conflict of interest (rejecting saves money) and LLM primes rejected good work. False restores
+    # prime reviews and disputes.
+    grader_reviews: bool = True
     venture_fee: int = 5_000  # paid to the treasury when proposing a venture (deters spam)
     venture_budget: int = 2  # ventures the market will take on per cycle, best-scored first
     venture_min_score: int = 5  # appraisals below this are worth nothing
@@ -214,6 +219,7 @@ class World:
         # grading happens after the turns, outside the lock (see settle_grading)
         self.awaiting_grade: dict[str, int] = {}  # submitted job id -> failed grading attempts so far
         self.pending_audits: dict[str, dict] = {}  # contract id -> {reason, attempts}
+        self.pending_reviews: dict[str, int] = {}  # delivered contract id -> failed grading attempts
         self.transcripts: defaultdict[str, deque] = defaultdict(lambda: deque(maxlen=2))  # LLM turns, newest last
         self.plans: defaultdict[str, Plans] = defaultdict(Plans)  # ideas and goals per community
         self._plan_seq = 0
@@ -387,7 +393,7 @@ class World:
                 self.rep.attest(c.prime, c.winner, c.capability, 0.0)
                 self._tell(c.prime, "failed", f"{c.winner} never delivered {c.id}", c.id)
                 self._tell(c.winner, "failed", f"you missed the delivery deadline on {c.id}", c.id)
-            elif c.status == DELIVERED:
+            elif c.status == DELIVERED and c.id not in self.pending_reviews:
                 if self.pay_remainder(c):
                     self.close_review(c, True, "accepted by default: the prime didn't review in time")
                 else:
@@ -434,7 +440,11 @@ class World:
     def deliver_contract(self, c: Contract, artifact: str, cites: tuple[str, ...]) -> None:
         c.status, c.artifact, c.cites = DELIVERED, artifact, cites
         c.deadline = self.cycle + self.params.review_ttl
-        self._tell(c.prime, "delivered", f"{c.winner} delivered {c.id}; review by cycle {c.deadline}", c.id)
+        if self.params.grader_reviews:
+            self.pending_reviews[c.id] = 0
+            self._tell(c.prime, "delivered", f"{c.winner} delivered {c.id}; the grader judges it at the end of this cycle", c.id)
+        else:
+            self._tell(c.prime, "delivered", f"{c.winner} delivered {c.id}; review by cycle {c.deadline}", c.id)
         self._stage(c, DELIVERED)
 
     def pay_remainder(self, c: Contract) -> bool:
@@ -532,17 +542,23 @@ class World:
                                    if cap not in job.scores]))
             audits = [(cid, c.spec, c.rubric, c.artifact or "") for cid in list(self.pending_audits)
                       if (c := self.contracts.get(cid)) is not None]
+            reviews = [(cid, c.spec, c.rubric, c.artifact or "") for cid in list(self.pending_reviews)
+                       if (c := self.contracts.get(cid)) is not None and c.status == DELIVERED]
         verdicts: dict[tuple[str, str], object] = {}
         for jid, parts in jobs:
             for cap, spec, rubric, artifact in parts:
                 verdicts[(jid, cap)] = self._try_grade(spec, rubric, artifact)
         for cid, spec, rubric, artifact in audits:
             verdicts[("audit", cid)] = self._try_grade(spec, rubric, artifact)
+        for cid, spec, rubric, artifact in reviews:
+            verdicts[("review", cid)] = self._try_grade(spec, rubric, artifact)
         with self.lock:
             for jid, parts in jobs:
                 self._apply_job_grades(jid, [(cap, verdicts[(jid, cap)]) for cap, *_ in parts])
             for cid, *_ in audits:
                 self._settle_audit(cid, verdicts[("audit", cid)])
+            for cid, *_ in reviews:
+                self._settle_review(cid, verdicts[("review", cid)])
 
     def _try_grade(self, spec: str, rubric: str, artifact: str):
         try:
@@ -581,6 +597,42 @@ class World:
             self._fail_job(job, f"a part failed grading ({', '.join(f'{k} {v:.2f}' for k, v in job.scores.items())})")
             return
         self._pay_job(job)
+
+    def _settle_review(self, cid: str, g) -> None:
+        """The grader's verdict on a delivery decides the contract (option B). Under the lock."""
+        c = self.contracts.get(cid)
+        if c is None or c.status != DELIVERED:
+            self.pending_reviews.pop(cid, None)
+            return
+        if isinstance(g, GradingError):
+            self.pending_reviews[cid] += 1
+            if self.pending_reviews[cid] < self.params.grade_retries:
+                return
+            self.pending_reviews.pop(cid)
+            # the grader stayed down: accept by default, so contractors aren't punished for an outage
+            if self.pay_remainder(c):
+                self.close_review(c, True, "accepted by default: the grader was unavailable")
+            else:
+                self._default(c)
+            return
+        self.pending_reviews.pop(cid)
+        self._charge_grade(g, job=c.job_id, part=c.capability, payers=("treasury", purse(c.prime)))
+        if g.score < self.params.pass_score:
+            self.close_review(c, False, f"failed grading ({g.score:.2f}): {g.reason}"[:300])
+            return
+        if not self.pay_remainder(c):
+            self._default(c)
+            return
+        job = self.jobs.get(c.job_id)
+        if job is not None:
+            job.scores[c.capability] = g.score  # reused when the job is graded: no part is graded twice
+        self.close_review(c, True, f"passed grading ({g.score:.2f}): {g.reason}"[:300])
+
+    def _default(self, c: Contract) -> None:
+        self._close(c, "defaulted")
+        self.rep.attest(c.winner, c.prime, c.capability, 0.0)
+        c.winner_attested = True
+        self._tell(c.winner, "defaulted", f"{c.prime} never paid for {c.id}", c.id)
 
     def _settle_audit(self, cid: str, g) -> None:
         entry = self.pending_audits[cid]
@@ -751,7 +803,8 @@ class World:
             claim_limit=max(2, me.thinking),
             my_announcements=tuple(contract_view(c, True) for c in cs if c.status == OPEN and c.prime == name),
             to_deliver=tuple(contract_view(c, False) for c in cs if c.status == AWARDED and c.winner == name),
-            to_review=tuple(contract_view(c, True) for c in cs if c.status == DELIVERED and c.prime == name),
+            to_review=tuple(contract_view(c, True) for c in cs if c.status == DELIVERED and c.prime == name
+                            and not p.grader_reviews),
             to_attest=tuple(contract_view(c, False) for c in cs
                             if c.winner == name and c.closed is not None and c.status in ("accepted", "rejected", "failed")
                             and not c.winner_attested),
@@ -767,7 +820,7 @@ class World:
             my_proposals=tuple(ProposalView(x.id, x.kind, x.proposer, x.deadline, x.role or x.target, 0.0)
                                for x in self.proposals.values() if x.proposer == name and x.status == "open"),
             to_dispute=tuple(contract_view(c, False) for c in cs
-                             if c.winner == name and c.status == "rejected" and not c.disputed
+                             if not p.grader_reviews and c.winner == name and c.status == "rejected" and not c.disputed
                              and self.cycle <= c.closed + p.dispute_window),
             library=tuple(PlaybookView(pb.id, pb.capability, pb.author, pb.title, pb.uses) for pb in self.library.values()),
             events=tuple(self.inbox[name]),

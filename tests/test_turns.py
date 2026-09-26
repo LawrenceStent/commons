@@ -63,7 +63,7 @@ def test_outcomes_explain_refusals():
 
 
 def test_only_the_prime_sees_bids_and_deliveries():
-    w = world()
+    w = world(grader_reviews=False)  # with prime reviews, the prime sees the delivery to review it
     job = claimed_job_needing_build(w)
     c = announce_and_award(w, job)
     act(w, "sub").deliver(c.id, tagged(0.9, " work"))
@@ -73,31 +73,71 @@ def test_only_the_prime_sees_bids_and_deliveries():
     assert all(v.bids == () for v in sub.to_deliver + sub.open_contracts)
 
 
-def test_accepted_delivery_completes_the_job_and_the_market_pays():
+def test_the_grader_accepts_a_good_delivery_and_its_grade_counts_for_the_job():
     w = world()
     job = claimed_job_needing_build(w)
     c = announce_and_award(w, job)
     act(w, "sub").deliver(c.id, tagged(0.9, " build"))
+    assert c.status == "delivered" and c.id in w.pending_reviews
+    w.settle_grading()
+    assert c.status == "accepted" and "passed grading" in c.reason
+    assert job.parts["build"].artifact and job.scores["build"] == 0.9
+    assert w.rep.score("prime", "sub", "build") > 0.5
     before = w.ledger.balance(purse("prime"))
     act(w, "prime").do_part(job.id, "research", tagged(0.9, " research"))
-    assert act(w, "prime").review(c.id, True)
-    assert job.status == "claimed" and job.id in w.awaiting_grade  # submitted; graded after the turns
+    graded = []
+    real_grade = w.grader.grade
+    w.grader.grade = lambda *a: graded.append(a) or real_grade(*a)
     w.settle_grading()
-    assert job.status == "paid" and w.jobs_done == 1
-    assert w.ledger.balance(purse("prime")) > before
-    assert w.rep.score("prime", "sub", "build") > 0.5
+    assert len(graded) == 1  # only research: the build part's delivery grade was reused
+    assert job.status == "paid" and w.jobs_done == 1 and w.ledger.balance(purse("prime")) > before
     w.ledger.check()
 
 
-def test_a_bad_part_fails_grading_and_nobody_is_paid_for_the_job():
+def test_the_grader_rejects_a_bad_delivery_and_the_prime_pays_nothing_more():
     w = world()
-    job = claimed_job_needing_build(w)
-    c = announce_and_award(w, job)
-    act(w, "sub").deliver(c.id, tagged(0.9, " build"))
-    act(w, "prime").review(c.id, True)
-    act(w, "prime").do_part(job.id, "research", tagged(0.2, " sloppy"))
+    c = announce_and_award(w, claimed_job_needing_build(w))
+    act(w, "sub").deliver(c.id, tagged(0.2, " junk"))
+    sub_before = w.ledger.balance(purse("sub"))
     w.settle_grading()
-    assert job.status == "failed" and w.jobs_done == 0
+    assert c.status == "rejected" and "failed grading" in c.reason
+    assert w.ledger.balance(purse("sub")) == sub_before
+    assert w.rep.score("prime", "sub", "build") < 0.5
+
+
+def test_reviews_and_disputes_are_no_longer_the_primes_to_make():
+    w = world()
+    c = announce_and_award(w, claimed_job_needing_build(w))
+    act(w, "sub").deliver(c.id, tagged(0.9, " build"))
+    assert "grader judges" in act(w, "prime").review(c.id, False).message
+    assert "judged by the grader" in act(w, "sub").dispute(c.id, "unfair").message
+    assert not w.observe(w.communities["prime"]).to_review
+
+
+def test_a_grader_outage_accepts_the_delivery_by_default_after_retries():
+    w = world(grade_retries=2)
+    c = announce_and_award(w, claimed_job_needing_build(w))
+    act(w, "sub").deliver(c.id, "untagged text the stub can't read")
+
+    from sim.grader import GradingError
+
+    def down(*a):
+        raise GradingError("model not loaded")
+
+    w.grader.grade = down
+    w.settle_grading()
+    assert c.status == "delivered"
+    w.settle_grading()
+    assert c.status == "accepted" and "grader was unavailable" in c.reason
+
+
+def test_a_prime_that_cannot_pay_for_passing_work_defaults():
+    w = world()
+    c = announce_and_award(w, claimed_job_needing_build(w))
+    act(w, "sub").deliver(c.id, tagged(0.9, " build"))
+    w.ledger.transfer(purse("prime"), "compute", w.ledger.balance(purse("prime")), cycle=w.cycle, kind="test")
+    w.settle_grading()
+    assert c.status == "defaulted" and w.rep.score("sub", "prime", "build") < 0.5
 
 
 def test_undelivered_work_fails_and_the_prime_complaint_is_filed():
@@ -110,7 +150,7 @@ def test_undelivered_work_fails_and_the_prime_complaint_is_filed():
 
 
 def test_unreviewed_delivery_is_accepted_by_default():
-    w = world()
+    w = world(grader_reviews=False)
     c = announce_and_award(w, claimed_job_needing_build(w))
     act(w, "sub").deliver(c.id, tagged(0.9, " build"))
     for _ in range(w.params.review_ttl + 1):
