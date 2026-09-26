@@ -356,7 +356,33 @@ Qwen 3.5 35B-A3B for steward, member and grader; the calibrated live economy; se
   without reputation.
 - **Next:**
   1. ~~make trust visible where awards are decided~~ (done: the world refuses)
-  2. cut wasted calls (retrying refused claims and done parts)
+
+#### 1.5 Qwen run 3 (26 Sep): parallel turns, world rules against waste, no local token caps
+Same seed (same market) as run 2, so differences come from the changes.
+- **Money: both LLM communities made a profit for the first time.** Studio ended at 435,652 µcr and lab at
+  452,809, from 400,000; neither ran out of money. Studio earned from contracts (it sold writing to the scripted
+  co-op twice). **Lab earned 160,000 µcr in royalties** from a build playbook it wrote itself in cycle 1, cited 4
+  times by the scripted co-op.
+- **The first LLM-prime jobs were paid:** J4 (studio) and J6 (lab). 6 jobs paid and 1 failed in all. J5 failed
+  grading on its build part (0.40).
+- **Phase 1 goal, partly met:** a playbook earned royalties from a community that didn't write it, and the
+  author was an LLM that decided to publish unprompted. The *citing* was scripted (the co-op cites library
+  playbooks by rule), so it isn't yet "none of it scripted". Lab also tried to spawn in cycle 1 but couldn't
+  afford the 1.5M fee from a 400k purse, so the live spawn fee needs recalibrating.
+- **Speed:** turns took 22.3 minutes in total, against 40.8 if back to back (**1.8× faster**). Normal cycles
+  take 45–90 s. Cycles 7 and 8 took about 9 and 3.5 minutes because audits ran the grader, with no token cap,
+  **while holding the world's lock**, so every action waited. **Fix next: grade outside the lock.**
+- **Wasted calls:** 69 of 97 calls succeeded (71%, up from 63%). The world rules removed both big sources:
+  refusals at the claim limit and re-submitted parts went from 24 to 0. What remains is mostly the **race that
+  parallel turns created**: 13 refusals were claims on jobs another steward took first, or announcements for
+  jobs it then didn't own. K2's allocation removes it; until then it costs about one round per race.
+- **LLM reviewers are too harsh:** both LLM primes rejected good work (studio → lab's research, lab → the
+  scripted co-op's design), and both were overturned on audit. Lab's standing fell to 0.43, close to the 0.35
+  line. Candidate world rule: the grader, not the prime, decides contract reviews (or a rejection triggers an
+  automatic audit). Needs your decision.
+- **The defector** won 1 contract before there was evidence, was rejected, then was refused by the world;
+  it ended at 0.33.
+- Goals and ideas: still unused (0). Decisions logged with a `why`: 79. No reminders needed.  2. cut wasted calls (retrying refused claims and done parts)
   3. measure parallel turns
   4. revisit the price of thinking: calls are cheaper than before, but a steward still makes about 6 per turn
 - [x] **Activity log** (`sim/activity.py`): every action through the executor (scripted and LLM), every steward
