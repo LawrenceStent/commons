@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import copy
 import json
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -66,6 +67,7 @@ class LLMStrategy(Strategy):
 
     # ── the turn ───────────────────────────────────────────────
     def turn(self, obs: Observation, act: ActionsAPI) -> None:
+        started = time.time()
         act.actor = "steward"
         system = [PREAMBLE, community_block(obs)]
         messages: list[dict[str, Any]] = [{"role": "user", "text": render(obs)}]
@@ -125,7 +127,7 @@ class LLMStrategy(Strategy):
                 break
             if t.stop == "max_tokens":
                 log.append({"kind": "error", "text": "the steward ran out of output tokens"})
-        act.record_transcript(log)
+        act.record_transcript(log, started)
 
     # ── tools ──────────────────────────────────────────────────
     def dispatch(self, obs: Observation, act: ActionsAPI, call: ToolCall) -> Outcome:

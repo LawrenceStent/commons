@@ -9,6 +9,7 @@ LLM can see why something didn't happen and try something else.
 from __future__ import annotations
 
 import hashlib
+import time
 from typing import TYPE_CHECKING
 
 from protocol import Envelope, Message
@@ -288,13 +289,13 @@ class Actions:
         """A fresh view mid-turn: after a claim or an award, the start-of-turn observation is stale."""
         return self.w.observe(self.me)
 
-    def record_transcript(self, entries: list[dict]) -> None:
+    def record_transcript(self, entries: list[dict], started: float | None = None) -> None:
         self.w.transcripts[self.me.name].append({"cycle": self.w.cycle, "entries": entries[-80:]})
         tools = [e for e in entries if e["kind"] == "tool"]
         self.w.hub.emit("llm.turn", self.w.cycle, community=self.me.name, tools=len(tools),
                         ok=sum(e["ok"] for e in tools), names=[e["name"] for e in tools],
                         said=sum(e["kind"] == "say" for e in entries), errors=[e["text"] for e in entries if e["kind"] == "error"],
-                        entries=entries[-80:])
+                        entries=entries[-80:], started=started, ended=time.time())
 
     def record_member_work(self, args: dict, out: Outcome) -> None:
         """A member's commissioned work: part of the action log even though it runs in the runtime."""
