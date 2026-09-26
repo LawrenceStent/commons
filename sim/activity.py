@@ -76,6 +76,12 @@ def _change(ev: Event) -> tuple[str, str | None, str] | None:
             return "learn", f["community"], f"{f['community']} learned {f['capability']}"
         case "population.retire":
             return "retire", f["community"], f"{f['agent']} retired"
+        case "venture.proposed":
+            return "venture.proposed", f["proposer"], f"{f['proposer']} proposed venture {f['id']}: {f['title']}"
+        case "venture.decided":
+            extra = f", job {f['job']}, reward {f['reward']}" if f.get("job") else ""
+            return (f"venture.{f['status']}", f["proposer"],
+                    f"venture {f['id']} {f['title']!r} {f['status']} (score {f['score']}{extra}): {f.get('reason', '')}")
         case "meter.kill_switch":
             return "kill_switch", None, f"kill-switch: {f.get('reason')}"
     return None

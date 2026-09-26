@@ -34,12 +34,13 @@ from protocol.reputation import Gossip
 from sim.actions import Actions
 from sim.activity import ActivityLog
 from sim.goals import Plans
+from sim.ventures import AppraisalError, Appraiser, StubAppraiser, Venture, value as venture_value
 from sim.grader import GradingError
 from sim.market import CAPABILITIES, Grade, Grader, MarketJob, StubGrader, generate_job
 from sim.population import Proposal, expire_proposals
 from society.community import Community
 from society.observation import (
-    BidView, ContractView, Event, GoalView, IdeaView, JobView, Observation, Outcome, PartView, PeerView, PlaybookView,
+    BidView, ContractView, Event, GoalView, IdeaView, VentureView, JobView, Observation, Outcome, PartView, PeerView, PlaybookView,
     ProposalView,
 )
 from society.strategies import Cooperator, Defector, FreeRider
@@ -70,6 +71,9 @@ class Params:
     parts_per_job: int = 2
     work_cost: int = 10_000  # what a scripted community spends producing one part
     grade_cost: int = 2_000  # notional treasury cost per graded part (StubGrader)
+    venture_fee: int = 5_000  # paid to the treasury when proposing a venture (deters spam)
+    venture_budget: int = 2  # ventures the market will take on per cycle, best-scored first
+    venture_min_score: int = 5  # appraisals below this are worth nothing
     grade_retries: int = 3  # cycles a complete job waits for an unavailable grader before it fails
     # The world refuses bids (and awards) from anyone below this line, in the commons' pooled standing or in
     # the prime's own record of them for that capability. A rule, not a judgement: in the 1.5 runs LLM primes
@@ -178,7 +182,7 @@ class Snapshot:
 
 class World:
     def __init__(self, params: Params | None = None, population: list[Community] | None = None,
-                 hub: Hub | None = None, grader: Grader | None = None):
+                 hub: Hub | None = None, grader: Grader | None = None, appraiser: Appraiser | None = None):
         self.params = p = params or Params()
         self.hub = hub or Hub()
         self.lock = threading.RLock()  # held for every state change; see parallel_turns
@@ -192,6 +196,9 @@ class World:
         self.bus = MemoryBus(self.registry, standing=self._standing, base_allowance=p.base_allowance,
                              verify=p.verify, hub=self.hub)
         self.grader = grader or StubGrader(cost=p.grade_cost)
+        self.appraiser = appraiser or StubAppraiser()
+        self.ventures: dict[str, Venture] = {}
+        self._venture_seq = 0
         self.jobs: dict[str, MarketJob] = {}
         self.contracts: dict[str, Contract] = {}
         self.library: dict[str, Playbook] = {}
@@ -283,6 +290,7 @@ class World:
             self._post_jobs()
             order = self._active()
             self.rng.shuffle(order)  # turn order must not decide who wins
+        self._appraise_ventures()
         if self.params.parallel_turns and len(order) > 1:
             # the lock is released here: each action takes it, model calls don't
             with ThreadPoolExecutor(max_workers=self.params.parallel_workers) as pool:
@@ -524,6 +532,64 @@ class World:
             return
         self._pay_job(job)
 
+    def _appraise_ventures(self) -> None:
+        """Appraise waiting ventures outside the lock (a model call must never stall other communities),
+        then decide under it: best score first, up to the market's budget for this cycle."""
+        with self.lock:
+            todo = [v for v in self.ventures.values() if v.status == "pending" and v.score is None]
+        results = {}
+        for v in todo:
+            try:
+                results[v.id] = self.appraiser.appraise(v)
+            except AppraisalError as e:
+                self._tell(v.proposer, "venture_delayed", f"{v.id} couldn't be appraised yet: {e}", v.id)
+        with self.lock:
+            p = self.params
+            for vid, a in results.items():
+                v = self.ventures[vid]
+                v.score, v.reason, v.reward = a.score, a.reason, venture_value(a.score, p.job_reward, p.venture_min_score)
+                if a.cost:
+                    payer = "treasury" if self.ledger.balance("treasury") >= a.cost else purse(v.proposer)
+                    self.ledger.transfer(payer, "compute", min(a.cost, self.ledger.balance(payer)), cycle=self.cycle,
+                                         kind="appraisal", memo=vid)
+                if a.model and a.usage:
+                    self.hub.emit("llm.call", self.cycle, community="appraiser", role="appraiser", model=a.model,
+                                  input_tokens=a.usage.input_tokens, output_tokens=a.usage.output_tokens,
+                                  cache_hit=None, cost=a.cost, ms=a.ms, real=a.real)
+                    if a.real:
+                        self.meter.record_real("appraiser", a.price_as or a.model, a.usage, cycle=self.cycle)
+                if v.reward == 0:
+                    self._decide_venture(v, approved=False)
+            waiting = sorted((v for v in self.ventures.values() if v.status == "pending" and v.score is not None),
+                             key=lambda v: (-v.score, v.id))
+            for i, v in enumerate(waiting):
+                if i < p.venture_budget:
+                    self._decide_venture(v, approved=True)
+                else:
+                    self._tell(v.proposer, "venture_waiting", f"{v.id} scored {v.score} but the market's budget this "
+                               f"cycle went to better-scored ventures; it stays in line", v.id)
+
+    def _decide_venture(self, v: Venture, approved: bool) -> None:
+        if not approved:
+            v.status = "rejected"
+            self._tell(v.proposer, "venture_rejected", f"{v.id} {v.title!r} rejected (score {v.score}): {v.reason}", v.id)
+            self.hub.emit("venture.decided", self.cycle, id=v.id, proposer=v.proposer, title=v.title, status="rejected",
+                          score=v.score, reward=0, reason=v.reason)
+            return
+        from sim.market import MarketJob, Part
+
+        self._venture_seq += 1
+        job = MarketJob(f"V{self._venture_seq}", v.title, v.reward,
+                        {c: Part(c, spec, rubric) for c, spec, rubric in v.parts}, posted=self.cycle,
+                        deadline=self.cycle + self.params.job_ttl, prime=v.proposer, status="claimed")
+        self.jobs[job.id] = job
+        v.status, v.job_id = "approved", job.id
+        self._tell(v.proposer, "venture_approved", f"{v.id} {v.title!r} approved as job {job.id}, reward {v.reward} µcr "
+                   f"(score {v.score}: {v.reason}); deliver every part by cycle {job.deadline}", job.id)
+        self.hub.emit("venture.decided", self.cycle, id=v.id, proposer=v.proposer, title=v.title, status="approved",
+                      score=v.score, reward=v.reward, reason=v.reason, job=job.id)
+        self.hub.emit("market.job", self.cycle, id=job.id, stage="venture", prime=v.proposer, caps=sorted(job.parts), reward=v.reward)
+
     def _grade(self, spec: str, rubric: str, artifact: str, *, job: str, part: str, payers: tuple[str, ...],
                audit: str | None = None) -> Grade:
         """Grade one part and pay for it: the notional cost from the first payer that can
@@ -640,12 +706,14 @@ class World:
             events=tuple(self.inbox[name]),
             journal=tuple(self.journal[name]),
             params={"sub_share": p.sub_share, "work_cost": p.work_cost, "advance_frac": p.advance_frac, "publish_cost": p.publish_cost,
-                    "spawn_fee": p.spawn_fee, "learn_cost": p.learn_cost, "audit_cost": p.audit_cost,
+                    "spawn_fee": p.spawn_fee, "venture_fee": p.venture_fee, "learn_cost": p.learn_cost, "audit_cost": p.audit_cost,
                     "max_members": p.max_members, "pass_score": p.pass_score, "max_communities": p.max_communities,
                     "communities": len(self._living()),
                     "upkeep": p.upkeep, "actions_per_member": p.actions_per_member, "job_ttl": p.job_ttl, "pass_score": p.pass_score},
             track=dict(me.deliveries),
             owed=sum(c.price - c.advance for c in cs if c.prime == name and c.status in (AWARDED, DELIVERED)),
+            ventures=tuple(VentureView(v.id, v.title, v.status, v.score, v.reward, v.reason, v.job_id, v.cycle)
+                           for v in list(self.ventures.values()) if v.proposer == name)[-5:],
             goals=tuple(GoalView(g.id, g.title, g.status, tuple((s.text, s.done, s.note) for s in g.steps), round(g.progress, 2))
                         for g in self.plans[name].active()),
             ideas=tuple(IdeaView(i.id, i.title, i.detail, i.cycle, i.status) for i in self.plans[name].ideas[-5:]),

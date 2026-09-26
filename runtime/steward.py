@@ -166,6 +166,8 @@ class LLMStrategy(Strategy):
                     return act.learn(str(a["capability"]), a.get("playbook_id") or None)
                 case "retire":
                     return act.retire()
+                case "propose_venture":
+                    return act.propose_venture(str(a["title"]), str(a["pitch"]), list(a["parts"]), a.get("idea_id") or None)
                 case "set_goal":
                     return act.set_goal(str(a["title"]), [str(x) for x in a["steps"]], a.get("idea_id") or None)
                 case "update_goal":

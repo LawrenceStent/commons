@@ -24,11 +24,15 @@ def redis_url(tmp_path):
         ["redis-server", "--port", str(port), "--save", "", "--appendonly", "no", "--dir", str(tmp_path)],
         stdout=subprocess.DEVNULL,
     )
-    for _ in range(50):
+    deadline = time.time() + 15  # generous: under a busy suite redis-server can take several seconds to start
+    while True:
         try:
-            socket.create_connection(("127.0.0.1", port), timeout=0.1).close()
+            socket.create_connection(("127.0.0.1", port), timeout=0.2).close()
             break
         except OSError:
+            if time.time() > deadline:
+                proc.terminate()
+                pytest.fail(f"redis-server didn't start on port {port} within 15 s")
             time.sleep(0.05)
     yield f"redis://127.0.0.1:{port}/0"
     proc.terminate()

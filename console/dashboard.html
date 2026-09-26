@@ -179,7 +179,7 @@ pre { margin:0; font:12px/1.55 var(--mono); white-space:pre-wrap; }
   <section class="w6"><h2>Telemetry <small>events since start, by kind</small></h2><div id="events"></div></section>
 
   <section class="w8"><h2>Goals &amp; progress <small>agents' own goals, and every job in progress</small></h2><div id="goals"></div></section>
-  <section class="w4"><h2>Ideas</h2><div id="ideas"></div></section>
+  <section class="w4"><h2>Ventures &amp; ideas <small>work the co-ops thought up</small></h2><div id="ideas"></div></section>
 
   <section class="w12"><h2>Activity log <small>every action, decision and change</small>
     <span><select id="act-kind"><option value="">all kinds</option><option>action</option><option>decision</option><option>change</option></select>
@@ -368,9 +368,14 @@ function render(s) {
   }).join("");
   $("goals").innerHTML = (goalHtml || empty("No goals set yet. LLM stewards set them with set_goal; scripted characters don't.")) +
     `<h2 style="margin-top:12px">Jobs in progress</h2>` + (jobHtml || empty("No jobs in progress."));
-  $("ideas").innerHTML = P2.ideas.length ? P2.ideas.map(i => `<div class="goal"><b>${esc(i.community)}</b> <span class="mono">${esc(i.id)}</span>
+  const vHtml = P2.ventures.map(v => `<div class="goal ${v.status === "rejected" ? "dropped" : v.status === "approved" ? "" : "done"}">
+      <b>${esc(v.proposer)}</b> <span class="mono">${esc(v.id)}</span> <span class="${v.status === "approved" ? "good" : v.status === "rejected" ? "bad" : "warn"}">${esc(v.status)}</span>
+      ${v.score != null ? `<span class="muted">score ${v.score}${v.reward ? " · " + amt(v.reward) : ""}${v.job_id ? " · job " + esc(v.job_id) : ""}</span>` : ""}
+      <div>${esc(v.title)} <span class="muted">(${esc(v.parts.join(" + "))})</span></div>
+      <div class="muted step">${esc(v.reason || v.pitch).slice(0, 220)}</div></div>`).join("");
+  $("ideas").innerHTML = (vHtml || empty("No ventures proposed yet.")) + `<h2 style="margin-top:12px">Ideas</h2>` + (P2.ideas.length ? P2.ideas.map(i => `<div class="goal"><b>${esc(i.community)}</b> <span class="mono">${esc(i.id)}</span>
       <span class="muted">cycle ${i.cycle} · ${esc(i.status)}${i.goal_id ? " → " + esc(i.goal_id) : ""}</span><div>${esc(i.title)}</div>
-      ${i.detail ? `<div class="muted step">${esc(i.detail)}</div>` : ""}</div>`).join("") : empty("No ideas recorded yet.");
+      ${i.detail ? `<div class="muted step">${esc(i.detail)}</div>` : ""}</div>`).join("") : empty("No ideas recorded yet."));
 
   const who = $("act-who"), names = s.communities.map(c => c.name);
   if (who.options.length - 1 !== names.length) who.innerHTML = `<option value="">everyone</option>` + names.map(n => `<option>${esc(n)}</option>`).join("");

@@ -34,6 +34,9 @@ THE MARKET
   reward splits: most to you, some to the treasury, and 10% to the authors of any playbooks your parts cite.
 - For a part you can do: commission a member to write it (you get a draft id), then do_part with that draft.
 - For a part you can't do: announce a contract and buy it from another community.
+- You don't have to wait for the board. propose_venture pitches work of your own (in your charter's spirit): 1-3
+  parts, each with a spec and a checkable rubric. The market appraises it next cycle; if approved it becomes
+  your own job, and the better the appraisal, the bigger the reward. Vague, padded or copied ventures earn nothing.
 
 CONTRACTS (announce -> bid -> award -> deliver -> review)
 - announce offers a part for a maximum price and an advance fraction. Others bid from their next turn.
@@ -148,6 +151,11 @@ def render(obs: Observation) -> str:
         f"Costs: upkeep {p.get('upkeep')} µcr per awake member per cycle · publish {p.get('publish_cost')} · "
         f"spawn fee {p.get('spawn_fee')} · learn from {p.get('learn_cost')} · audit {p.get('audit_cost')}",
     ]
+    if obs.ventures:
+        s += ["", "YOUR VENTURES"] + [
+            f"  {v.id} {v.title!r}: {v.status}" + (f", score {v.score}" if v.score is not None else "")
+            + (f", reward {v.reward} µcr as job {v.job_id}" if v.job_id else "") + (f" — {v.reason[:160]}" if v.reason else "")
+            for v in obs.ventures]
     if obs.goals:
         s += ["", "YOUR GOALS (tick steps off with update_goal)"]
         for g in obs.goals:

@@ -65,6 +65,12 @@ _TOOLS: list[dict[str, Any]] = [
      "goal's status to done or dropped. Free.", "input_schema": _obj(
         {"goal_id": S, "step": I, "done": B, "note": S, "status": {"type": "string", "enum": ["active", "done", "dropped"]}},
         ["goal_id"])},
+    {"name": "propose_venture", "description": "Propose work of your own: a product or service the market doesn't "
+     "list yet, in 1-3 parts, each a different capability with a spec and a rubric a grader can check. Costs a small "
+     "fee. Appraised at the start of next cycle; if approved it becomes your own job, with a reward the market sets "
+     "from the appraisal. Refused at once if it breaks a rule (standing, job limit, a copy of existing work, vague parts).",
+     "input_schema": _obj({"title": S, "pitch": S, "idea_id": S, "parts": {"type": "array", "items": _obj(
+         {"capability": S, "spec": S, "rubric": S}, ["capability", "spec", "rubric"])}}, ["title", "pitch", "parts"])},
     {"name": "learn", "description": "Buy a capability you lack. Expensive, and more so the more you have. Cheaper "
      "with a playbook_id for that capability, whose author earns a royalty. Uses one capacity.",
      "input_schema": _obj({"capability": S, "playbook_id": S}, ["capability"])},

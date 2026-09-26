@@ -130,6 +130,18 @@ class IdeaView:
 
 
 @dataclass(frozen=True)
+class VentureView:
+    id: str
+    title: str
+    status: str  # pending | approved | rejected
+    score: int | None
+    reward: int
+    reason: str
+    job_id: str | None
+    cycle: int
+
+
+@dataclass(frozen=True)
 class Observation:
     cycle: int
     name: str
@@ -159,6 +171,7 @@ class Observation:
     to_dispute: tuple[ContractView, ...] = ()  # my rejected deliveries I can still take to audit
     claim_limit: int = 2  # the most open jobs I may hold (see Actions.claim)
     refused_contracts: int = 0  # open contracts hidden because the commons would refuse my bid
+    ventures: tuple[VentureView, ...] = ()  # my recent venture proposals
     goals: tuple[GoalView, ...] = ()  # my active goals
     ideas: tuple[IdeaView, ...] = ()  # my most recent ideas
     params: dict[str, int | float] = field(default_factory=dict)
@@ -185,6 +198,7 @@ class ActionsAPI(Protocol):
     def propose_merge(self, target: str) -> Outcome: ...
     def accept_merge(self, proposal_id: str) -> Outcome: ...
     def learn(self, capability: str, playbook_id: str | None = None) -> Outcome: ...
+    def propose_venture(self, title: str, pitch: str, parts: list, idea_id: str | None = None) -> Outcome: ...
     def idea(self, title: str, detail: str = "") -> Outcome: ...
     def set_goal(self, title: str, steps: list[str], idea_id: str | None = None) -> Outcome: ...
     def update_goal(self, goal_id: str, step: int | None = None, done: bool | None = None, note: str = "",

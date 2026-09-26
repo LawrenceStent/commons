@@ -19,6 +19,7 @@ from protocol.reputation import Attest, Dispute
 from sim import population
 from sim.activity import logged
 from sim.goals import MAX_ACTIVE_GOALS, MAX_STEPS, Goal, Idea, Step
+from sim import ventures as ventures_mod
 from society.observation import Outcome
 from substrate.bus import RateLimited
 from substrate.ledger import InsufficientFunds, purse
@@ -307,6 +308,35 @@ class Actions:
         if text.strip():
             self.w.activity.add(self.w.cycle, self.me.name, self.actor, "decision", "said", text.strip())
 
+    # ── ventures ───────────────────────────────────────────────
+    def propose_venture(self, title: str, pitch: str, parts: list, idea_id: str | None = None) -> Outcome:
+        """Propose work of your own. Rules refuse at once; the appraisal comes at the start of next cycle."""
+        norm = []
+        for part in parts or []:
+            if isinstance(part, dict):
+                norm.append((str(part.get("capability", "")), str(part.get("spec", "")), str(part.get("rubric", ""))))
+            elif isinstance(part, (list, tuple)) and len(part) == 3:
+                norm.append(tuple(str(x) for x in part))
+        title, pitch = str(title)[:120], str(pitch)[:600]
+        if why := ventures_mod.check(self.w, self.me, title, pitch, norm):
+            return Outcome(False, f"the market won't consider it: {why}")
+        if err := self._use_capacity():
+            return err
+        fee = self.w.params.venture_fee
+        try:
+            self.w.ledger.transfer(purse(self.me.name), "treasury", fee, cycle=self.w.cycle, kind="venture", memo=title[:40])
+        except InsufficientFunds:
+            self.me.capacity += 1
+            return Outcome(False, f"proposing a venture costs {fee}; you can't afford it")
+        self.w._venture_seq += 1
+        v = ventures_mod.Venture(f"P{self.w._venture_seq}", self.me.name, title, pitch, norm, self.w.cycle, idea_id=idea_id)
+        self.w.ventures[v.id] = v
+        for i in self.w.plans[self.me.name].ideas:
+            if i.id == idea_id:
+                i.status = "adopted"
+        self.w.hub.emit("venture.proposed", self.w.cycle, id=v.id, proposer=self.me.name, title=title, parts=[c for c, _, _ in norm])
+        return Outcome(True, f"venture {v.id} proposed (fee {fee}); it will be appraised at the start of next cycle", v.id)
+
     # ── ideas and goals ────────────────────────────────────────
     def idea(self, title: str, detail: str = "") -> Outcome:
         plans = self.w.plans[self.me.name]
@@ -369,7 +399,7 @@ class Actions:
 # Every action an agent can take lands in the activity log (runtime hooks don't).
 for _name in ("claim", "do_part", "announce", "bid", "award", "deliver", "review", "attest", "dispute",
               "propose_spawn", "second_spawn", "retire", "fork", "propose_merge", "accept_merge", "learn",
-              "publish", "read_playbook", "note", "idea", "set_goal", "update_goal"):
+              "publish", "read_playbook", "note", "idea", "set_goal", "update_goal", "propose_venture"):
     setattr(Actions, _name, logged(_name, getattr(Actions, _name)))
 
 

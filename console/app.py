@@ -128,6 +128,9 @@ def snapshot(state: dict) -> dict:
                        "steps": [{"text": s.text, "done": s.done, "note": s.note} for s in g.steps]}
                       for n, p in w.plans.items() for g in sorted(p.goals.values(), key=lambda g: (g.status != "active", -g.updated))],
             "ideas": [{"community": n, **asdict(i)} for n, p in w.plans.items() for i in p.ideas][-40:][::-1],
+            "ventures": [{"id": v.id, "proposer": v.proposer, "title": v.title, "pitch": v.pitch, "status": v.status,
+                          "score": v.score, "reward": v.reward, "reason": v.reason, "job_id": v.job_id, "cycle": v.cycle,
+                          "parts": [c for c, _, _ in v.parts]} for v in list(w.ventures.values())[-30:]][::-1],
             "jobs": [{"id": j.id, "title": j.title, "prime": j.prime, "deadline": j.deadline, "reward": j.reward,
                       "awaiting_grade": j.id in w.awaiting_grade,
                       "parts": [{"capability": cap, "done": part.artifact is not None,

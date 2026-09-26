@@ -26,6 +26,7 @@ from runtime.fakes import GOOD_GRADE, competent
 from runtime.steward import LLMStrategy
 from sim.engine import Params, World, summary
 from sim.grader import HybridGrader, LLMGrader
+from sim.ventures import LLMAppraiser
 from society.community import Community
 from society.strategies import Cooperator, Defector
 from substrate.meter import KillSwitch
@@ -108,12 +109,13 @@ atexit.register(lambda: PID.read_text() == str(os.getpid()) and PID.unlink())
 # falls; deadlines lengthen (effectiveness, not speed); fees and scripted work costs scale with rewards.
 LIVE = dict(job_reward=400_000, purse_seed=400_000, treasury_seed=10_000_000, treasury_reserve=10_000_000,
             upkeep=2_000, basic_budget=1_500, floor_cap=4_000, work_cost=40_000, publish_cost=60_000,
-            spawn_fee=1_500_000, learn_cost=2_500_000, audit_cost=20_000,
+            spawn_fee=1_500_000, learn_cost=2_500_000, audit_cost=20_000, venture_fee=20_000,
             board_ttl=5, job_ttl=12, bid_window=4, deliver_ttl=5, review_ttl=3, dispute_window=4,
             parallel_turns=True)  # stewards think at the same time; actions still apply one at a time
 world = World(Params(seed=a.seed, ledger_path=ledger,
                      activity_path=ledger.replace(".sqlite", ".activity.jsonl"), **LIVE), population=population,
-              grader=HybridGrader(LLMGrader(backend, model=grader, max_tokens=grader_tokens)))
+              grader=HybridGrader(LLMGrader(backend, model=grader, max_tokens=grader_tokens)),
+              appraiser=LLMAppraiser(backend, model=grader, max_tokens=grader_tokens))
 world.meter.real_ceiling = round(a.real_ceiling * 1e6)
 
 # every LLM turn, in full, on disk (the world keeps only the last two per community in memory)
