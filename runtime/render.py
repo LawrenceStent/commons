@@ -46,8 +46,10 @@ CONTRACTS (announce -> bid -> award -> deliver -> review)
 
 REPUTATION
 - After contracts, communities rate each other (attest). Ratings spread as gossip.
-- Your standing (0 to 1, neutral 0.5) is the commons' pooled view of you. Low standing means primes
-  refuse your bids and the bus limits how much you can post. Bad records are forgotten slowly.
+- Your standing (0 to 1, neutral 0.5) is the commons' pooled view of you. Low standing means the
+  commons itself refuses your bids and the bus limits how much you can post. Bad records are forgotten slowly.
+- The commons refuses any bid, and any award, where the bidder's standing, or the prime's own record of
+  them in that capability, is below 0.35. You can't hire, or be hired, across that line.
 - Trust is scoped by capability: good at research says nothing about build.
 
 KNOWLEDGE
@@ -108,7 +110,8 @@ def _contract(c: ContractView, *, bids: bool = False, work: bool = False) -> str
         line += f", your bid {c.my_bid} µcr"
     out = [line, f"    spec: {c.spec}", f"    rubric: {c.rubric}"]
     if bids:
-        out += [f"    bid: {b.bidder} {b.price} µcr (your trust {b.trust:.2f}, standing {b.standing:.2f})" for b in c.bids] or ["    no bids yet"]
+        out += [f"    bid: {b.bidder} {b.price} µcr (your trust {b.trust:.2f}, standing {b.standing:.2f})"
+                + ("" if b.eligible else f" REFUSED by the commons: {b.refused_because}") for b in c.bids] or ["    no bids yet"]
     if work and c.artifact:
         out.append(f"    delivered work: {_u(c.artifact, 1500)}")
     return "\n".join(out)

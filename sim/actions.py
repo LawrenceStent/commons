@@ -129,6 +129,9 @@ class Actions:
             return Outcome(False, f"you lack the {c.capability} capability")
         if not 0 < price <= c.max_price:
             return Outcome(False, f"price must be between 1 and {c.max_price}")
+        ok, why = self.w.eligible(c.prime, self.me.name, c.capability)
+        if not ok:
+            return Outcome(False, f"the commons refuses your bid: {why}")
         if err := self._use_capacity():
             return err
         if not self._send(Bid(job_id=contract_id, price=price)):
@@ -145,6 +148,9 @@ class Actions:
             return Outcome(False, f"{bidder} did not bid on {contract_id}")
         if self.w.cycle <= c.announced:
             return Outcome(False, "wait a cycle: other communities haven't had a turn to bid")
+        ok, why = self.w.eligible(self.me.name, bidder, c.capability)  # standing can fall between bid and award
+        if not ok:
+            return Outcome(False, f"the commons refuses this award: {why}; choose another bidder")
         price = c.bids[bidder]
         advance = round(price * c.advance_frac)
         try:

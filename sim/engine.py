@@ -71,6 +71,10 @@ class Params:
     work_cost: int = 10_000  # what a scripted community spends producing one part
     grade_cost: int = 2_000  # notional treasury cost per graded part (StubGrader)
     grade_retries: int = 3  # cycles a complete job waits for an unavailable grader before it fails
+    # The world refuses bids (and awards) from anyone below this line, in the commons' pooled standing or in
+    # the prime's own record of them for that capability. A rule, not a judgement: in the 1.5 runs LLM primes
+    # kept hiring a known defector whose standing had fallen to 0.17.
+    bid_floor: float = 0.35
     pass_score: float = 0.5  # every part must grade at least this for the market to pay
     sub_share: float = 0.4  # of job reward a scripted prime offers for each part it lacks
     advance_frac: float = 0.5
@@ -226,6 +230,18 @@ class World:
     # ── helpers ────────────────────────────────────────────────
     def _standing(self, name: str) -> float:
         return self.rep.standing(name) if self.params.reputation else 0.5
+
+    def eligible(self, prime: str, bidder: str, capability: str) -> tuple[bool, str]:
+        """Whether the commons lets `bidder` work for `prime` in `capability`. Deterministic; with
+        reputation switched off (the control run) everyone is neutral and eligible."""
+        floor = self.params.bid_floor
+        standing = self._standing(bidder)
+        if standing < floor:
+            return False, f"{bidder}'s standing in the commons is {standing:.2f}, below the {floor:.2f} line"
+        trust = self._trust(prime, bidder, capability)
+        if trust < floor:
+            return False, f"{prime}'s record of {bidder} in {capability} is {trust:.2f}, below the {floor:.2f} line"
+        return True, ""
 
     def _trust(self, observer: str, subject: str, capability: str) -> float:
         return self.rep.score(observer, subject, capability) if self.params.reputation else 0.5
@@ -579,7 +595,8 @@ class World:
                 for cap, part in sorted(j.parts.items())), j.deadline)
 
         def contract_view(c: Contract, as_prime: bool) -> ContractView:
-            bids = tuple(BidView(b, price, round(self._trust(name, b, c.capability), 3), round(self._standing(b), 3))
+            bids = tuple(BidView(b, price, round(self._trust(name, b, c.capability), 3), round(self._standing(b), 3),
+                                 *self.eligible(name, b, c.capability))
                          for b, price in sorted(c.bids.items())) if as_prime else ()
             show = as_prime and c.status != OPEN or c.winner == name
             return ContractView(c.id, c.job_id, c.capability, c.prime, c.spec, c.rubric, c.max_price, c.advance_frac,

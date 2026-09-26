@@ -59,6 +59,8 @@ class BidView:
     price: int
     trust: float  # my first-hand + heard score for this bidder in this capability
     standing: float  # the commons' pooled view
+    eligible: bool = True  # False: the commons refuses this bidder (see World.eligible)
+    refused_because: str = ""
 
 
 @dataclass(frozen=True)

@@ -152,3 +152,35 @@ def test_a_community_cannot_hoard_jobs():
     assert act(w, "prime").claim(ids[0]) and act(w, "prime").claim(ids[1])
     out = act(w, "prime").claim(ids[2])
     assert not out and "finish one first" in out.message
+
+
+def test_the_world_refuses_bids_from_the_distrusted():
+    w = world()
+    job = claimed_job_needing_build(w)
+    for _ in range(6):
+        w.rep.attest("other", "sub", "build", 0.0)  # the commons has seen sub fail repeatedly
+    cid = act(w, "prime").announce(job.id, "build", 30_000, 0.5).id
+    out = act(w, "sub").bid(cid, 20_000)
+    assert not out and "standing" in out.message and "sub" not in w.contracts[cid].bids
+    assert act(w, "other").bid(cid, 25_000)
+
+
+def test_the_world_refuses_an_award_when_standing_fell_after_the_bid():
+    w = world()
+    job = claimed_job_needing_build(w)
+    cid = act(w, "prime").announce(job.id, "build", 30_000, 0.5).id
+    assert act(w, "sub").bid(cid, 20_000)
+    for _ in range(6):
+        w.rep.attest("prime", "sub", "build", 0.0)  # the prime's own record of sub in build collapses
+    w.step()
+    view = next(c for c in w.observe(w.communities["prime"]).my_announcements if c.id == cid)
+    assert not view.bids[0].eligible and "below the 0.35 line" in view.bids[0].refused_because
+    out = act(w, "prime").award(cid, "sub")
+    assert not out and "refuses this award" in out.message and w.contracts[cid].status == "open"
+
+
+def test_the_control_run_refuses_no_one():
+    w = world(reputation=False)
+    for _ in range(6):
+        w.rep.attest("other", "sub", "build", 0.0)
+    assert w.eligible("prime", "sub", "build") == (True, "")

@@ -347,8 +347,15 @@ Qwen 3.5 35B-A3B for steward, member and grader; the calibrated live economy; se
 - **Money:** studio spent 405,884 µcr on 58 model calls and lab 416,157 on 59 (about 7,000 per call). They
   earned 100,000 and 300,000 in contracts. Thinking still costs about 4× what they earn: studio ended broke,
   and lab with 86,803. Standing: studio 0.83, lab 0.71.
+- **Decided 26 Sep: the world refuses, not the model.** `World.eligible(prime, bidder, capability)` refuses any
+  bid, and any award, where the bidder's standing or the prime's own record of them in that capability is below
+  `bid_floor` (0.35). It runs at bid time and again at award time, since standing can fall between the two. The
+  steward sees each bid marked eligible or refused, with the reason, and still chooses freely among eligible
+  bidders. Control runs (reputation off) refuse no one. Scripted check, 3 seeds × 200 cycles: the defector
+  wins its first 2 contracts before there is evidence, then none; it earns 11,200 µcr vs 400,000–760,000
+  without reputation.
 - **Next:**
-  1. make trust visible where awards are decided
+  1. ~~make trust visible where awards are decided~~ (done: the world refuses)
   2. cut wasted calls (retrying refused claims and done parts)
   3. measure parallel turns
   4. revisit the price of thinking: calls are cheaper than before, but a steward still makes about 6 per turn

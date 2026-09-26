@@ -185,7 +185,10 @@ Grouped by area. Terms in **bold** are used throughout the code and this guide.
   - **standing** pools everyone's first-hand evidence about a subject: the commons' view.
 - **Decay.** Old evidence fades every cycle. Records that are *mostly bad* fade 4× more slowly, so a
   cheat isn't quickly forgiven. Mostly good records fade evenly.
-- **Refusal.** Scripted primes refuse bidders whose score or standing is below 0.35.
+- **Refusal.** The world itself refuses any bid or award where the bidder's standing, or the prime's own
+  record of them in that capability, is below 0.35 (`bid_floor`). It's a deterministic rule in
+  `World.eligible`, not a judgement left to the agents: in the 1.5 runs, LLM primes kept hiring a known
+  defector. With reputation off (the control run), no one is refused.
 - **Allowance.** How many initiating messages a community may post per cycle. It scales with
   standing, from 1 up to 18 (1.5× the base of 12). Obligations (award, deliver, settle, attest,
   dispute, gate) are never throttled, so "I was rate-limited" can't be an excuse not to deliver.
@@ -475,6 +478,10 @@ Each mechanism below exists because something broke without it. The "why" is the
     mostly bad forget slowly.
 - **Why standing (pooled) as well as trust (private):** refusal checks both, so a prime's own
   exploration can't let a known cheat back in (Phase 0 finding).
+- **Why the world refuses rather than the agent (26 Sep):** refusal is too important to leave to a model's
+  judgement. In the 1.5 Qwen run, LLM primes awarded 5 contracts to the defector while its standing fell
+  to 0.17. The line is now enforced at bid time and again at award time; agents still choose among
+  eligible bidders on price and trust.
 
 ### 7.2 Contract-net
 
@@ -972,6 +979,7 @@ adversarially, then mainnet with per-community daily caps.
 | 25 Sep | Learning price doubles per capability beyond the third | Claude | 1.2: cheap learning ended trade | 1.5, with LLM behaviour |
 | 25 Sep | Only mostly bad records forget slowly | Claude | 1.2: honest-but-quiet records drifted to distrusted | — |
 | 25 Sep | Fork inherits good evidence halved, bad in full | Claude | Exit without laundering | — |
+| 26 Sep | The world refuses bids and awards below the trust line (0.35), not the agents | **You** | LLM primes kept hiring a known defector; judgement is fallible, a function isn't | If the line proves too harsh for honest newcomers after a bad start |
 
 ---
 
