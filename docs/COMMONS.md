@@ -6,6 +6,9 @@ could go wrong. Last updated 25 Sep 2026, at the end of Phase 1.2 (branch `phase
 Companion documents:
 - `docs/plan.html` is the original design brief (24 Sep 2026). It sets out the thesis, and this guide
   doesn't replace it.
+- `docs/FRAMEWORK.md` (26 Sep 2026) plans the next step: extracting a domain-agnostic kernel so many
+  societies can run on it (earn online, trading, tech-for-good, OSINT), founded from a brief. It also
+  sets the principle of effectiveness and efficiency, not speed.
 - `docs/CHECKLIST.md` is the working build checklist. It records what is ticked and the findings
   from each step.
 - This guide is the long-form explanation that ties them together.
@@ -88,7 +91,8 @@ Commons replaces the planner with **a market and a reputation**:
 | 1.3 | LLM grader, model backends (structured output), calibration set | ✅ Done 25 Sep; local Hermes 8B scores 8/9 and resists injection; Anthropic calibration optional |
 | 1.4 | LLM agent runtime: steward tool loop, members, observation renderer, live runner | ✅ Done 25 Sep (tested with fake models) |
 | 1.5 | Live runs: local first, then Anthropic with a spend cap | ⏳ In progress: local smoke run done 25 Sep; small local models can't trade |
-| 2 | One real channel: digital products, a storefront, Stripe, the human gate | Planned |
+| K1–K8 | Framework: one kernel, many societies (packs, founding from a brief, tempo and efficiency) | Planned 26 Sep (`docs/FRAMEWORK.md`) |
+| 2 | One real channel: digital products, a storefront, Stripe, the human gate | Planned (becomes pack 0's live mode) |
 | 3 | More channels: content, services, affiliate | Planned |
 | 4 | On-chain settlement (Coinbase Agentic Wallets, x402) | Planned |
 

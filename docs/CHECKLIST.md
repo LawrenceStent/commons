@@ -337,6 +337,27 @@ Setup: 2 LLM communities (studio, lab), a scripted cooperator and the defector, 
 - [ ] Full run: two LLM seed communities + scripted defector; watch for spawn, fork, royalty
 - [ ] Decide: vote-weighting cap, grader panel, charter mutability evidence
 
+## Framework track: one kernel, many societies (planned 26 Sep; see `docs/FRAMEWORK.md`)
+
+**Principle added:** effectiveness and efficiency, not speed. No mechanism may reward being first.
+
+- [ ] K1 Kernel/pack split: move market, capabilities, job templates, grader choice, the preamble's market
+      section, seed population and param defaults into `packs/earn-online/`; `Pack`, `WorkSource`, `Evaluator`,
+      `Society`. Done when every existing test passes with pack 0 and no domain words remain in the kernel
+- [ ] K2 Tempo and efficiency: proposals-then-allocation with a claim bond (fixes hoarding); value scaled by
+      quality; deferred settlement with escrow; efficiency metrics (value per unit of thought) in observation
+      and dashboard; pack-set deadlines
+- [ ] K3 Context and founding: brief and charter/doctrine as cached system blocks; archive and `read_archive`;
+      `commons found` (blueprints drafted, you approve); per-society isolation and `runs/<society>/` layout
+- [ ] K4 Second pack: tech-for-good (grant economy, brief-based work, panel + human-sample evaluator, calibration)
+- [ ] K5 Member tools and the gate (web search/fetch, archive), with egress allowlist and batch approval
+- [ ] K6 Trading pack: paper broker, forward-only, deterministic risk-adjusted evaluator, doctrine per co-op
+- [ ] K7 OSINT pack: sourcing-first evaluator, separate verify co-op, forbidden-target policy enforced in tools
+- [ ] K8 Many societies: registry, CLI, dashboard picker, per-society and total spend caps, slow-cadence scheduler
+
+Recommended order: a minimal 1.5 (one capable model trading), then K1–K3, K4, K5, Phase 2 as pack 0's
+live mode, then K6, K7, K8.
+
 ## Phase 2 — One real channel (digital products)
 - [ ] Gate enforced via PreToolUse hook + egress allowlist; batch approval in console
 - [ ] Storefront + Stripe connector
