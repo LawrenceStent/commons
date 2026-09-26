@@ -332,3 +332,74 @@ def test_stewards_think_at_the_same_time_and_the_world_stays_readable():
     t.join(10)
     assert not t.is_alive()
     w.ledger.check()
+
+
+# ── world rules that remove wasted calls ───────────────────────
+def _jobs(w, n, caps=("research", "build")):
+    out = []
+    for i in range(n):
+        j = MarketJob(f"X{i}", "kit", 80_000, {c: Part(c, f"do {c}", "rubric") for c in caps}, posted=w.cycle, deadline=w.cycle + 3)
+        w.jobs[j.id] = j
+        out.append(j)
+    return out
+
+
+def test_the_world_spells_out_each_parts_next_step():
+    from sim.actions import Actions
+
+    w, _ = llm_world(lambda s, m, t: {"tool_calls": [("end_turn", {})]} if t else {"text": "x"})
+    w.step()
+    me = w.communities["llm-a"]
+    me.capabilities = frozenset({"research"})
+    job = _jobs(w, 1)[0]
+    act = Actions(w, me)
+    me.capacity = 5
+    assert act.claim(job.id)
+    text = render(w.observe(me))
+    assert "research [open; you can] → next: commission a draft, then do_part" in text
+    assert "build [open; you can't] → next: announce a contract for it" in text
+    act.announce(job.id, "build", 30_000, 0.5)
+    assert "waiting: announced; award a bidder once bids arrive" in render(w.observe(me))
+
+
+def test_the_board_is_hidden_at_the_claim_limit():
+    from sim.actions import Actions
+
+    w, _ = llm_world(lambda s, m, t: {"tool_calls": [("end_turn", {})]} if t else {"text": "x"})
+    w.step()
+    me = w.communities["llm-a"]
+    act = Actions(w, me)
+    me.capacity = 10
+    for j in _jobs(w, 3):
+        act.claim(j.id)
+    obs = w.observe(me)
+    assert len(obs.my_jobs) == obs.claim_limit
+    text = render(obs)
+    assert "hidden. You hold" in text and "THE BOARD (unclaimed jobs" not in text
+
+
+def test_contracts_the_commons_would_refuse_are_not_offered():
+    w, _ = llm_world()
+    w.step()
+    for _ in range(8):
+        w.rep.attest("coop-b", "llm-a", "build", 0.0)
+    w.run(3)
+    obs = w.observe(w.communities["llm-a"])
+    assert all(w.eligible(c.prime, "llm-a", c.capability)[0] for c in obs.open_contracts)
+
+
+def test_a_call_refused_once_is_not_sent_again_in_the_same_turn():
+    calls = []
+
+    def stubborn(system, messages, tools):
+        if tools is None:
+            return {"text": "work"}
+        rounds = sum(m["role"] == "assistant" for m in messages)
+        return {"tool_calls": [("bid", {"contract_id": "nope", "price": 5})]} if rounds < 3 else {"tool_calls": [("end_turn", {})]}
+
+    w, _ = llm_world(stubborn)
+    w.step()
+    bids = [e for e in w.activity.ring if e.community == "llm-a" and e.name == "bid"]
+    assert len(bids) == 1  # only the first reached the world
+    entries = w.transcripts["llm-a"][-1]["entries"]
+    assert sum("already refused this turn" in e.get("result", "") for e in entries) == 2

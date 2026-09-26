@@ -60,10 +60,16 @@ else:
     steward = member = grader = "fake"
 
 
-# Reasoning models think before answering, and thinking counts against max_tokens: give stewards room,
-# but a cap (thinking is charged). Members never reason (see runtime/steward.py), so they need little.
-room = {"max_tokens": 6000, "member_max_tokens": 2500} if a.reasoning else {}
-grader_tokens = 6000 if a.reasoning else 400
+# Local models cost nothing real, so they get as many tokens as they need (26 Sep): no per-turn budget,
+# and replies bounded only by the context window (load the model with 32k). Thinking is still charged to
+# the purse notionally. Real-money backends keep the caps. Rounds stay bounded either way: that limit stops
+# a steward looping, not thinking.
+if a.backend == "lmstudio":
+    room = {"max_tokens": 16_000, "member_max_tokens": 8_000, "turn_tokens": 10**9}
+    grader_tokens = 12_000
+else:
+    room = {"max_tokens": 6000, "member_max_tokens": 2500} if a.reasoning else {}
+    grader_tokens = 6000 if a.reasoning else 400
 
 
 def llm(name, caps, charter):

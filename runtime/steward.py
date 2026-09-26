@@ -17,6 +17,7 @@ turn ends there: thinking you can't afford doesn't happen.
 from __future__ import annotations
 
 import copy
+import json
 from dataclasses import dataclass
 from typing import Any
 
@@ -71,6 +72,7 @@ class LLMStrategy(Strategy):
         log: list[dict[str, Any]] = []
         spent = 0
         nudged = False
+        refused: dict[tuple[str, str], str] = {}
         self._commissions = 0
         for _ in range(self.max_rounds):
             try:
@@ -104,7 +106,14 @@ class LLMStrategy(Strategy):
                     done = True
                     results.append(ToolResult(call.id, "turn ended"))
                     continue
-                out = self.dispatch(obs, act, call)
+                key = (call.name, json.dumps({k: v for k, v in call.input.items() if k != "why"}, sort_keys=True))
+                if key in refused:
+                    # the same call, refused earlier this turn, would be refused again: don't ask the world twice
+                    out = Outcome(False, f"already refused this turn: {refused[key]}")
+                else:
+                    out = self.dispatch(obs, act, call)
+                    if not out.ok:
+                        refused[key] = out.message
                 results.append(ToolResult(call.id, out.message, not out.ok))
                 log.append({"kind": "tool", "name": call.name, "input": _short(call.input), "ok": out.ok,
                             "result": out.message[:300]})

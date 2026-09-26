@@ -610,7 +610,12 @@ class World:
             purse=self.ledger.balance(purse(name)), standing=round(self._standing(name), 3),
             board=tuple(job_view(j) for j in self.jobs.values() if j.status == "open"),
             my_jobs=tuple(job_view(j) for j in self.jobs.values() if j.status == "claimed" and j.prime == name),
-            open_contracts=tuple(contract_view(c, False) for c in cs if c.status == OPEN and c.prime != name),
+            # a world rule: contracts the commons would refuse my bid on aren't offered at all
+            open_contracts=tuple(contract_view(c, False) for c in cs
+                                 if c.status == OPEN and c.prime != name and self.eligible(c.prime, name, c.capability)[0]),
+            refused_contracts=sum(1 for c in cs if c.status == OPEN and c.prime != name and c.capability in me.capabilities
+                                  and not self.eligible(c.prime, name, c.capability)[0]),
+            claim_limit=max(2, me.thinking),
             my_announcements=tuple(contract_view(c, True) for c in cs if c.status == OPEN and c.prime == name),
             to_deliver=tuple(contract_view(c, False) for c in cs if c.status == AWARDED and c.winner == name),
             to_review=tuple(contract_view(c, True) for c in cs if c.status == DELIVERED and c.prime == name),

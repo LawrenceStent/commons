@@ -65,6 +65,8 @@ YOUR COMMUNITY CAN CHANGE SHAPE
 HOW TO TAKE YOUR TURN
 - Keep your obligations first: review deliveries, deliver work you won, then new business.
 - Tools return what happened, or why not. Read refusals and adjust; don't repeat a refused call unchanged.
+- Make all the calls you can in one reply. Every reply re-reads your whole situation, and that reading is
+  what your thinking costs.
 - Your capacity is limited each turn; work, bids, claims and deliveries use it.
 - Use note to leave yourself a short journal entry; your last notes are shown to you next turn.
 - Record ideas with idea. Turn the ones worth pursuing into goals with set_goal (a checklist of steps),
@@ -90,12 +92,30 @@ def _u(text: str | None, limit: int = 600) -> str:
     return f"<untrusted>{text}</untrusted>"
 
 
-def _job(j: JobView, mine: set[str]) -> str:
+NEXT = {  # the world's own reading of what a part needs next; the steward doesn't have to work it out
+    ("done", True): "done: nothing to do", ("done", False): "done: nothing to do",
+    ("open", True): "next: commission a draft, then do_part",
+    ("open", False): "next: announce a contract for it (you can't do it yourself)",
+    ("awarded", True): "waiting: a contractor is working on it", ("awarded", False): "waiting: a contractor is working on it",
+    ("delivered", True): "next: review the delivery", ("delivered", False): "next: review the delivery",
+}
+
+
+def _job(j: JobView, mine: set[str], *, prime: bool = False) -> str:
     parts = []
     for p in j.parts:
         state = "done" if p.done else (p.pending or "open")
         can = "you can" if p.capability in mine else "you can't"
-        parts.append(f"    - {p.capability} [{state}; {can}]\n      spec: {p.spec}\n      rubric: {p.rubric}")
+        if not prime:
+            parts.append(f"    - {p.capability} [{state}; {can}]\n      spec: {p.spec}\n      rubric: {p.rubric}")
+        elif state == "done":
+            parts.append(f"    - {p.capability} [done; {can}] → {NEXT[(state, True)]}")
+        else:
+            if p.pending == "open":
+                nxt = "waiting: announced; award a bidder once bids arrive"
+            else:
+                nxt = NEXT[(state, p.capability in mine)]
+            parts.append(f"    - {p.capability} [{state}; {can}] → {nxt}\n      spec: {p.spec}\n      rubric: {p.rubric}")
     return f"  {j.id} \"{j.title}\" reward {j.reward} µcr, deadline cycle {j.deadline}\n" + "\n".join(parts)
 
 
@@ -152,10 +172,21 @@ def render(obs: Observation) -> str:
     section("RECENT REJECTIONS you could dispute", [_contract(c, work=True) for c in obs.to_dispute])
     section("CLOSED CONTRACTS where you may rate the prime", [_contract(c) for c in obs.to_attest])
     section("YOUR ANNOUNCEMENTS (awaiting award)", [_contract(c, bids=True) for c in obs.my_announcements])
-    section("YOUR JOBS (you are prime)", [_job(j, mine) for j in obs.my_jobs])
-    section("THE BOARD (unclaimed jobs)", [_job(j, mine) for j in obs.board], "empty")
+    section("YOUR JOBS (you are prime; the next step for each part is worked out for you)",
+            [_job(j, mine, prime=True) for j in obs.my_jobs])
+    if len(obs.my_jobs) >= obs.claim_limit:
+        # a world rule: a job you may not claim isn't offered
+        s += ["", f"THE BOARD: {len(obs.board)} unclaimed jobs, hidden. You hold {len(obs.my_jobs)} open jobs, the most "
+                  f"you may; finish one before claiming another."]
+    else:
+        section(f"THE BOARD (unclaimed jobs; you may claim {obs.claim_limit - len(obs.my_jobs)} more)",
+                [_job(j, mine) for j in obs.board], "empty")
+    mine_open = [c for c in obs.open_contracts if c.capability in mine]
     section("OPEN CONTRACTS you could bid on",
-            [_contract(c) for c in obs.open_contracts if c.capability in mine], "none for your capabilities")
+            [_contract(c) + ("\n    you have bid: wait for the award before doing any work" if c.my_bid is not None else "")
+             for c in mine_open], "none for your capabilities")
+    if obs.refused_contracts:
+        s.append(f"  ({obs.refused_contracts} more hidden: the commons would refuse your bid on them)")
     section("SPAWN REQUESTS you could second",
             [f"  {r.id} from {r.proposer} (standing {r.standing:.2f}), role {_u(r.detail, 60)}, until cycle {r.deadline}"
              for r in obs.spawn_requests])

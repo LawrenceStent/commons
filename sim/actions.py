@@ -68,7 +68,7 @@ class Actions:
         # open jobs, or one per awake member if more are awake. Matches what scripted strategies allow
         # themselves, so the economy is unchanged. K2 replaces it with allocation and a claim bond.
         held = sum(j.prime == self.me.name and j.status == "claimed" for j in self.w.jobs.values())
-        limit = max(2, self.me.thinking)
+        limit = max(2, self.me.thinking)  # keep in step with Observation.claim_limit
         if held >= limit:
             return Outcome(False, f"you already hold {held} open jobs, the most you can (two, or one per awake "
                                   f"member); finish one first")

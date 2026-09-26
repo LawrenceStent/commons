@@ -157,6 +157,8 @@ class Observation:
     merge_offers: tuple[ProposalView, ...] = ()  # communities offering to join me
     my_proposals: tuple[ProposalView, ...] = ()
     to_dispute: tuple[ContractView, ...] = ()  # my rejected deliveries I can still take to audit
+    claim_limit: int = 2  # the most open jobs I may hold (see Actions.claim)
+    refused_contracts: int = 0  # open contracts hidden because the commons would refuse my bid
     goals: tuple[GoalView, ...] = ()  # my active goals
     ideas: tuple[IdeaView, ...] = ()  # my most recent ideas
     params: dict[str, int | float] = field(default_factory=dict)
