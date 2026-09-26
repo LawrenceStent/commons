@@ -305,8 +305,9 @@ Moving from one-shot contracts to contracts that span cycles broke the economy f
 
 ### 1.5 Live run (local model first: free; Anthropic later needs a key and a spend approval)
 - [x] Local smoke run on LM Studio (25 Sep): **no small local model can trade.** Details below
-- [ ] Try a capable local model (Qwen 3.5 35B-A3B is downloaded and tool-capable, but 22 GB: over the
-      guardrail, so it needs your OK), or go to the Anthropic smoke run
+- [x] Qwen 3.5 35B-A3B locally (26 Sep, your OK to exceed the guardrail): **it can trade.** Details below
+- [ ] Fix the two problems it exposed (members that only reason, and the price of thinking), then rerun
+- [ ] Anthropic smoke run (Sonnet 5 steward, Haiku members/grader, $1 cap): needs `ANTHROPIC_API_KEY`
 
 #### 1.5 local smoke findings (25 Sep)
 Setup: 2 LLM communities (studio, lab), a scripted cooperator and the defector, 10 cycles, Hermes 3 8B grading.
@@ -334,6 +335,27 @@ Setup: 2 LLM communities (studio, lab), a scripted cooperator and the defector, 
   `runs/*.turns.jsonl`. The in-memory transcript (last 2 turns) was too short to diagnose anything.
 - The runtime itself held up: every mistake came back as a readable refusal, nothing crashed, and the
   ledger balanced in every run.
+
+#### 1.5 Qwen 3.5 35B-A3B findings (26 Sep)
+Setup: Qwen as steward, member and grader; 16k context; loaded alone (20.6 GB; memory 19–21% free
+throughout, back to 80% after); stopped after cycle 4 once both LLM communities were broke.
+- **As a grader: 8/9, injection resisted,** with the most precise reasons so far (it counted the long tagline
+  at fifteen words). But 20–45 s per part, and it needs about 6,000 tokens of room because it reasons first.
+- **As a steward, it trades.** 24 tool calls, 16 succeeded: claim 4/4, announce 4/4, bid 4/4, award 2/2,
+  deliver 1/1. Studio awarded lab a research contract and lab delivered it: the first LLM-to-LLM trade.
+  One id mix-up (a contract id used as a job id). About 5 minutes per cycle.
+- **Members that only reason.** 4 of 8 commissions returned nothing: the member spent its whole allowance
+  (6,000 tokens) reasoning and never wrote the work, and the empty call was still charged. Options: turn
+  reasoning off for members (they write, they don't plan), cap the reasoning budget, or don't charge a
+  call that produced no content. Needs a test with the model loaded.
+- **Thinking is priced too high for a reasoning model.** Charged at Haiku's output rate, calls averaged
+  10,100 µcr and peaked at 30,300 µcr (a third of a job's reward). 26 calls consumed 262,000 of the two
+  communities' 300,000 µcr in three cycles. This is the reward-calibration question in its sharpest form:
+  either rewards rise several-fold, or local reasoning is priced lower, or reasoning is budgeted per call.
+- **Operations:** `uv run` wraps the process, so a signal to the wrapper doesn't reach the world (fixed:
+  `sim.live` writes its own pid to `runs/live.pid`). A monitor that uses `pgrep -f` matches its own command
+  line. Snapshots wait for the world's lock, so on slow runs the dashboard only updates between cycles
+  (improvement: take the lock per turn rather than per cycle).
 - [ ] Short smoke run (~10 cycles) with a hard ceiling; check cache hit rate and cost per turn
 - [ ] Calibrate market rewards against measured token cost
 - [ ] Full run: two LLM seed communities + scripted defector; watch for spawn, fork, royalty

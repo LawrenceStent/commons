@@ -41,6 +41,8 @@ ap.add_argument("--seed", type=int, default=0)
 ap.add_argument("--real-ceiling", type=float, default=1.00, help="real dollars per day before the kill-switch trips")
 ap.add_argument("--yes-spend", action="store_true", help="required for the anthropic backend")
 ap.add_argument("--serve", action="store_true", help="watch it on the dashboard")
+ap.add_argument("--reasoning", action="store_true",
+                help="the local model reasons before answering: give every call more room (thinking counts against max_tokens)")
 a = ap.parse_args()
 
 if a.backend == "anthropic":
@@ -58,8 +60,12 @@ else:
     steward = member = grader = "fake"
 
 
+room = {"max_tokens": 12000, "member_max_tokens": 6000} if a.reasoning else {}
+grader_tokens = 6000 if a.reasoning else 400
+
+
 def llm(name, caps, charter):
-    return Community(name, 3, caps, LLMStrategy(backend, steward_model=steward, member_model=member), charter=charter)
+    return Community(name, 3, caps, LLMStrategy(backend, steward_model=steward, member_model=member, **room), charter=charter)
 
 
 population = [
@@ -70,8 +76,14 @@ population = [
 ]
 Path("runs").mkdir(exist_ok=True)
 ledger = f"runs/live-{a.backend}-{time.strftime('%Y%m%d-%H%M%S')}.sqlite"
+# this process's own pid: `uv run` wraps us, and a signal sent to the wrapper doesn't reach the world
+import atexit
+import os
+
+Path("runs/live.pid").write_text(str(os.getpid()))
+atexit.register(lambda: Path("runs/live.pid").unlink(missing_ok=True))
 world = World(Params(seed=a.seed, ledger_path=ledger), population=population,
-              grader=HybridGrader(LLMGrader(backend, model=grader)))
+              grader=HybridGrader(LLMGrader(backend, model=grader, max_tokens=grader_tokens)))
 world.meter.real_ceiling = round(a.real_ceiling * 1e6)
 
 # every LLM turn, in full, on disk (the world keeps only the last two per community in memory)
@@ -96,6 +108,7 @@ if a.serve:
 
     print(f"dashboard: http://localhost:8000 · stops at cycle {a.cycles} · ledger {ledger}")
     uvicorn.run(create_app(world, cycles_per_second=5, stop_at=a.cycles), port=8000, log_level="warning")
+    # stop with: kill -INT $(cat runs/live.pid). An in-flight model call finishes first (up to its timeout).
 else:
     t0 = time.time()
     try:
