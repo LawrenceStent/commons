@@ -276,18 +276,57 @@ def test_members_are_asked_not_to_reason():
     assert member_calls and not any(member_calls) and all(steward_calls)
 
 
-def test_lmstudio_no_think_goes_on_the_last_message_only_when_asked():
+def test_lmstudio_turns_reasoning_off_only_when_asked():
     b = LMStudioBackend()
     b._tool_capable["m"] = True
     sent = []
     b._post = lambda body: (sent.append(body) or {"choices": [{"finish_reason": "stop", "message": {"content": "ok"}}]}, 1)
     b.chat(model="m", system=["s"], messages=[{"role": "user", "text": "write it"}], reasoning=False)
     b.chat(model="m", system=["s"], messages=[{"role": "user", "text": "plan it"}])
-    assert sent[0]["messages"][-1]["content"].endswith("/no_think")
-    assert "/no_think" not in sent[1]["messages"][-1]["content"]
+    assert sent[0]["reasoning_effort"] == "none" and "reasoning_effort" not in sent[1]
 
 
 def test_a_reply_that_is_all_reasoning_reads_as_out_of_tokens():
     b = LMStudioBackend()
     b._post = lambda body: ({"choices": [{"finish_reason": "stop", "message": {"content": "", "reasoning_content": "hmm…"}}]}, 1)
     assert b.chat(model="m", system=["s"], messages=[{"role": "user", "text": "x"}]).stop == "max_tokens"
+
+
+# ── parallel turns ─────────────────────────────────────────────
+def test_parallel_turns_keep_the_books_straight():
+    w, _ = llm_world(parallel_turns=True)
+    w.communities["coop-a"].strategy  # scripted peers run in threads too
+    w.run(12)
+    w.ledger.check()
+    assert w.jobs_done > 0
+
+
+def test_stewards_think_at_the_same_time_and_the_world_stays_readable():
+    import threading
+    import time
+
+    from console.app import snapshot
+
+    inside = threading.Semaphore(0)
+    release = threading.Event()
+
+    def slow(system, messages, tools):
+        if tools is not None and len(messages) == 1:
+            inside.release()
+            release.wait(5)  # hold every steward in its first model call
+        return competent(system, messages, tools)
+
+    w, _ = llm_world(slow, parallel_turns=True)
+    llm_b = Community("llm-b", 3, {"research", "write"}, LLMStrategy(FakeBackend(converse=slow)))
+    w._add_community(llm_b)
+    w.ledger.transfer("genesis", purse("llm-b"), 150_000, cycle=0, kind="genesis")
+    t = threading.Thread(target=w.step)
+    t.start()
+    assert inside.acquire(timeout=5) and inside.acquire(timeout=5), "both stewards should be thinking at once"
+    t0 = time.time()
+    snap = snapshot({"world": w, "running": True, "speed": 1, "reason": None, "rss_limit": 2**31})
+    assert time.time() - t0 < 2 and snap["run"]["cycle"] == 1  # readable mid-cycle
+    release.set()
+    t.join(10)
+    assert not t.is_alive()
+    w.ledger.check()

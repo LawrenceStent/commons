@@ -359,3 +359,17 @@ for _name in ("claim", "do_part", "announce", "bid", "award", "deliver", "review
               "propose_spawn", "second_spawn", "retire", "fork", "propose_merge", "accept_merge", "learn",
               "publish", "read_playbook", "note", "idea", "set_goal", "update_goal"):
     setattr(Actions, _name, logged(_name, getattr(Actions, _name)))
+
+
+def _locked(fn):
+    """Every call into the world takes its lock, so parallel turns change state one action at a time."""
+    def wrapper(self, *a, **kw):
+        with self.w.lock:
+            return fn(self, *a, **kw)
+
+    wrapper.__name__, wrapper.__doc__ = fn.__name__, fn.__doc__
+    return wrapper
+
+
+for _name in [n for n, v in vars(Actions).items() if callable(v) and not n.startswith("_")]:
+    setattr(Actions, _name, _locked(getattr(Actions, _name)))

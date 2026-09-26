@@ -166,28 +166,28 @@ def community_detail(w: World, name: str, n: int = 60) -> list[dict]:
 
 def create_app(world: World | None = None, cycles_per_second: float = 4.0, autostart: bool = True,
                rss_limit: int = 2 * 1024**3, host_every: float = 2.0, stop_at: int | None = None) -> FastAPI:
-    """`stop_at` pauses the run at that cycle. The world steps in a worker thread under a lock, so
-    slow (LLM) cycles never freeze the page, and a snapshot never sees a half-finished cycle."""
+    """`stop_at` pauses the run at that cycle. The world steps in a worker thread and snapshots take the
+    world's lock, so slow (LLM) cycles never freeze the page and a snapshot never sees a half-made change."""
     state = {"world": world or World(Params(seed=0)), "running": autostart, "speed": cycles_per_second,
              "reason": None, "rss_limit": rss_limit, "stop_at": stop_at}
-    lock = threading.Lock()
 
     def pause(reason: str | None) -> None:
         state["running"], state["reason"] = False, reason
 
     def step() -> None:
-        with lock:
-            try:
-                state["world"].step()
-            except KillSwitch as e:
-                pause(f"kill-switch: {e}")
-            except Exception as e:  # a crash pauses the run and says why, rather than killing the driver
-                pause(f"the world raised {type(e).__name__}: {e}")
+        # the world takes its own lock: for the whole cycle normally, per action with parallel turns,
+        # so with parallel turns the page updates while communities are still thinking
+        try:
+            state["world"].step()
+        except KillSwitch as e:
+            pause(f"kill-switch: {e}")
+        except Exception as e:  # a crash pauses the run and says why, rather than killing the driver
+            pause(f"the world raised {type(e).__name__}: {e}")
         if state["stop_at"] and state["world"].cycle >= state["stop_at"]:
             pause(f"reached the cycle limit ({state['stop_at']})")
 
     def locked(fn, *a):
-        with lock:
+        with state["world"].lock:
             return fn(*a)
 
     async def snap() -> dict:

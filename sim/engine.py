@@ -24,6 +24,8 @@ Money in this world is created money (SIM credits); see substrate/ledger.py.
 from __future__ import annotations
 
 import random
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from collections import Counter, defaultdict, deque
 from dataclasses import dataclass, field
 
@@ -87,6 +89,12 @@ class Params:
     ledger_path: str = ":memory:"  # a file under runs/ keeps long runs out of RAM
     journal_keep: int = 20
     events_keep: int = 50
+    # Let communities think at the same time: model calls run in parallel, but every action takes the
+    # world's lock, so state changes one action at a time. Off by default: scripted runs stay
+    # deterministic. The catch until K2: when two communities want the same job, whoever's model
+    # answers first gets it, which is a small reward for speed.
+    parallel_turns: bool = False
+    parallel_workers: int = 4
     activity_keep: int = 2000  # entries of the activity log kept in memory
     activity_path: str | None = None  # also append every entry to this JSONL file
     retain: int = 20  # cycles a closed job or contract stays visible before it's dropped
@@ -169,6 +177,7 @@ class World:
                  hub: Hub | None = None, grader: Grader | None = None):
         self.params = p = params or Params()
         self.hub = hub or Hub()
+        self.lock = threading.RLock()  # held for every state change; see parallel_turns
         self.rng = random.Random(p.seed)
         self.cycle = 0
         self.communities = {c.name: c for c in (population or default_population())}
@@ -246,25 +255,34 @@ class World:
 
     # ── the cycle ──────────────────────────────────────────────
     def step(self) -> None:
-        self.cycle += 1
-        self.rep.cycle = self.cycle
-        self.bus.begin_cycle(self.cycle)
-        self._stats = {n: Counter() for n in self.communities}
-        self._floor()
-        self._upkeep()
-        self._deadlines()
-        expire_proposals(self)
-        self._post_jobs()
-        order = self._active()
-        self.rng.shuffle(order)  # turn order must not decide who wins
-        for c in order:
-            self._turn(c)
-        if self.cycle % self.params.gossip_every == 0:
-            self._gossip()
-        self.rep.tick()
-        self.bus.compact()
-        self._prune()
-        self._record()
+        with self.lock:
+            self.cycle += 1
+            self.rep.cycle = self.cycle
+            self.bus.begin_cycle(self.cycle)
+            self._stats = {n: Counter() for n in self.communities}
+            self._floor()
+            self._upkeep()
+            self._deadlines()
+            expire_proposals(self)
+            self._post_jobs()
+            order = self._active()
+            self.rng.shuffle(order)  # turn order must not decide who wins
+        if self.params.parallel_turns and len(order) > 1:
+            # the lock is released here: each action takes it, model calls don't
+            with ThreadPoolExecutor(max_workers=self.params.parallel_workers) as pool:
+                for f in [pool.submit(self._turn, c) for c in order]:
+                    f.result()  # re-raise anything a turn raised (a kill-switch, say)
+        else:
+            with self.lock:
+                for c in order:
+                    self._turn(c)
+        with self.lock:
+            if self.cycle % self.params.gossip_every == 0:
+                self._gossip()
+            self.rep.tick()
+            self.bus.compact()
+            self._prune()
+            self._record()
 
     def run(self, cycles: int) -> World:
         for _ in range(cycles):
@@ -310,8 +328,9 @@ class World:
             self.hub.emit("market.job", self.cycle, id=job.id, stage="posted", caps=sorted(job.parts), reward=job.reward)
 
     def _turn(self, c: Community) -> None:
-        obs = self.observe(c)
-        self.inbox[c.name].clear()
+        with self.lock:
+            obs = self.observe(c)
+            self.inbox[c.name].clear()
         c.strategy.turn(obs, Actions(self, c))
 
     # ── deadlines ──────────────────────────────────────────────
