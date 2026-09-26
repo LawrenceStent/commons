@@ -59,6 +59,11 @@ class Actions:
         job = self.w.jobs.get(job_id)
         if job is None or job.status != "open":
             return Outcome(False, f"job {job_id} is not on the board")
+        # Stopgap against hoarding (an LLM claimed 5 jobs it couldn't fund in one turn): at most one
+        # open job per awake member. K2 replaces this with proposals, allocation and a claim bond.
+        held = sum(j.prime == self.me.name and j.status == "claimed" for j in self.w.jobs.values())
+        if held >= max(1, self.me.thinking):
+            return Outcome(False, f"you already hold {held} open job(s), one per awake member; finish one first")
         if err := self._use_capacity():
             return err
         job.prime, job.status = self.me.name, "claimed"

@@ -139,3 +139,16 @@ def test_closed_jobs_and_contracts_are_dropped_so_memory_stays_flat():
     w = World(Params(seed=0, verify=False)).run(400)
     assert len(w.jobs) < 80 and len(w.contracts) < 80
     assert all(len(q) <= w.params.events_keep for q in w.inbox.values())
+
+
+def test_a_community_cannot_hoard_jobs():
+    w = world()  # prime has 2 members, both awake
+    ids = []
+    for n in range(3):
+        job = MarketJob(f"H{n}", "kit", 80_000, {"research": Part("research", "r", "r")}, posted=w.cycle, deadline=w.cycle + 3)
+        w.jobs[job.id] = job
+        ids.append(job.id)
+    act(w, "prime").me.capacity = 10
+    assert act(w, "prime").claim(ids[0]) and act(w, "prime").claim(ids[1])
+    out = act(w, "prime").claim(ids[2])
+    assert not out and "one per awake member" in out.message
