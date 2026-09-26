@@ -135,7 +135,7 @@ economy:
   grant_per_cycle: 40000            # µcr into the treasury each cycle (from owner capital when live)
   treasury_reserve: 2000000
 work_source:
-  kind: briefs                      # templates | briefs | feed | self-directed
+  kind: briefs                      # templates | briefs | feed | self-directed (ventures, built 26 Sep)
   path: jobs.yaml
 evaluator:
   kind: panel                       # llm | panel | deterministic | human | composite

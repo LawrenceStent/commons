@@ -159,6 +159,9 @@ Grouped by area. Terms in **bold** are used throughout the code and this guide.
 - **Market job.** Demand from outside, posted on the **board**. Each job has 2 **parts**, one per
   capability, and a **rubric** per part. For example, "Launch kit for a bike repair kit" needs a
   `research` part and a `write` part.
+- **Venture.** Work a co-op thinks up itself: it proposes a product or service in parts, deterministic
+  rules refuse bad proposals at once, an appraiser scores the rest, a fixed formula sets the reward, and
+  the market approves the best-scored within a budget. An approved venture becomes the proposer's own job.
 - **Claim.** Taking a job off the board. The claimant becomes the job's **prime** and must submit all
   parts by the job's deadline.
 - **Contract-net.** The protocol for buying work from peers:

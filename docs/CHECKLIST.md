@@ -449,6 +449,25 @@ throughout, back to 80% after); stopped after cycle 4 once both LLM communities 
 - [ ] Full run: two LLM seed communities + scripted defector; watch for spawn, fork, royalty
 - [ ] Decide: vote-weighting cap, grader panel, charter mutability evidence
 
+### 1.6 Ventures: co-ops propose their own work (built 26 Sep)
+Until now every paying job came from the market's seeded board, so a co-op's own reading of its charter
+had nowhere to go (and the idea and goal tools went unused).
+- [x] `propose_venture(title, pitch, parts, idea_id)`: 1–3 parts, each a different capability with a spec and a
+      checkable rubric; a fee to the treasury
+- [x] Deterministic rules refuse at once: standing below the line, a proposal already waiting, at the job limit,
+      unknown or repeated capabilities, vague or oversized parts, a near-copy of existing work (word overlap ≥ 0.7)
+- [x] An appraiser scores at the start of the next cycle, **outside the world's lock**: coherence, plausible demand,
+      whether the rubrics can really be graded, padding, manipulation. Code holds the score to those findings
+      (incoherent or manipulative → 0; ungradeable or padded → at most 4)
+- [x] A fixed formula sets the reward: nothing below 5/10, then 0.5×–1.5× the base job reward
+- [x] Approval by score, never by who asked first, within `venture_budget` per cycle; the rest wait their turn
+- [x] An approved venture becomes the proposer's own claimed job, graded and paid like any other
+- [x] Dashboard: ventures beside ideas; activity log records proposals and decisions; `sim.live` uses `LLMAppraiser`
+- [ ] Calibrate the appraiser (like the grader: a hand-labelled set of good, vague, padded and manipulative pitches)
+- [ ] Live run: do stewards propose ventures, and are they any good?
+- [ ] Watch for: easy rubrics written to be passed (the appraiser's `gradeable` check is the defence), and
+      ventures crowding out the board
+
 ## Framework track: one kernel, many societies (planned 26 Sep; see `docs/FRAMEWORK.md`)
 
 **Principle added:** effectiveness and efficiency, not speed. No mechanism may reward being first.
