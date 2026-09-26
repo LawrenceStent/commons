@@ -2,45 +2,55 @@
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Commons Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
 <style>
+/* Two themes. "neon" (default): a HUD for a city of agents. Neon status colours were checked with the
+   dataviz palette validator on the dark surface: colour-blind separation, normal-vision separation and
+   contrast pass; only the categorical lightness band fails, which is expected for neon and acceptable
+   because every status colour also carries a label or icon. "$" is gold and means real money only.
+   "plain": the original calm theme, light or dark with the system. */
 :root {
+  color-scheme: dark;
+  --bg:#07070d; --card:#0d0f1a; --fg:#d8e1ff; --muted:#7f8bb3; --rule:#1c2035;
+  --accent:#00e5ff; --good:#2ee88f; --warn:#ff9f1c; --bad:#ff2a6d; --violet:#a97bff; --gold:#ffc857;
+  --series:#00e5ff; --seq-0:#10142a; --seq-1:#00e5ff;
+  --head:"Orbitron", ui-sans-serif, sans-serif; --mono:"JetBrains Mono", ui-monospace, Menlo, monospace;
+  --glow:0 0 6px color-mix(in oklab, var(--accent) 70%, transparent), 0 0 18px color-mix(in oklab, var(--accent) 35%, transparent);
+}
+:root[data-theme="plain"] {
   color-scheme: light;
   --bg:#EEF1F0; --card:#FCFCFB; --fg:#16202B; --muted:#5D6B70; --rule:#D2DAD8;
-  --accent:#1B6B5E; --good:#1B6B5E; --warn:#9A6A00; --bad:#B03A2E;
+  --accent:#1B6B5E; --good:#1B6B5E; --warn:#9A6A00; --bad:#B03A2E; --violet:#5b4bb7; --gold:#8a6d00;
   --series:#2a78d6; --seq-0:#E8F0FB; --seq-1:#2a78d6;
+  --head:ui-monospace, Menlo, monospace; --mono:ui-monospace, Menlo, monospace; --glow:none;
 }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  :root[data-theme="plain"] {
     color-scheme: dark;
     --bg:#0F1518; --card:#151D20; --fg:#DDE5E3; --muted:#93A2A4; --rule:#26312F;
-    --accent:#4CB8A0; --good:#4CB8A0; --warn:#D9A43A; --bad:#E66767;
+    --accent:#4CB8A0; --good:#4CB8A0; --warn:#D9A43A; --bad:#E66767; --violet:#9d8cf0; --gold:#e0b64a;
     --series:#3987e5; --seq-0:#1A2530; --seq-1:#3987e5;
   }
-}
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --bg:#0F1518; --card:#151D20; --fg:#DDE5E3; --muted:#93A2A4; --rule:#26312F;
-  --accent:#4CB8A0; --good:#4CB8A0; --warn:#D9A43A; --bad:#E66767;
-  --series:#3987e5; --seq-0:#1A2530; --seq-1:#3987e5;
 }
 * { box-sizing:border-box; }
 body { background:var(--bg); color:var(--fg); font:13px/1.5 ui-sans-serif,-apple-system,sans-serif; margin:0; padding:16px; }
 main { max-width:1400px; margin:0 auto; display:grid; gap:14px; grid-template-columns:repeat(12, minmax(0,1fr)); }
 .w12 { grid-column:span 12; } .w8 { grid-column:span 8; } .w6 { grid-column:span 6; } .w4 { grid-column:span 4; }
 @media (max-width:1000px) { .w8, .w6, .w4 { grid-column:span 12; } }
-h1 { font:600 18px ui-monospace,Menlo,monospace; margin:0; }
-h2 { font:600 11px ui-monospace,Menlo,monospace; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin:0 0 8px; display:flex; justify-content:space-between; gap:8px; }
+h1 { font:700 18px var(--head); letter-spacing:.14em; text-transform:uppercase; margin:0; }
+h2 { font:500 11px var(--head); letter-spacing:.16em; text-transform:uppercase; color:var(--muted); margin:0 0 8px; display:flex; justify-content:space-between; gap:8px; }
 h2 small { letter-spacing:0; text-transform:none; font-weight:400; }
 section { background:var(--card); border:1px solid var(--rule); padding:12px 14px; overflow-x:auto; min-width:0; }
 table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }
 th, td { text-align:left; padding:4px 8px; border-bottom:1px solid var(--rule); white-space:nowrap; vertical-align:middle; }
 th { font-size:11px; color:var(--muted); font-weight:600; }
-.num { text-align:right; font-family:ui-monospace,Menlo,monospace; }
-.mono { font-family:ui-monospace,Menlo,monospace; font-size:12px; }
+.num { text-align:right; font-family:var(--mono); }
+.mono { font-family:var(--mono); font-size:12px; }
 .muted { color:var(--muted); } .good { color:var(--good); } .warn { color:var(--warn); } .bad { color:var(--bad); }
 .bar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
 .stats { display:flex; gap:22px; flex-wrap:wrap; }
-.stat b { display:block; font:600 18px ui-monospace,Menlo,monospace; }
+.stat b { display:block; font:600 18px var(--mono); }
 .stat span { font-size:11px; color:var(--muted); }
 button, select { font:inherit; padding:3px 10px; border:1px solid var(--rule); background:var(--card); color:var(--fg); cursor:pointer; }
 button.danger { color:var(--bad); border-color:var(--bad); }
@@ -53,7 +63,7 @@ a.c { color:inherit; text-decoration:underline dotted; cursor:pointer; }
 .spark polyline { fill:none; stroke:var(--series); stroke-width:2; stroke-linejoin:round; stroke-linecap:round; }
 .spark .dot { fill:var(--series); stroke:var(--card); stroke-width:2; }
 .spark .hit { fill:transparent; }
-#tip { position:fixed; pointer-events:none; background:var(--fg); color:var(--bg); padding:2px 7px; font:12px ui-monospace,Menlo,monospace; display:none; z-index:9; }
+#tip { position:fixed; pointer-events:none; background:var(--fg); color:var(--bg); padding:2px 7px; font:12px var(--mono); display:none; z-index:9; }
 .hbar { display:grid; grid-template-columns:110px 1fr 90px; gap:8px; align-items:center; margin:3px 0; }
 .hbar i { display:block; height:10px; background:var(--series); border-radius:0 4px 4px 0; min-width:2px; }
 .meter { height:10px; background:var(--rule); position:relative; }
@@ -65,13 +75,54 @@ a.c { color:inherit; text-decoration:underline dotted; cursor:pointer; }
 .prog { display:inline-block; width:90px; height:8px; background:var(--rule); vertical-align:middle; margin:0 6px; }
 .prog i { display:block; height:100%; background:var(--series); }
 .act-decision { color:var(--series); } .act-change { color:var(--muted); } .act-bad { color:var(--bad); }
-td.cell { text-align:center; font-family:ui-monospace,Menlo,monospace; font-size:12px; }
-pre { margin:0; font:12px/1.55 ui-monospace,Menlo,monospace; white-space:pre-wrap; }
+td.cell { text-align:center; font-family:var(--mono); font-size:12px; }
+pre { margin:0; font:12px/1.55 var(--mono); white-space:pre-wrap; }
 .empty { color:var(--muted); font-style:italic; }
 #drill { position:fixed; top:0; right:0; bottom:0; width:min(560px,100%); background:var(--card); border-left:1px solid var(--rule); padding:16px; overflow:auto; transform:translateX(100%); transition:transform .15s; z-index:5; }
 #drill.on { transform:none; }
+
+/* ── neon only ─────────────────────────────────────────────── */
+:root:not([data-theme="plain"]) h1 { color:var(--accent); text-shadow:var(--glow); }
+:root:not([data-theme="plain"]) h2 { color:var(--accent); opacity:.85; }
+:root:not([data-theme="plain"]) section {
+  border-color:var(--rule); position:relative;
+  clip-path:polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+  background:linear-gradient(180deg, color-mix(in oklab, var(--accent) 4%, var(--card)), var(--card) 40%);
+  box-shadow:inset 0 1px 0 color-mix(in oklab, var(--accent) 35%, transparent);
+}
+:root:not([data-theme="plain"]) section:hover { box-shadow:inset 0 1px 0 var(--accent), inset 0 0 24px color-mix(in oklab, var(--accent) 8%, transparent); }
+:root:not([data-theme="plain"]) .spark polyline { filter:drop-shadow(0 0 3px var(--series)); }
+:root:not([data-theme="plain"]) .hbar i, :root:not([data-theme="plain"]) .prog i { box-shadow:0 0 8px var(--series); }
+:root:not([data-theme="plain"]) button { border-color:color-mix(in oklab, var(--accent) 45%, var(--rule)); background:transparent; font-family:var(--head); font-size:11px; letter-spacing:.1em; text-transform:uppercase; }
+:root:not([data-theme="plain"]) button:hover { color:var(--accent); box-shadow:var(--glow); }
+:root:not([data-theme="plain"]) button.danger { border-color:var(--bad); color:var(--bad); }
+:root:not([data-theme="plain"]) button.danger:hover { box-shadow:0 0 10px var(--bad); }
+:root:not([data-theme="plain"]) #banner.on { border-color:var(--bad); color:var(--bad); text-shadow:0 0 8px var(--bad); animation:glitch .6s steps(2) 1; }
+:root:not([data-theme="plain"]) .money { border-left-color:var(--gold); }
+:root:not([data-theme="plain"]) .money .stat b { color:var(--gold); text-shadow:0 0 8px color-mix(in oklab, var(--gold) 60%, transparent); }
+:root:not([data-theme="plain"]) #state.running { color:var(--good); text-shadow:0 0 6px var(--good); }
+:root:not([data-theme="plain"]) body.scan::after {
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:20; opacity:.05;
+  background:repeating-linear-gradient(0deg, #fff 0 1px, transparent 1px 3px);
+}
+@keyframes glitch {
+  0% { text-shadow:2px 0 var(--accent), -2px 0 var(--bad); transform:translateX(1px); }
+  50% { text-shadow:-2px 0 var(--accent), 2px 0 var(--bad); transform:translateX(-1px); }
+  100% { text-shadow:0 0 8px var(--bad); transform:none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-theme="plain"]) #banner.on { animation:none; }
+  body.scan::after { display:none; }
+}
+.theme-toggle { font-size:11px; }
 </style></head>
-<body>
+<body class="scan">
+<script>
+  // theme preferences are per viewer and optional: storage can be missing or blocked
+  const pref = (k, v) => { try { return v === undefined ? localStorage.getItem(k) : localStorage.setItem(k, v); } catch { return null; } };
+  if (pref("theme") === "plain") document.documentElement.dataset.theme = "plain";
+  if (pref("scan") === "off") document.body.classList.remove("scan");
+</script>
 <main>
   <section class="w12">
     <div class="bar">
@@ -86,6 +137,8 @@ pre { margin:0; font:12px/1.55 ui-monospace,Menlo,monospace; white-space:pre-wra
       </select> cycles/s</label>
       <button data-a="kill" class="danger">kill-switch</button>
       <button data-a="reset-kill">reset kill</button>
+      <button id="theme" class="theme-toggle" title="switch between the neon and plain themes">plain</button>
+      <button id="scan" class="theme-toggle" title="scanline overlay (neon theme only)">scanlines</button>
     </div>
     <div id="banner" style="margin-top:10px"></div>
     <div class="money">
@@ -191,7 +244,8 @@ function render(s) {
     ? "This society runs on SIM credits (cr): created money that can never become dollars. Only the figures in this box are real."
     : "This society runs on real dollars: every purse is a share of money that came from you or from customers.";
   $("treasury-label").textContent = `treasury (${CUR === "SIM" ? "credits" : "USD"})`;
-  $("state").textContent = `${r.running ? "running" : "paused"} · ${r.speed} cycles/s · seed ${r.seed}${r.reputation ? "" : " · reputation OFF (control run)"}`;
+  $("state").className = "mono " + (r.running ? "running" : "muted");
+  $("state").textContent = `${r.running ? "● running" : "‖ paused"} · ${r.speed} cycles/s · seed ${r.seed}${r.reputation ? "" : " · reputation OFF (control run)"}`;
   $("banner").className = r.pause_reason || r.halted ? "on" : "";
   $("banner").textContent = r.halted ? `Kill-switch is on. ${r.pause_reason || ""}` : (r.pause_reason || "");
   $("s-cycle").textContent = r.cycle.toLocaleString();
@@ -363,6 +417,14 @@ document.addEventListener("click", async e => {
   if (c) drill(c.dataset.c);
 });
 $("act-kind").onchange = $("act-who").onchange = () => last && render(last);
+const syncTheme = () => { $("theme").textContent = document.documentElement.dataset.theme === "plain" ? "neon" : "plain"; };
+$("theme").onclick = () => {
+  const plain = document.documentElement.dataset.theme !== "plain";
+  if (plain) document.documentElement.dataset.theme = "plain"; else delete document.documentElement.dataset.theme;
+  pref("theme", plain ? "plain" : "neon"); syncTheme();
+};
+$("scan").onclick = () => { pref("scan", document.body.classList.toggle("scan") ? "on" : "off"); };
+syncTheme();
 $("speed").onchange = e => fetch("/control/speed?value=" + e.target.value, {method: "POST"});
 
 function connect() {

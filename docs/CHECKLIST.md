@@ -306,7 +306,26 @@ Moving from one-shot contracts to contracts that span cycles broke the economy f
 ### 1.5 Live run (local model first: free; Anthropic later needs a key and a spend approval)
 - [x] Local smoke run on LM Studio (25 Sep): **no small local model can trade.** Details below
 - [x] Qwen 3.5 35B-A3B locally (26 Sep, your OK to exceed the guardrail): **it can trade.** Details below
-- [ ] Fix the two problems it exposed (members that only reason, and the price of thinking), then rerun
+- [x] Fix the two problems it exposed (26 Sep):
+  - **Members never reason.** Tested on Qwen: `/no_think`, `chat_template_kwargs` and `reasoning_effort: low`
+    all still reason until the allowance runs out; only `reasoning_effort: "none"` works (a 60-word description
+    in 2.1 s and 75 tokens, against 2,500 tokens and nothing written). Anthropic members run with thinking off.
+    An all-reasoning reply now reads as "out of tokens", and the refusal says the call was still charged.
+  - **A calibrated live economy** for LLM runs (`sim/live.py`): reward 400k, purse 400k, upkeep 2k, scripted
+    work cost 40k, fees scaled to match, and longer deadlines (board 5, job 12, bids 4, deliver 5, review 3).
+    Scripted runs keep their defaults, so the regression suite is unchanged. Steward reasoning capped at
+    6,000 tokens a call.
+- [ ] Rerun with Qwen on the fixes (in progress 26 Sep)
+- [x] **Activity log** (`sim/activity.py`): every action through the executor (scripted and LLM), every steward
+  decision (its words, and an optional `why` on any tool call) and every world change (jobs, contracts, grades,
+  audits, population, playbooks, kill-switches) in one timeline. A bounded ring in memory (2,000 entries); live
+  runs also stream it to `runs/<run>.activity.jsonl`. 2,000 scripted cycles log 55k entries at no measurable cost
+- [x] **Ideas and goals** (`sim/goals.py`): `idea`, `set_goal` (a checklist of up to 12 steps, optionally from an
+  idea), `update_goal`. Active goals and recent ideas are shown back in the observation every turn: the steward's
+  memory across turns, alongside the journal
+- [x] **Dashboard:** "Goals & progress" (every community's goals with checklists and progress bars, plus every
+  claimed job as an automatic checklist of its parts), "Ideas", and a filterable "Activity log"; the drill-down
+  shows that community's actions and decisions
 - [ ] Anthropic smoke run (Sonnet 5 steward, Haiku members/grader, $1 cap): needs `ANTHROPIC_API_KEY`
 
 #### 1.5 local smoke findings (25 Sep)

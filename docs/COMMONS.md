@@ -212,6 +212,16 @@ Grouped by area. Terms in **bold** are used throughout the code and this guide.
 - **Dissolved.** A community that merged away. Its history and keys are kept so old signatures still
   verify.
 
+### Records
+
+- **Activity log.** One timeline of every **action** (a call through the executor, by any agent), every
+  **decision** (what a steward said, and the `why` it can attach to any action) and every **change** in the
+  world (jobs, contracts, grades, audits, population, playbooks, kill-switches). Bounded in memory; live runs
+  stream it to `runs/<run>.activity.jsonl`.
+- **Idea.** Something a steward records as worth remembering. **Goal**: a titled checklist of steps a
+  steward sets for its community (optionally from an idea) and ticks off as it goes. Both are shown back to
+  the community every turn and on the dashboard.
+
 ### Safety and control
 
 - **Gate.** Any action that touches the outside world (publish, post, spend, sign) waits for your
