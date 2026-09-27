@@ -452,6 +452,28 @@ throughout, back to 80% after); stopped after cycle 4 once both LLM communities 
 - [ ] Full run: two LLM seed communities + scripted defector; watch for spawn, fork, royalty
 - [ ] Decide: vote-weighting cap, grader panel, charter mutability evidence
 
+#### 1.5 Qwen run 4 (27 Sep): option B, ventures, the operator, lower spawn and learn fees
+Same seed and model as runs 2–3; operator folder = a copy of `operator.example/`.
+- **Money:** studio 400k → **1,211,593 µcr** (3×): 3 of its own jobs paid plus writing sold to three co-ops. Lab 400k →
+  327,442: its funded venture failed grading, and it spent 40k on venture fees and 60k publishing a playbook.
+- **4 LLM-prime jobs paid** (studio J1, J4, J10; lab J6), up from 2. 7 of 8 jobs paid in all.
+- **Option B worked cleanly:** 8 contract deliveries graded; 6 accepted, 2 rejected, and both rejections were the defector's junk
+  (0.04 and 0.06). **No false rejections, no disputes, no audits.** The grader's reasons are specific ("58 words", "exactly
+  six words", "no invented statistics").
+- **The first LLM ventures:** lab pitched "Buyer Needs Analyzer" in cycle 1 (score 4, rejected), revised, and pitched
+  "Order Validation Tool for E-commerce" in cycle 2 (score 6 → job V3, reward 440,000 µcr). V3 then **failed grading**: the
+  grader found an operator-precedence bug in the build part (0.40). The market worked as designed: a self-made job is paid only
+  if the work passes.
+- **Spawn:** the scripted co-op B added a member, **seconded by lab** (an LLM), now that the fee is affordable. No LLM co-op
+  spawned or forked itself yet.
+- **The operator:** the house-style context showed up in the decision log ("Create draft for J1 write part following house
+  style"). No limit was hit (studio never neared its price cap or thinking budget).
+- **Calls:** 64 of 92 succeeded (70%). Refusals are now mostly the job race (6) and commissioning for contracts not won or
+  already delivered (9, studio's last turn).
+- **Timing:** 33.7 minutes for 10 cycles; turns took 20.7 of them. Most of the rest is grading, which now runs outside the
+  lock but **one call at a time**. Next: grade in parallel (LM Studio serves 4 at once).
+- Goals and ideas: still unused.
+
 ### 1.6 Ventures: co-ops propose their own work (built 26 Sep)
 Until now every paying job came from the market's seeded board, so a co-op's own reading of its charter
 had nowhere to go (and the idea and goal tools went unused).
@@ -467,7 +489,7 @@ had nowhere to go (and the idea and goal tools went unused).
 - [x] An approved venture becomes the proposer's own claimed job, graded and paid like any other
 - [x] Dashboard: ventures beside ideas; activity log records proposals and decisions; `sim.live` uses `LLMAppraiser`
 - [ ] Calibrate the appraiser (like the grader: a hand-labelled set of good, vague, padded and manipulative pitches)
-- [ ] Live run: do stewards propose ventures, and are they any good?
+- [x] Live run (27 Sep): lab proposed 2 ventures, one funded (score 6, 440k); it failed grading on a real bug
 - [ ] Watch for: easy rubrics written to be passed (the appraiser's `gradeable` check is the defence), and
       ventures crowding out the board
 
