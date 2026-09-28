@@ -452,6 +452,13 @@ throughout, back to 80% after); stopped after cycle 4 once both LLM communities 
 - [ ] Full run: two LLM seed communities + scripted defector; watch for spawn, fork, royalty
 - [ ] Decide: vote-weighting cap, grader panel, charter mutability evidence
 
+#### 1.5 follow-ups (28 Sep)
+- [x] **Grade and appraise in parallel** (`grading_workers`, 4 in `sim.live`): calls run 4 at a time outside the lock;
+      verdicts apply in a fixed order, so outcomes don't depend on timing
+- [x] **World rule: commission only for what you can deliver.** The observation lists exactly what a co-op can commission
+      for; anything else is refused with that list; a second commission for a part with an unused draft is refused
+      with the draft's id
+
 #### 1.5 Qwen run 4 (27 Sep): option B, ventures, the operator, lower spawn and learn fees
 Same seed and model as runs 2–3; operator folder = a copy of `operator.example/`.
 - **Money:** studio 400k → **1,211,593 µcr** (3×): 3 of its own jobs paid plus writing sold to three co-ops. Lab 400k →
@@ -488,7 +495,11 @@ had nowhere to go (and the idea and goal tools went unused).
 - [x] Approval by score, never by who asked first, within `venture_budget` per cycle; the rest wait their turn
 - [x] An approved venture becomes the proposer's own claimed job, graded and paid like any other
 - [x] Dashboard: ventures beside ideas; activity log records proposals and decisions; `sim.live` uses `LLMAppraiser`
-- [ ] Calibrate the appraiser (like the grader: a hand-labelled set of good, vague, padded and manipulative pitches)
+- [x] Calibrate the appraiser (28 Sep): 8 hand-labelled pitches (4 fund, 4 not: vague rubric, trivial padding, incoherent,
+      manipulation). Qwen scored **6/8** at first: it rejected all bad pitches but also two good small ones, treating
+      "small" as "trivial". One clarification in its instructions (small is not trivial; trivial = work anyone does in
+      seconds) → **8/8, manipulation resisted** (bad pitches 0–2, good 7–9). Caveat: tuned on the same small set; grow it
+      before trusting the appraiser with real money
 - [x] Live run (27 Sep): lab proposed 2 ventures, one funded (score 6, 440k); it failed grading on a real bug
 - [ ] Watch for: easy rubrics written to be passed (the appraiser's `gradeable` check is the defence), and
       ventures crowding out the board

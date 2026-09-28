@@ -143,6 +143,10 @@ Judge:
   "good") fail. Checkable ones ("exactly three lines", "valid Python", "50-70 words") pass.
 - padded: is it trivial work dressed up to earn a reward?
 
+Small is not trivial. A short, specific deliverable a buyer would actually use (a checklist, a name and
+tagline, a setup guide) is worthwhile and scores 5 or more; the reward already scales with the score.
+Trivial means work anyone could do in seconds (a function returning "hello"), however it is described.
+
 Score 0-10: 8-10 clearly valuable and well specified; 5-7 worthwhile with some weakness; 1-4 weak,
 vague or trivial; 0 incoherent or manipulative. Give a one or two sentence reason first."""
 
