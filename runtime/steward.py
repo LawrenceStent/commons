@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from runtime.backends import ModelBackend, ModelError, ToolCall, ToolResult
-from runtime.render import PREAMBLE, community_block, operator_block, render
+from runtime.render import PREAMBLE, commissionable, community_block, operator_block, render
 from runtime.tools import NAMES, TOOLS
 from sim.market import strip_tags
 from society.observation import ActionsAPI, Observation, Outcome
@@ -42,6 +42,7 @@ class Draft:
     capability: str
     text: str
     cites: tuple[str, ...]
+    ref: str = ""  # the job or contract it was written for
 
 
 class LLMStrategy(Strategy):
@@ -160,12 +161,18 @@ class LLMStrategy(Strategy):
                     d = self.drafts.get(str(a["draft_id"]))
                     if d is None:
                         return Outcome(False, f"no draft {a['draft_id']}; commission one first")
-                    return act.do_part(str(a["job_id"]), str(a["capability"]), d.text, d.cites)
+                    out = act.do_part(str(a["job_id"]), str(a["capability"]), d.text, d.cites)
+                    if out:
+                        self.drafts.pop(d.id, None)  # used: the part is done
+                    return out
                 case "deliver":
                     d = self.drafts.get(str(a["draft_id"]))
                     if d is None:
                         return Outcome(False, f"no draft {a['draft_id']}; commission one first")
-                    return act.deliver(str(a["contract_id"]), d.text, d.cites)
+                    out = act.deliver(str(a["contract_id"]), d.text, d.cites)
+                    if out:
+                        self.drafts.pop(d.id, None)
+                    return out
                 case "announce":
                     return act.announce(str(a["job_id"]), str(a["capability"]), int(a["max_price"]), float(a["advance_frac"]))
                 case "bid":
@@ -200,17 +207,16 @@ class LLMStrategy(Strategy):
             return Outcome(False, f"none of your members can do {capability}; announce a contract instead")
         if obs.funded < 1 or self._commissions >= max(2, 2 * obs.funded):
             return Outcome(False, "every awake member is already busy this turn")
-        spec = rubric = None
-        for j in obs.my_jobs:
-            if j.id == ref:
-                part = next((p for p in j.parts if p.capability == capability), None)
-                if part:
-                    spec, rubric = part.spec, part.rubric
-        for c in obs.to_deliver:
-            if c.id == ref and c.capability == capability:
-                spec, rubric = c.spec, c.rubric
-        if spec is None:
-            return Outcome(False, f"{ref} isn't a job you're prime on or a contract you won, with a {capability} part")
+        options = commissionable(obs)
+        match = next(((s, r) for ref_, cap, s, r, _ in options if ref_ == ref and cap == capability), None)
+        if match is None:
+            valid = ", ".join(f"{r} {c}" for r, c, *_ in options) or "nothing right now"
+            return Outcome(False, f"you can't commission {ref} {capability}; you can commission for: {valid}")
+        spec, rubric = match
+        waiting = next((d for d in self.drafts.values() if d.ref == ref and d.capability == capability), None)
+        if waiting:
+            how = "do_part" if any(r == ref and h == "do_part" for r, _, _, _, h in options) else "deliver"
+            return Outcome(False, f"you already have draft {waiting.id} for {ref} {capability}; submit it with {how}")
         method = ""
         if playbook_id:
             pb = act.read_playbook(playbook_id)
@@ -235,7 +241,7 @@ class LLMStrategy(Strategy):
             why = " (it spent its whole allowance reasoning)" if t.stop == "max_tokens" else ""
             return Outcome(False, f"the member returned nothing{why}; the call was still charged")
         self._seq += 1
-        d = Draft(f"D{self._seq}", capability, text, (playbook_id,) if playbook_id else ())
+        d = Draft(f"D{self._seq}", capability, text, (playbook_id,) if playbook_id else (), ref)
         self.drafts[d.id] = d
         while len(self.drafts) > self.keep_drafts:
             self.drafts.pop(next(iter(self.drafts)))

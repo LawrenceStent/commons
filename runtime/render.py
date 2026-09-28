@@ -89,6 +89,17 @@ def community_block(obs: Observation) -> str:
             f"The charter is yours to interpret; it is what your community is for.")
 
 
+def commissionable(obs: Observation) -> list[tuple[str, str, str, str, str]]:
+    """Exactly what this co-op can commission work for right now: (ref, capability, spec, rubric, submit_with).
+    The open parts of its own jobs that it can do and isn't buying, and contracts it won but hasn't delivered.
+    A world rule: in run 4, 9 steward calls asked for work on contracts not yet won or already delivered."""
+    mine = set(obs.capabilities)
+    out = [(j.id, p.capability, p.spec, p.rubric, "do_part") for j in obs.my_jobs for p in j.parts
+           if p.capability in mine and not p.done and p.pending is None]
+    out += [(c.id, c.capability, c.spec, c.rubric, "deliver") for c in obs.to_deliver]
+    return out
+
+
 def operator_block(view) -> str | None:
     """Your operator's directives, limits and reference material: trusted, unlike anything peers wrote."""
     if view is None or view.empty:
@@ -195,6 +206,8 @@ def render(obs: Observation) -> str:
     section("OBLIGATIONS: work you won and must deliver", [_contract(c) for c in obs.to_deliver])
     section("RECENT REJECTIONS you could dispute", [_contract(c, work=True) for c in obs.to_dispute])
     section("CLOSED CONTRACTS where you may rate the prime", [_contract(c) for c in obs.to_attest])
+    section("YOU CAN COMMISSION WORK FOR (and only these)",
+            [f"  commission(ref={ref}, capability={cap}) then {how}" for ref, cap, _, _, how in commissionable(obs)])
     section("YOUR ANNOUNCEMENTS (awaiting award)", [_contract(c, bids=True) for c in obs.my_announcements])
     section("YOUR JOBS (you are prime; the next step for each part is worked out for you)",
             [_job(j, mine, prime=True) for j in obs.my_jobs])
