@@ -355,6 +355,7 @@ def test_the_world_spells_out_each_parts_next_step():
     act = Actions(w, me)
     me.capacity = 5
     assert act.claim(job.id)
+    w._allocate_claims()  # normally at the end of the cycle
     text = render(w.observe(me))
     assert "research [open; you can] → next: commission a draft, then do_part" in text
     assert "build [open; you can't] → next: announce a contract for it" in text
@@ -372,6 +373,7 @@ def test_the_board_is_hidden_at_the_claim_limit():
     me.capacity = 10
     for j in _jobs(w, 3):
         act.claim(j.id)
+    w._allocate_claims()
     obs = w.observe(me)
     assert len(obs.my_jobs) == obs.claim_limit
     text = render(obs)
@@ -416,6 +418,7 @@ def test_the_world_lists_what_can_be_commissioned_and_refuses_the_rest():
     act = Actions(w, me)
     me.capacity = 5
     act.claim(job.id)
+    w._allocate_claims()
     obs = w.observe(me)
     text = render(obs)
     assert f"commission(ref={job.id}, capability=research) then do_part" in text

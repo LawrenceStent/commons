@@ -166,6 +166,8 @@ pre { margin:0; font:12px/1.55 var(--mono); white-space:pre-wrap; }
 
   <section class="w12"><h2>Communities <small>click a name for its activity</small></h2><div id="communities"></div></section>
 
+  <section class="w12"><h2>Efficiency <small>value per unit of thought: earned against spent thinking; above the line earns more than it costs</small></h2><div id="efficiency"></div></section>
+
   <section class="w6"><h2>Reputation <small>row trusts column, first-hand</small></h2><div id="reputation"></div></section>
   <section class="w6"><h2>Contract-net <small id="contracts-window"></small></h2><div id="contracts"></div></section>
 
@@ -274,6 +276,26 @@ function render(s) {
       <td class="num">${amt(c.compute)}</td><td class="num">${amt(c.royalties)}</td>
       <td class="num ${c.rate_limited ? "warn" : ""}">${c.rate_limited}</td></tr>`));
   s.communities.forEach((c, i) => spark($("sp-" + i), c.purse_series, usd));
+
+  // efficiency: one dot per co-op, direct labels, one axis each, the break-even diagonal
+  const pts = s.communities.filter(c => c.efficiency && c.efficiency.spent > 0);
+  if (pts.length) {
+    const W = 560, Hh = 240, pad = 44;
+    const mx = Math.max(...pts.map(c => Math.max(c.efficiency.spent, c.efficiency.earned)), 1);
+    const X = v => pad + (W - pad - 16) * v / mx, Y = v => Hh - pad + 10 - (Hh - pad - 10) * v / mx;
+    const dots = pts.map(c => `<g><circle cx="${X(c.efficiency.spent)}" cy="${Y(c.efficiency.earned)}" r="5" fill="var(--series)" stroke="var(--card)" stroke-width="2">
+        <title>${esc(c.name)}: earned ${amt(c.efficiency.earned)} for ${amt(c.efficiency.spent)} spent (${c.efficiency.ratio.toFixed(2)} per unit; model calls ${amt(c.efficiency.thinking)})</title></circle>
+        <text x="${X(c.efficiency.spent) + 8}" y="${Y(c.efficiency.earned) + 4}" font-size="11" fill="var(--fg)">${esc(c.name)} ${c.efficiency.ratio.toFixed(2)}</text></g>`).join("");
+    $("efficiency").innerHTML = `<svg viewBox="0 0 ${W} ${Hh}" width="100%" style="max-width:${W}px" role="img" aria-label="Earned against spent thinking, per co-op">
+      <line x1="${X(0)}" y1="${Y(0)}" x2="${X(mx)}" y2="${Y(mx)}" stroke="var(--muted)" stroke-dasharray="4 4"/>
+      <line x1="${X(0)}" y1="${Y(0)}" x2="${X(mx)}" y2="${Y(0)}" stroke="var(--rule)"/><line x1="${X(0)}" y1="${Y(0)}" x2="${X(0)}" y2="${Y(mx)}" stroke="var(--rule)"/>
+      <text x="${X(mx)}" y="${Y(0) + 28}" font-size="11" fill="var(--muted)" text-anchor="end">spent thinking →</text>
+      <text x="${X(0) - 6}" y="${Y(mx) + 4}" font-size="11" fill="var(--muted)" text-anchor="end">earned</text>
+      <text x="${X(mx) - 4}" y="${Y(mx) + 14}" font-size="11" fill="var(--muted)" text-anchor="end">break-even</text>${dots}</svg>` +
+      table(["co-op", "#earned", "#spent thinking", "#model calls", "#earned per unit"], pts.map(c =>
+        `<tr><td>${esc(c.name)}</td><td class="num">${amt(c.efficiency.earned)}</td><td class="num">${amt(c.efficiency.spent)}</td>
+         <td class="num">${amt(c.efficiency.thinking)}</td><td class="num ${c.efficiency.ratio >= 1 ? "good" : "bad"}">${c.efficiency.ratio.toFixed(2)}</td></tr>`));
+  } else $("efficiency").innerHTML = empty("No spending yet.");
 
   const R = s.reputation, stand = Object.fromEntries(s.communities.map(c => [c.name, c.standing]));
   $("reputation").innerHTML = table(["observer ↓ / subject →", ...R.names],

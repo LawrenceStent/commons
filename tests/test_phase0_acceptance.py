@@ -70,11 +70,16 @@ def test_cooperators_prosper(run):
 
 
 def test_control_without_reputation_defection_pays_and_output_falls(run):
-    """Same seed, reputation switched off: proves the mechanism, not the tuning, does the work."""
+    """Same seed, reputation switched off: proves the mechanism, not the tuning, does the work.
+
+    Without reputation, either defection pays (the defector earns more than 10x as much) or the economy
+    collapses (output below 10%). Since K2's claim bonds, a control run can collapse outright: primes keep
+    hiring the defector, its junk sinks their jobs, they forfeit their bonds, and soon no one has money,
+    not even for the defector to take. Both outcomes show reputation is doing the work."""
     on, off = run
     earned_on = sum(s.earned for s in on.history["defector"])
     earned_off = sum(s.earned for s in off.history["defector"])
-    assert earned_off > 10 * earned_on
+    assert earned_off > 10 * earned_on or off.jobs_done < 0.1 * on.jobs_done
     assert off.jobs_done < 0.9 * on.jobs_done
 
 

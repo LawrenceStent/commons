@@ -29,9 +29,13 @@ MONEY
 
 THE MARKET
 - Jobs appear on the board. Each has parts, one per capability, each with a spec and a rubric.
-- claim a job to become its prime. Every part must then be submitted by the job's deadline.
-- A grader scores each part against its rubric. The market pays only if every part passes. Then the
-  reward splits: most to you, some to the treasury, and 10% to the authors of any playbooks your parts cite.
+- claim a job to ask to become its prime. Claims are allocated at the end of the cycle, not first come: the
+  most trusted claimant wins, then the best fit (can do more parts itself), then the least loaded. The winner
+  posts a bond (10% of the reward), returned when the job is paid and lost if it fails. Claim only what you
+  can finish; you start work on a job the turn after you win it.
+- A grader scores each part against its rubric. The market pays only if every part passes, and pays more for
+  better work: half the reward depends on the average score. The pay splits: most to you, some to the
+  treasury, and 10% to the authors of any playbooks your parts cite.
 - For a part you can do: commission a member to write it (you get a draft id), then do_part with that draft.
 - For a part you can't do: announce a contract and buy it from another community.
 - You don't have to wait for the board. propose_venture pitches work of your own (in your charter's spirit): 1-3
@@ -175,6 +179,8 @@ def render(obs: Observation) -> str:
         f"Purse {obs.purse} µcr · owed on contracts {obs.owed} µcr · standing {obs.standing:.2f}",
         f"Members {obs.members}, awake {obs.funded}, capacity left {obs.capacity}",
         f"Capabilities: {', '.join(obs.capabilities)}",
+        (f"Efficiency: earned {obs.efficiency['earned']} µcr for {obs.efficiency['spent']} spent thinking "
+         f"({obs.efficiency['ratio']:.2f} per µcr; model calls {obs.efficiency['thinking']})") if obs.efficiency else "",
         f"Costs: upkeep {p.get('upkeep')} µcr per awake member per cycle · publish {p.get('publish_cost')} · "
         f"spawn fee {p.get('spawn_fee')} · learn from {p.get('learn_cost')} · audit {p.get('audit_cost')}",
     ]
@@ -211,12 +217,14 @@ def render(obs: Observation) -> str:
     section("YOUR ANNOUNCEMENTS (awaiting award)", [_contract(c, bids=True) for c in obs.my_announcements])
     section("YOUR JOBS (you are prime; the next step for each part is worked out for you)",
             [_job(j, mine, prime=True) for j in obs.my_jobs])
-    if len(obs.my_jobs) >= obs.claim_limit:
+    if obs.pending_claims:
+        s += ["", f"YOUR CLAIMS (allocated at the end of this cycle): {', '.join(obs.pending_claims)}"]
+    if len(obs.my_jobs) + len(obs.pending_claims) >= obs.claim_limit:
         # a world rule: a job you may not claim isn't offered
-        s += ["", f"THE BOARD: {len(obs.board)} unclaimed jobs, hidden. You hold {len(obs.my_jobs)} open jobs, the most "
-                  f"you may; finish one before claiming another."]
+        s += ["", f"THE BOARD: {len(obs.board)} unclaimed jobs, hidden. You hold or have claimed "
+                  f"{len(obs.my_jobs) + len(obs.pending_claims)} jobs, the most you may; finish one before claiming another."]
     else:
-        section(f"THE BOARD (unclaimed jobs; you may claim {obs.claim_limit - len(obs.my_jobs)} more)",
+        section(f"THE BOARD (unclaimed jobs; you may claim {obs.claim_limit - len(obs.my_jobs) - len(obs.pending_claims)} more)",
                 [_job(j, mine) for j in obs.board], "empty")
     mine_open = [c for c in obs.open_contracts if c.capability in mine]
     section("OPEN CONTRACTS you could bid on",

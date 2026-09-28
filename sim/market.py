@@ -33,8 +33,10 @@ class MarketJob:
     posted: int
     deadline: int  # claim-by while on the board; submit-by once claimed
     prime: str | None = None
-    status: str = "open"  # open | claimed | paid | failed | expired
+    status: str = "open"  # open | claimed | graded (awaiting a deferred outcome) | paid | failed | expired
     scores: dict[str, float] = field(default_factory=dict)
+    bond: int = 0  # posted by the prime on allocation; returned when paid, forfeited if the job fails
+    settle_at: int | None = None  # for deferred outcomes: the cycle the grader settles it
 
     @property
     def complete(self) -> bool:
@@ -53,6 +55,9 @@ class Grade:
     real: bool = False  # someone is billed for this call
     ms: int | None = None
     cache_hit: float | None = None
+    # an outcome known only later (a trading P&L, a verified claim): settle this many cycles on. The grader's
+    # settle(job) is then asked again and may return new scores {capability: score}, or None to keep these.
+    settle_after: int = 0
 
 
 class Grader(Protocol):

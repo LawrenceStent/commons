@@ -172,6 +172,8 @@ class Observation:
     claim_limit: int = 2  # the most open jobs I may hold (see Actions.claim)
     refused_contracts: int = 0  # open contracts hidden because the commons would refuse my bid
     ventures: tuple[VentureView, ...] = ()  # my recent venture proposals
+    efficiency: dict = field(default_factory=dict)  # earned vs spent on thinking, since the start
+    pending_claims: tuple[str, ...] = ()  # jobs I've claimed this cycle, allocated at its end
     goals: tuple[GoalView, ...] = ()  # my active goals
     ideas: tuple[IdeaView, ...] = ()  # my most recent ideas
     params: dict[str, int | float] = field(default_factory=dict)

@@ -25,7 +25,8 @@ class Puppet(Strategy):
 def world(**kw) -> World:
     pop = [Community("prime", 2, {"research"}, Puppet()), Community("sub", 2, {"build", "write", "design"}, Puppet()),
            Community("other", 2, {"build"}, Puppet())]
-    w = World(Params(seed=0, verify=False, **kw), population=pop)
+    # these tests are about contracts and deadlines, so claims are instant here; allocation has its own tests
+    w = World(Params(**{"seed": 0, "verify": False, "claim_allocation": False, **kw}), population=pop)
     w.step()
     return w
 

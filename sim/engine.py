@@ -78,6 +78,15 @@ class Params:
     # had a conflict of interest (rejecting saves money) and LLM primes rejected good work. False restores
     # prime reviews and disputes.
     grader_reviews: bool = True
+    # K2, tempo and efficiency: no rule may reward being first.
+    # Claims are registered during a cycle and allocated at its end: most trusted, then best fit, then least
+    # loaded; ties by a draw seeded from the job. The winner posts a bond (a share of the reward), returned when
+    # the job is paid and forfeited to the treasury if it fails, so claiming what you can't finish costs money.
+    claim_allocation: bool = True
+    claim_bond: float = 0.1
+    # Pay scales with quality: this share of the reward depends on the mean part score (1.0 pays in full, 0.5
+    # pays 1 - share/2). Every part must still pass. 0 = the old flat reward.
+    quality_pay: float = 0.5
     venture_fee: int = 5_000  # paid to the treasury when proposing a venture (deters spam)
     venture_budget: int = 2  # ventures the market will take on per cycle, best-scored first
     venture_min_score: int = 5  # appraisals below this are worth nothing
@@ -219,6 +228,9 @@ class World:
         self.awaiting_grade: dict[str, int] = {}  # submitted job id -> failed grading attempts so far
         self.pending_audits: dict[str, dict] = {}  # contract id -> {reason, attempts}
         self.pending_reviews: dict[str, int] = {}  # delivered contract id -> failed grading attempts
+        self.claims: dict[str, dict[str, int]] = {}  # job id -> {claimant: cycle claimed}, allocated at cycle end
+        self.thinking_spend: Counter[str] = Counter()  # µcr of model calls, per co-op
+        self.deferred: set[str] = set()  # graded jobs waiting for their outcome (see Grade.settle_after)
         self.transcripts: defaultdict[str, deque] = defaultdict(lambda: deque(maxlen=2))  # LLM turns, newest last
         self.plans: defaultdict[str, Plans] = defaultdict(Plans)  # ideas and goals per community
         self._plan_seq = 0
@@ -312,6 +324,8 @@ class World:
             with self.lock:
                 for c in order:
                     self._turn(c)
+        with self.lock:
+            self._allocate_claims()
         self.settle_grading()
         with self.lock:
             if self.cycle % self.params.gossip_every == 0:
@@ -409,7 +423,7 @@ class World:
     def _prune(self) -> None:
         """Drop closed jobs and contracts after a while, so memory stays flat on long runs."""
         cutoff = self.cycle - self.params.retain
-        for k in [k for k, j in self.jobs.items() if j.status not in ("open", "claimed") and j.deadline < cutoff]:
+        for k in [k for k, j in self.jobs.items() if j.status not in ("open", "claimed", "graded") and j.deadline < cutoff]:
             del self.jobs[k]
         for k in [k for k, c in self.contracts.items() if c.closed is not None and c.closed < cutoff]:
             del self.contracts[k]
@@ -555,6 +569,7 @@ class World:
                 self._settle_audit(cid, verdicts[("audit", cid)])
             for cid, *_ in reviews:
                 self._settle_review(cid, verdicts[("review", cid)])
+            self._settle_deferred()
 
     def _map_calls(self, fn, items: list) -> list:
         """Run model calls (outside the lock) up to `grading_workers` at a time; results in input order."""
@@ -575,7 +590,7 @@ class World:
         if job is None or job.status != "claimed":
             self.awaiting_grade.pop(jid, None)
             return
-        errors = []
+        errors, defer = [], 0
         for cap, g in graded:
             if isinstance(g, GradingError):
                 errors.append(str(g))
@@ -588,6 +603,7 @@ class World:
                 self._fail_job(job, "no one could pay for grading")
                 return
             job.scores[cap] = g.score
+            defer = max(defer, g.settle_after)
         if errors:
             self.awaiting_grade[jid] += 1
             if self.awaiting_grade[jid] >= self.params.grade_retries:
@@ -597,10 +613,34 @@ class World:
                 self._tell(job.prime, "grading_delayed", f"{jid} is waiting for the grader: {errors[0]}", jid)
             return
         self.awaiting_grade.pop(jid, None)
+        if defer and min(job.scores.values()) >= self.params.pass_score:
+            job.status, job.settle_at = "graded", self.cycle + defer
+            self.deferred.add(jid)
+            self._tell(job.prime, "job_graded", f"{jid} passed for now; its outcome settles at cycle {job.settle_at}", jid)
+            return
+        self._finish_job(job)
+
+    def _finish_job(self, job: MarketJob) -> None:
         if min(job.scores.values()) < self.params.pass_score:
             self._fail_job(job, f"a part failed grading ({', '.join(f'{k} {v:.2f}' for k, v in job.scores.items())})")
             return
         self._pay_job(job)
+
+    def _settle_deferred(self) -> None:
+        """Outcomes whose time has come: ask the grader again (if it can), then pay or fail. Under the lock."""
+        for jid in sorted(self.deferred):
+            job = self.jobs.get(jid)
+            if job is None or job.status != "graded":
+                self.deferred.discard(jid)
+                continue
+            if self.cycle < job.settle_at:
+                continue
+            self.deferred.discard(jid)
+            later = self.grader.settle(job) if hasattr(self.grader, "settle") else None
+            if later:
+                job.scores.update(later)
+            job.status = "claimed"  # back to the ordinary path for paying or failing
+            self._finish_job(job)
 
     def _settle_review(self, cid: str, g) -> None:
         """The grader's verdict on a delivery decides the contract (option B). Under the lock."""
@@ -749,8 +789,12 @@ class World:
                     pb.uses += 1
         # the commons takes only what it needs: no treasury share while the treasury is at its reserve
         tax = self.ledger.balance("treasury") < self.params.treasury_reserve
-        split = self.ledger.settle_revenue(prime, job.reward, cycle=self.cycle, royalties=dict(weights), memo=job.id, tax=tax)
-        share = job.reward * (70 if tax else 90) // 100
+        q = self.params.quality_pay
+        mean = sum(job.scores.values()) / len(job.scores) if job.scores else 1.0
+        payout = round(job.reward * (1 - q + q * mean))  # pay scales with quality
+        split = self.ledger.settle_revenue(prime, payout, cycle=self.cycle, royalties=dict(weights), memo=job.id, tax=tax)
+        share = payout * (70 if tax else 90) // 100
+        self._settle_bond(job, returned=True)
         job.status = "paid"
         self.jobs_done += 1
         self._stat(prime, "earned", share)
@@ -758,15 +802,78 @@ class World:
         for cap, part in job.parts.items():
             if part.source == "self":
                 track[cap] = track.get(cap, 0) + 1
-        self._tell(prime, "job_paid", f"{job.id} passed grading; you received {share}", job.id)
+        self._tell(prime, "job_paid", f"{job.id} passed grading (mean score {mean:.2f}); the market paid {payout} "
+                   f"of {job.reward}, you received {share}", job.id)
         for author, amount in split.items():
             self._stat(author, "earned", amount)
             self.royalties_paid[author] = self.royalties_paid.get(author, 0) + amount
             self._tell(author, "royalty", f"your playbook was used in {job.id}: {amount}", job.id)
         self.hub.emit("market.job", self.cycle, id=job.id, stage="paid", prime=prime, caps=sorted(job.parts),
-                      reward=job.reward, scores=job.scores, royalties=split, taxed=tax)
+                      reward=job.reward, payout=payout, scores=job.scores, royalties=split, taxed=tax)
+
+    def efficiency(self, name: str) -> dict[str, float]:
+        """Value per unit of thought: what a co-op has earned against what it has spent to think (upkeep, work
+        and model calls). Above 1.0 it earns more than its thinking costs."""
+        earned = sum(s.earned for s in self.history.get(name, []))
+        spent = self.meter.by_community.get(name, 0)
+        return {"earned": earned, "spent": spent, "thinking": self.thinking_spend[name],
+                "ratio": round(earned / spent, 3) if spent else 0.0}
+
+    def held_jobs(self, name: str) -> int:
+        return sum(j.prime == name and j.status == "claimed" for j in self.jobs.values())
+
+    def claim_limit(self, c: Community) -> int:
+        return max(2, c.thinking)
+
+    def pending_claims(self, name: str) -> list[str]:
+        return [jid for jid, who in self.claims.items() if name in who]
+
+    def _allocate_claims(self) -> None:
+        """Give each claimed job to one claimant, by rule rather than by who answered first."""
+        p = self.params
+        for jid in sorted(self.claims):
+            job, claimants = self.jobs.get(jid), self.claims.pop(jid)
+            if job is None or job.status != "open":
+                continue
+            draw = random.Random(f"{p.seed}:{self.cycle}:{jid}")  # its own seed: the world's dice stay untouched
+
+            def key(name: str) -> tuple:
+                c = self.communities[name]
+                fit = sum(cap in c.capabilities for cap in job.parts) / len(job.parts)
+                return (-round(self._standing(name), 3), -fit, self.held_jobs(name), draw.random())
+
+            bond = round(job.reward * p.claim_bond)
+            for name in sorted(sorted(claimants), key=key):
+                c = self.communities[name]
+                if self.held_jobs(name) >= self.claim_limit(c):
+                    continue
+                if bond:
+                    try:
+                        self.ledger.transfer(purse(name), "escrow", bond, cycle=self.cycle, kind="bond", memo=jid)
+                    except InsufficientFunds:
+                        self._tell(name, "claim_lost", f"you couldn't post the {bond} bond for {jid}", jid)
+                        continue
+                job.prime, job.status, job.bond = name, "claimed", bond
+                job.deadline = self.cycle + p.job_ttl
+                self._tell(name, "claim_won", f"{jid} is yours (bond {bond}, returned when it's paid); "
+                           f"submit every part by cycle {job.deadline}", jid)
+                for other in claimants:
+                    if other != name:
+                        self._tell(other, "claim_lost", f"{jid} went to {name} (more trusted, a better fit, or less loaded)", jid)
+                self.hub.emit("market.job", self.cycle, id=jid, stage="claimed", prime=name, caps=sorted(job.parts),
+                              reward=job.reward, claimants=sorted(claimants), bond=bond)
+                break
+
+    def _settle_bond(self, job: MarketJob, returned: bool) -> None:
+        if not job.bond:
+            return
+        dest = purse(job.prime) if returned else "treasury"
+        self.ledger.transfer("escrow", dest, job.bond, cycle=self.cycle, kind="bond",
+                             memo=f"{'return' if returned else 'forfeit'} {job.id}")
+        job.bond = 0
 
     def _fail_job(self, job: MarketJob, why: str) -> None:
+        self._settle_bond(job, returned=False)
         job.status = "failed"
         self.jobs_failed += 1
         for c in self.contracts.values():
@@ -845,6 +952,8 @@ class World:
             owed=sum(c.price - c.advance for c in cs if c.prime == name and c.status in (AWARDED, DELIVERED)),
             ventures=tuple(VentureView(v.id, v.title, v.status, v.score, v.reward, v.reason, v.job_id, v.cycle)
                            for v in list(self.ventures.values()) if v.proposer == name)[-5:],
+            efficiency=self.efficiency(name),
+            pending_claims=tuple(self.pending_claims(name)),
             goals=tuple(GoalView(g.id, g.title, g.status, tuple((s.text, s.done, s.note) for s in g.steps), round(g.progress, 2))
                         for g in self.plans[name].active()),
             ideas=tuple(IdeaView(i.id, i.title, i.detail, i.cycle, i.status) for i in self.plans[name].ideas[-5:]),

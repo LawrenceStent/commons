@@ -60,6 +60,7 @@ def snapshot(state: dict) -> dict:
             "won_total": sum(s.won for s in w.history[name]),
             "ok_total": sum(s.delivered_ok for s in w.history[name]),
             "compute": w.meter.by_community.get(name, 0),
+            "efficiency": w.efficiency(name),
             "rate_limited": w.bus.rejected.get(name, 0),
             "royalties": w.royalties_paid.get(name, 0),
             "purse_series": _downsample([[e.cycle, e.fields["communities"][name]["purse"]] for e in cycles

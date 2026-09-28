@@ -22,7 +22,7 @@ class Puppet(Strategy):
 def world(**kw) -> World:
     pop = [Community("alpha", 3, {"research", "build"}, Puppet()), Community("beta", 2, {"build", "write"}, Puppet()),
            Community("gamma", 2, {"design"}, Puppet())]
-    w = World(Params(seed=0, verify=False, **kw), population=pop)
+    w = World(Params(**{"seed": 0, "verify": False, "claim_allocation": False, **kw}), population=pop)
     for c in pop:
         w.ledger.transfer("genesis", purse(c.name), 5_000_000, cycle=0, kind="genesis")
     w.step()

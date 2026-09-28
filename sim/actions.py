@@ -67,18 +67,26 @@ class Actions:
         job = self.w.jobs.get(job_id)
         if job is None or job.status != "open":
             return Outcome(False, f"job {job_id} is not on the board")
-        # Stopgap against hoarding (an LLM claimed 5 jobs it couldn't fund in one turn): at most two
-        # open jobs, or one per awake member if more are awake. Matches what scripted strategies allow
-        # themselves, so the economy is unchanged. K2 replaces it with allocation and a claim bond.
-        held = sum(j.prime == self.me.name and j.status == "claimed" for j in self.w.jobs.values())
-        limit = max(2, self.me.thinking)  # keep in step with Observation.claim_limit
+        # at most two open jobs (or one per awake member), counting claims waiting for allocation
+        w, p = self.w, self.w.params
+        held = w.held_jobs(self.me.name) + (len(w.pending_claims(self.me.name)) if p.claim_allocation else 0)
+        limit = w.claim_limit(self.me)
         if held >= limit:
-            return Outcome(False, f"you already hold {held} open jobs, the most you can (two, or one per awake "
-                                  f"member); finish one first")
+            return Outcome(False, f"you already hold or have claimed {held} jobs, the most you can (two, or one per "
+                                  f"awake member); finish one first")
+        bond = round(job.reward * p.claim_bond)
+        if bond and w.ledger.balance(purse(self.me.name)) < bond:
+            return Outcome(False, f"claiming {job_id} needs a {bond} bond if you win it; you can't afford it")
+        if p.claim_allocation and self.me.name in w.claims.get(job_id, {}):
+            return Outcome(False, f"you have already claimed {job_id}; it is allocated at the end of the cycle")
         if err := self._use_capacity():
             return err
+        if p.claim_allocation:
+            w.claims.setdefault(job_id, {})[self.me.name] = w.cycle
+            return Outcome(True, f"claim on {job_id} registered; jobs are allocated at the end of the cycle to the most "
+                                 f"trusted, best-fitting claimant (bond {bond} if you win)", job_id)
         job.prime, job.status = self.me.name, "claimed"
-        job.deadline = self.w.cycle + self.w.params.job_ttl
+        job.deadline = w.cycle + p.job_ttl
         return Outcome(True, f"claimed {job_id}; submit all parts by cycle {job.deadline}", job_id)
 
     def do_part(self, job_id: str, capability: str, artifact: str, cites: tuple[str, ...] = ()) -> Outcome:
@@ -286,6 +294,7 @@ class Actions:
         """Charge a model call to this community: notionally always, in USD too when real.
         Raises InsufficientFunds when the purse can't pay, and KillSwitch at a ceiling."""
         cost = self.w.meter.charge_usage(self.me.name, price_as, usage, cycle=self.w.cycle, real=real)
+        self.w.thinking_spend[self.me.name] += cost
         self.w.hub.emit("llm.call", self.w.cycle, community=self.me.name, role=role, model=model,
                         input_tokens=usage.input_tokens, output_tokens=usage.output_tokens,
                         cache_read=usage.cache_read_input_tokens, cache_hit=cache_hit, cost=cost, ms=ms, real=real)

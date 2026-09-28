@@ -39,8 +39,10 @@ _TOOLS: list[dict[str, Any]] = [
      "Not allowed in the cycle you announced.", "input_schema": _obj({"contract_id": S, "bidder": S}, ["contract_id", "bidder"])},
     {"name": "bid", "description": "Bid on another community's open contract for a capability you have. Uses one "
      "capacity. price in µcr, at most the contract's max.", "input_schema": _obj({"contract_id": S, "price": I}, ["contract_id", "price"])},
-    {"name": "claim", "description": "Take a job from the board and become its prime. Uses one capacity. You must "
-     "submit every part by the job's deadline.", "input_schema": _obj({"job_id": S}, ["job_id"])},
+    {"name": "claim", "description": "Ask for a job on the board. Claims are allocated at the end of the cycle to the "
+     "most trusted, best-fitting claimant, not the first. The winner posts a bond (returned when the job is paid, lost "
+     "if it fails) and must submit every part by the deadline. Uses one capacity.",
+     "input_schema": _obj({"job_id": S}, ["job_id"])},
     {"name": "commission", "description": "Have an awake member write the work for a part, for a job you are prime "
      "on (ref = job id) or a contract you won (ref = contract id). Returns a draft id and a preview. Costs a model "
      "call, charged to your purse. Optionally pass playbook_id to work from a library playbook; the draft then "
