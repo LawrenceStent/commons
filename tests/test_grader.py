@@ -234,3 +234,38 @@ def test_grading_runs_outside_the_worlds_lock():
     release.set()
     t.join(5)
     assert job.status == "paid"
+
+
+def test_grading_runs_in_parallel_and_applies_in_a_fixed_order():
+    import threading
+    import time
+
+    active, peak, lock = [0], [0], threading.Lock()
+
+    def slow(*a):
+        with lock:
+            active[0] += 1
+            peak[0] = max(peak[0], active[0])
+        time.sleep(0.2)
+        with lock:
+            active[0] -= 1
+        return answer(8, "ok")
+
+    w = world(LLMGrader(FakeBackend(slow)), grading_workers=4)
+    jobs = []
+    for i in range(3):
+        job = MarketJob(f"P{i}", "kit", 80_000, {c: Part(c, f"do {c}", "r") for c in ("research", "write")},
+                        posted=w.cycle, deadline=w.cycle + 3)
+        w.jobs[job.id] = job
+        job.prime, job.status = "solo", "claimed"
+        for cap in job.parts:
+            job.parts[cap].artifact, job.parts[cap].source = "work", "self"
+        w.maybe_submit(job)
+        jobs.append(job)
+    t0 = time.time()
+    w.settle_grading()
+    assert peak[0] > 1 and time.time() - t0 < 1.0  # 6 parts × 0.2 s, four at a time
+    assert all(j.status == "paid" for j in jobs)
+    paid = [e.fields["id"] for e in w.hub.recent("market.job", n=50) if e.fields["stage"] == "paid"]
+    assert paid == ["P0", "P1", "P2"]
+    w.ledger.check()

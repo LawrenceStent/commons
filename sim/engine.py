@@ -109,6 +109,9 @@ class Params:
     # answers first gets it, which is a small reward for speed.
     parallel_turns: bool = False
     parallel_workers: int = 4
+    # model calls for grading and appraisal at once (outside the lock). Verdicts are applied in a fixed order,
+    # so results don't depend on which call finishes first. 1 for scripted runs; sim.live uses 4.
+    grading_workers: int = 1
     activity_keep: int = 2000  # entries of the activity log kept in memory
     activity_path: str | None = None  # also append every entry to this JSONL file
     retain: int = 20  # cycles a closed job or contract stays visible before it's dropped
@@ -544,14 +547,10 @@ class World:
                       if (c := self.contracts.get(cid)) is not None]
             reviews = [(cid, c.spec, c.rubric, c.artifact or "") for cid in list(self.pending_reviews)
                        if (c := self.contracts.get(cid)) is not None and c.status == DELIVERED]
-        verdicts: dict[tuple[str, str], object] = {}
-        for jid, parts in jobs:
-            for cap, spec, rubric, artifact in parts:
-                verdicts[(jid, cap)] = self._try_grade(spec, rubric, artifact)
-        for cid, spec, rubric, artifact in audits:
-            verdicts[("audit", cid)] = self._try_grade(spec, rubric, artifact)
-        for cid, spec, rubric, artifact in reviews:
-            verdicts[("review", cid)] = self._try_grade(spec, rubric, artifact)
+        tasks = [((jid, cap), spec, rubric, artifact) for jid, parts in jobs for cap, spec, rubric, artifact in parts]
+        tasks += [(("audit", cid), spec, rubric, artifact) for cid, spec, rubric, artifact in audits]
+        tasks += [(("review", cid), spec, rubric, artifact) for cid, spec, rubric, artifact in reviews]
+        verdicts = dict(self._map_calls(lambda t: (t[0], self._try_grade(*t[1:])), tasks))
         with self.lock:
             for jid, parts in jobs:
                 self._apply_job_grades(jid, [(cap, verdicts[(jid, cap)]) for cap, *_ in parts])
@@ -559,6 +558,14 @@ class World:
                 self._settle_audit(cid, verdicts[("audit", cid)])
             for cid, *_ in reviews:
                 self._settle_review(cid, verdicts[("review", cid)])
+
+    def _map_calls(self, fn, items: list) -> list:
+        """Run model calls (outside the lock) up to `grading_workers` at a time; results in input order."""
+        workers = self.params.grading_workers
+        if workers <= 1 or len(items) <= 1:
+            return [fn(i) for i in items]
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            return list(pool.map(fn, items))
 
     def _try_grade(self, spec: str, rubric: str, artifact: str):
         try:
@@ -658,12 +665,19 @@ class World:
         then decide under it: best score first, up to the market's budget for this cycle."""
         with self.lock:
             todo = [v for v in self.ventures.values() if v.status == "pending" and v.score is None]
-        results = {}
-        for v in todo:
+        def appraise(v):
             try:
-                results[v.id] = self.appraiser.appraise(v)
+                return v, self.appraiser.appraise(v)
             except AppraisalError as e:
-                self._tell(v.proposer, "venture_delayed", f"{v.id} couldn't be appraised yet: {e}", v.id)
+                return v, e
+
+        results = {}
+        for v, a in self._map_calls(appraise, todo):
+            if isinstance(a, AppraisalError):
+                with self.lock:
+                    self._tell(v.proposer, "venture_delayed", f"{v.id} couldn't be appraised yet: {a}", v.id)
+            else:
+                results[v.id] = a
         with self.lock:
             p = self.params
             for vid, a in results.items():
