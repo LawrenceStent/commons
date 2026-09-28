@@ -1,6 +1,6 @@
 """Found a society from your brief, then approve it.
 
-    uv run python -m sim.found NAME --pack earn_online --brief brief.md [--context DIR] [--coops 4] \
+    uv run python -m sim.found NAME --pack earn_online --brief brief.md [--questions FILE] [--context DIR] [--coops 4] \
         --backend lmstudio --model <id>        # drafts societies/NAME/ (one model call)
     uv run python -m sim.found NAME --approve  # checks the blueprints you've read and edited, and approves them
     uv run python -m sim.live --society NAME   # runs it
@@ -21,6 +21,7 @@ ap.add_argument("name")
 ap.add_argument("--approve", action="store_true")
 ap.add_argument("--pack", default=None)
 ap.add_argument("--brief", help="a text or markdown file: what this society is for, in your words")
+ap.add_argument("--questions", help="a file of subjects the society will work on, one per line (else the pack's defaults)")
 ap.add_argument("--context", help="a folder of reference files: summarised for drafting, then kept as the archive")
 ap.add_argument("--coops", type=int, default=4)
 ap.add_argument("--seed", type=int, default=0)
@@ -71,7 +72,8 @@ else:
 
 try:
     folder, errors, warnings = founding.found(a.name, a.pack, Path(a.brief).read_text(), Path(a.context) if a.context else None,
-                                              a.coops, backend, model, seed=a.seed, max_tokens=a.max_tokens)
+                                              a.coops, backend, model, seed=a.seed, max_tokens=a.max_tokens,
+                                              questions=Path(a.questions).read_text() if a.questions else "")
 except founding.FoundingError as e:
     sys.exit(str(e))
 blueprints, _ = founding.read_blueprints(folder / "blueprints.toml")

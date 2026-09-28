@@ -4,10 +4,12 @@ A society lives in one folder, `societies/<name>/` (git-ignored: briefs are your
 
     society.toml      which pack, which seed
     brief.md          what this society is for, in your words (added to the pack's brief in every steward's prompt)
+    questions.md      optional: the subjects its work is about, one per line (replace the pack's defaults)
     blueprints.toml   the co-ops: name, kind, members, capabilities, charter, doctrine; `approved = true` to run
     archive/          reference material (.md, .txt), searched on demand (see sim/archive.py)
     playbooks/        methods you already trust, seeded into the library (<capability>--<title>.md)
     operator/         optional: your directives, context and limits (see sim/operator.py)
+    samples.jsonl     work set aside for you to rate; ratings.jsonl holds your ratings (see sim/ratings.py)
     runs/             every run's ledger, activity log and turn log
 
 Founding happens once:
@@ -31,7 +33,7 @@ from pathlib import Path
 from typing import Any
 
 from runtime.backends import ModelBackend, ModelError
-from sim.pack import Pack
+from sim.pack import Pack, TemplateWorkSource
 from sim.pack import load as load_pack
 
 ROOT = Path("societies")
@@ -70,7 +72,7 @@ Rules:
 
 
 def draft(backend: ModelBackend, model: str, pack: Pack, brief: str, context: str, n: int,
-          max_tokens: int = 4000) -> list[Blueprint]:
+          max_tokens: int = 4000, questions: str = "") -> list[Blueprint]:
     schema: dict[str, Any] = {
         "type": "object",
         "properties": {"coops": {"type": "array", "items": {
@@ -83,6 +85,7 @@ def draft(backend: ModelBackend, model: str, pack: Pack, brief: str, context: st
     }
     prompt = (f"{pack.brief}\n\nSkills this market trades: {', '.join(pack.capabilities)}\n\n"
               f"Operator's brief:\n{brief.strip()}\n\n"
+              + (f"Questions this society will work on:\n{questions.strip()[:2000]}\n\n" if questions.strip() else "")
               + (f"<context>\n{context[:MAX_CONTEXT]}\n</context>\n\n" if context else "")
               + f"Propose {n} co-ops.")
     try:
@@ -159,7 +162,8 @@ def read_blueprints(path: Path) -> tuple[list[Blueprint], bool]:
 
 
 def found(name: str, pack_name: str | None, brief: str, context_dir: Path | None, n: int, backend: ModelBackend,
-          model: str, seed: int = 0, root: Path = ROOT, max_tokens: int = 4000) -> tuple[Path, list[str], list[str]]:
+          model: str, seed: int = 0, root: Path = ROOT, max_tokens: int = 4000,
+          questions: str = "") -> tuple[Path, list[str], list[str]]:
     """Draft a society and write its folder. Returns (folder, errors, warnings); nothing is approved."""
     if not NAME.match(name):
         raise FoundingError("a society name is 2-24 lowercase letters, digits or hyphens, starting with a letter")
@@ -167,10 +171,12 @@ def found(name: str, pack_name: str | None, brief: str, context_dir: Path | None
     if (folder / "blueprints.toml").exists():
         raise FoundingError(f"{folder} already has blueprints; founding happens once (edit them, or pick a new name)")
     pack = load_pack(pack_name)
-    blueprints = draft(backend, model, pack, brief, summarise_context(context_dir), n, max_tokens)
+    blueprints = draft(backend, model, pack, brief, summarise_context(context_dir), n, max_tokens, questions)
     errors, warnings = check(blueprints, pack)
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "brief.md").write_text(brief.strip() + "\n")
+    if questions.strip():
+        (folder / "questions.md").write_text(questions.strip() + "\n")
     (folder / "society.toml").write_text(f'pack = "{pack.name}"\nseed = {seed}\n')
     if context_dir and context_dir.exists():
         shutil.copytree(context_dir, folder / "archive", dirs_exist_ok=True)
@@ -189,6 +195,18 @@ def approve(name: str, root: Path = ROOT) -> tuple[list[str], list[str]]:
         text = path.read_text()
         path.write_text(re.sub(r"^approved\s*=\s*false", "approved = true", text, count=1, flags=re.M))
     return errors, warnings
+
+
+def read_questions(path: Path) -> list[str]:
+    """One subject per line; blank lines, headings (#) and list markers are ignored."""
+    if not path.exists():
+        return []
+    out = []
+    for line in path.read_text().splitlines():
+        line = re.sub(r"^\s*(?:[-*]|\d+[.)])\s*", "", line).strip()
+        if line and not line.startswith("#"):
+            out.append(line[:200])
+    return out
 
 
 def society_config(folder: Path) -> dict[str, Any]:
@@ -248,4 +266,8 @@ def load(name: str, root: Path = ROOT, require_approved: bool = True) -> Society
     brief = (folder / "brief.md").read_text().strip() if (folder / "brief.md").exists() else ""
     if brief:
         pack = replace(pack, brief=f"{pack.brief}\n\nTHIS SOCIETY, IN ITS OPERATOR'S WORDS\n{brief}")
+    if questions := read_questions(folder / "questions.md"):
+        if not isinstance(pack.work_source, TemplateWorkSource):
+            raise FoundingError(f"the {pack.name} pack's work doesn't come from subjects, so questions.md can't be used")
+        pack = replace(pack, work_source=replace(pack.work_source, subjects=tuple(questions)))
     return Society(name, folder, pack, int(cfg.get("seed", 0)), tuple(blueprints))

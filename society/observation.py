@@ -176,6 +176,7 @@ class Observation:
     pending_claims: tuple[str, ...] = ()  # jobs I've claimed this cycle, allocated at its end
     doctrine: str = ""  # how my co-op works, set at founding
     archive: tuple = (0, ())  # (passages, source files) of the society's reference archive
+    grants: tuple | None = None  # grant economy: (pool now, budget per cycle); None in a market economy
     goals: tuple[GoalView, ...] = ()  # my active goals
     ideas: tuple[IdeaView, ...] = ()  # my most recent ideas
     params: dict[str, int | float] = field(default_factory=dict)

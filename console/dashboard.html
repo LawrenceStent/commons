@@ -164,6 +164,8 @@ pre { margin:0; font:12px/1.55 var(--mono); white-space:pre-wrap; }
     </div>
   </section>
 
+  <section class="w12"><h2>Scorecard <small id="scorecard-note">what success means for this society; credits are only fuel</small></h2><div id="scorecard"></div></section>
+
   <section class="w12"><h2>Communities <small>click a name for its activity</small></h2><div id="communities"></div></section>
 
   <section class="w12"><h2>Efficiency <small>value per unit of thought: earned against spent thinking; above the line earns more than it costs</small></h2><div id="efficiency"></div></section>
@@ -256,6 +258,19 @@ function render(s) {
   $("banner").className = r.pause_reason || r.halted ? "on" : "";
   $("banner").textContent = r.halted ? `Kill-switch is on. ${r.pause_reason || ""}` : (r.pause_reason || "");
   $("s-cycle").textContent = r.cycle.toLocaleString();
+  // scorecard: the society's mission metrics first, then the general ones; status in words and colour
+  const so = s.society || {scorecard: []};
+  const fmtMetric = m => m.value === null || m.value === undefined ? "–"
+    : m.unit === "%" ? `${Math.round(m.value * 100)}%` : m.unit === "cr" ? amt(m.value)
+    : Number.isInteger(m.value) ? m.value.toLocaleString() : m.value.toFixed(2);
+  const line = m => m.floor !== null ? ` · floor ${fmtMetric({...m, value: m.floor})}` : m.target !== null ? ` · target ${fmtMetric({...m, value: m.target})}` : "";
+  const cls = {"ok": "good", "below target": "warn", "breach": "bad", "no data": "muted"};
+  $("scorecard-note").textContent = `${so.pack || ""} · ${so.economy === "grant"
+    ? `paid by grants: pool ${amt(so.grants)} of ${amt(so.grant_budget)} a cycle` : "paid by a market"} · credits are only fuel`;
+  $("scorecard").innerHTML = so.scorecard.length ? `<div class="stats">${so.scorecard.map(m =>
+    `<div class="stat" title="${esc(m.what)}"><b class="${cls[m.status] || ""}">${fmtMetric(m)}</b>
+      <span>${esc(m.title)}<br><small class="muted">by ${esc(m.by)} · ${esc(m.status)}${line(m)}</small></span></div>`).join("")}</div>`
+    : empty("No scorecard yet: it appears after the first cycle.");
   $("s-treasury").textContent = amt(r.treasury);
   $("s-jobs").textContent = `${r.jobs_done.toLocaleString()} / ${(r.jobs_done + r.jobs_failed).toLocaleString()}`;
   $("s-spend").textContent = `${amt(r.spent_today)} / ${r.ceiling >= 1e11 ? "none" : amt(r.ceiling)}`;

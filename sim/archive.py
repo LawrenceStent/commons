@@ -7,6 +7,9 @@ search it with `search_archive(query)` (keyword ranking, no model call) and read
 
 The archive is written by you, so its text is trusted reference material, but it is still shown as reference,
 never as instructions.
+
+Work cites a passage as `[archive: <id>]`. Citations are checked by rule before any grading: work that cites a
+passage that doesn't exist fails that part (see World._try_grade).
 """
 
 from __future__ import annotations
@@ -20,11 +23,17 @@ from pathlib import Path
 PASSAGE = 800  # characters, roughly
 MAX_RESULTS = 5
 _WORD = re.compile(r"[a-z0-9]+")
+_CITE = re.compile(r"\[archive:\s*([A-Za-z0-9-]+#\d+)\s*\]")
 _STOP = frozenset("the a an and or of to in on for with is are be it this that as at by from was were not".split())
 
 
 def _terms(text: str) -> list[str]:
     return [w for w in _WORD.findall(text.lower()) if w not in _STOP and len(w) > 1]
+
+
+def citations(text: str) -> list[str]:
+    """The archive passages a piece of work cites, in order, without repeats."""
+    return list(dict.fromkeys(m.lower() for m in _CITE.findall(text)))
 
 
 @dataclass(frozen=True)

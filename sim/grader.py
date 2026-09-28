@@ -99,3 +99,33 @@ class HybridGrader:
         from sim.market import is_tagged
 
         return (self.stub if is_tagged(artifact) else self.llm).grade(spec, rubric, artifact)
+
+
+class PanelGrader:
+    """Several graders, each reading the work through its own lens (evidence, feasibility, harms, ...); the part
+    gets the median score, so one lenient or harsh reader can't decide it alone. Every call is paid for.
+
+    A panel of one model with different instructions is not independent judgement, but it does make each
+    reader look for one thing, and a flattering submission has to fool all of them."""
+
+    def __init__(self, graders: list):
+        if not graders:
+            raise ValueError("a panel needs at least one grader")
+        self.graders = graders
+
+    def grade(self, spec: str, rubric: str, artifact: str) -> Grade:
+        from statistics import median
+
+        from substrate.meter import Usage
+
+        grades = [g.grade(spec, rubric, artifact) for g in self.graders]  # a GradingError from any retries the part
+        scores = sorted(g.score for g in grades)
+        usage = None
+        if any(g.usage for g in grades):
+            usage = Usage(*(sum(getattr(g.usage, f) for g in grades if g.usage) for f in
+                            ("input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")))
+        first = grades[0]
+        reason = " | ".join(f"{g.score * 10:.0f}: {g.reason}" for g in grades)[:600]
+        return Grade(median(scores), sum(g.cost for g in grades), reason, model=first.model, price_as=first.price_as,
+                     usage=usage, real=any(g.real for g in grades), ms=max((g.ms or 0) for g in grades) or None,
+                     settle_after=max(g.settle_after for g in grades))

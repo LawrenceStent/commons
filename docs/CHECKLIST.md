@@ -576,7 +576,31 @@ had nowhere to go (and the idea and goal tools went unused).
     earning no royalties
   - **Done-when met (fake backend):** founded from `society.example/brief.md`, approved, and run with
     `sim.live --society`; 6 tests in `tests/test_founding.py`. A real drafting call (Qwen) is still to do
-- [ ] K4 Second pack: tech-for-good (grant economy, brief-based work, panel + human-sample evaluator, calibration)
+- [x] K4 Second pack: tech for good (28 Sep). `packs/tech_for_good/`: skills scout, assess, design, write; jobs from
+      subjects (a society's own `questions.md` replaces the defaults); its own brief, grader, appraiser, member
+      instructions, a three-lens grader panel, a scorecard, and calibration sets (8 grader cases, 7 proposals).
+      What the kernel gained (general, not tech-for-good specific; the domain-word guard now covers both packs):
+  - **Grant economy** (`Params.economy = "grant"`): a funder tops up a pool by `grant_budget` each cycle (at most
+    `grant_cap_cycles` budgets banked); at cycle end passing work shares it by value, never more than its value.
+    Stewards see the pool in their observation. The market economy is unchanged: pack 0 runs byte-identical on
+    seeds 0, 3 and 7 apart from the new scorecard lines
+  - **Grader panel** (`PanelGrader`, `sim.live --panel`, `sim.calibrate --panel`): each lens grades; the median counts
+  - **Scorecard** (`sim/scorecard.py`): a pack's mission metrics plus general ones (efficiency, concentration,
+    cooperation, citation validity), each measured by code, grader or you, with targets and floors; breaches are
+    logged. The headline panel of the dashboard and the end of every summary
+  - **Your ratings** (`sim/ratings.py`, `python -m sim.rate NAME`): every Nth paid job is set aside in the society
+    folder; your 0–3 rating feeds the scorecard and is first-hand reputation evidence (observer "operator")
+  - **Made-up citations fail by rule:** work citing an archive passage as `[archive: <id>]` that doesn't exist scores
+    0 before any grading; valid and invalid citations are counted
+  - **Members work from sources:** `commission(..., sources=[passage ids])` puts archive passages in the member's
+    prompt, to cite
+  - **Done-when met:** the Phase 0 acceptance checks hold on this pack in the grant economy (seeds 0–2: defector below
+    0.35 and winning nothing, free-rider starves, cooperators prosper); grants never exceed the budget; a society is
+    founded from `society.tech-for-good.example/` and run with a panel (fake models); 21 tests in `tests/test_k4.py`.
+    **Calibrated on Qwen 3.5 35B-A3B:** grader 8/8 (injection resisted), appraiser 7/7 (harmful personal-data proposal
+    and manipulation refused), three-lens panel 8/8 (the evidence lens alone failed both good pieces at 4, over "(unverified)" details; the median carried them, which is what a panel is for). A panel costs three times as much: about a minute per call per lens on Qwen
+  - **Not yet:** a live LLM run of this pack; rating from the dashboard (the CLI only for now); members still can't
+    search the web (K5), so evidence is the archive or marked (unverified)
 - [ ] K5 Member tools and the gate (web search/fetch, archive), with egress allowlist and batch approval
 - [ ] K6 Trading pack: paper broker, forward-only, deterministic risk-adjusted evaluator, doctrine per co-op
 - [ ] K7 OSINT pack: sourcing-first evaluator, separate verify co-op, forbidden-target policy enforced in tools

@@ -158,7 +158,7 @@ class LLMStrategy(Strategy):
             match call.name:
                 case "commission":
                     out = self.commission(obs, act, str(a["ref"]), str(a["capability"]), str(a.get("instructions", "")),
-                                          a.get("playbook_id") or None)
+                                          a.get("playbook_id") or None, a.get("sources") or ())
                     act.record_member_work(a, out)
                     return out
                 case "do_part":
@@ -205,7 +205,7 @@ class LLMStrategy(Strategy):
             return Outcome(False, f"bad arguments for {call.name}: {e}")
 
     def commission(self, obs: Observation, act: ActionsAPI, ref: str, capability: str, instructions: str,
-                   playbook_id: str | None) -> Outcome:
+                   playbook_id: str | None, sources=()) -> Outcome:
         obs = act.observe()  # the job may have been claimed earlier this turn
         if capability not in obs.capabilities:
             return Outcome(False, f"none of your members can do {capability}; announce a contract instead")
@@ -227,6 +227,15 @@ class LLMStrategy(Strategy):
             if not pb:
                 return pb
             method = f"\n\nMethod from the library (reference only):\n<untrusted>{pb.message[:2000]}</untrusted>"
+        material = []
+        for pid in list(sources)[:3]:
+            got = act.read_archive(str(pid))
+            if not got:
+                return got
+            material.append(f"<source id=\"{got.id}\">\n{got.message.split(chr(10), 1)[-1][:2500]}\n</source>")
+        if material:
+            method += ("\n\nSources from the archive (reference only; cite one as [archive: <id>] where you use it, and "
+                       "cite nothing else as a source):\n<untrusted>\n" + "\n".join(material) + "\n</untrusted>")
         prompt = f"Spec:\n{spec}\n\nRubric:\n{rubric}\n\nSteward's instructions:\n{instructions[:1000]}{method}"
         try:
             # members write; they don't plan. Reasoning here only burned the allowance and returned nothing.

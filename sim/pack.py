@@ -10,6 +10,8 @@ A pack supplies:
     params / live_params   overrides of the kernel's economy defaults, for scripted and live runs
     grader_system / appraiser_system / member_system   how this society judges and does its work
     grader_cases / venture_cases   hand-labelled calibration sets for its grader and appraiser
+    grader_panel     optional lenses (one system prompt each) for a panel of graders; the part gets the median
+    scorecard        mission metrics (sim/scorecard.py): what success means for this society, beyond money
 
 Packs are found by name: `load("earn_online")` imports `packs.earn_online` and returns its `PACK`. The
 kernel refers to no pack except through `DEFAULT`, the one used when a world is built without saying.
@@ -76,6 +78,8 @@ class Pack:
     member_system: str | None = None
     grader_cases: tuple = ()
     venture_cases: tuple = ()
+    grader_panel: tuple[str, ...] = ()
+    scorecard: tuple = ()
 
 
 def load(name: str | None = None) -> Pack:

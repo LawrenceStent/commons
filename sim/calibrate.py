@@ -22,6 +22,7 @@ ap.add_argument("--model", default=None, help="model id (default: claude-haiku-4
 ap.add_argument("--yes-spend", action="store_true", help="required for the anthropic backend: it costs real money")
 ap.add_argument("--max-tokens", type=int, default=400, help="raise for models that reason before answering (e.g. 3000)")
 ap.add_argument("--target", choices=("grader", "appraiser"), default="grader")
+ap.add_argument("--panel", action="store_true", help="grade with the pack's panel of lenses (median), as sim.live --panel does")
 ap.add_argument("--pack", default=None, help="whose cases and instructions to use (default earn_online)")
 a = ap.parse_args()
 pack = load_pack(a.pack)
@@ -45,6 +46,14 @@ else:
 
     grader = LLMGrader(FakeBackend(oracle), model="fake")
 
+if a.panel and a.backend != "fake":
+    from sim.grader import PanelGrader
+
+    if not pack.grader_panel:
+        sys.exit(f"the {pack.name} pack has no grader panel")
+    grader = PanelGrader([LLMGrader(grader.backend, model=grader.model, max_tokens=a.max_tokens, system=s)
+                          for s in pack.grader_panel])
+
 if a.target == "appraiser":
     from sim.ventures import LLMAppraiser
 
@@ -59,7 +68,8 @@ if a.target == "appraiser":
 
         appraiser = LLMAppraiser(FakeBackend(oracle), model="fake")
     else:
-        appraiser = LLMAppraiser(grader.backend, model=grader.model, max_tokens=max(a.max_tokens, 600), system=pack.appraiser_system)
+        one = grader.graders[0] if a.panel else grader
+        appraiser = LLMAppraiser(one.backend, model=one.model, max_tokens=max(a.max_tokens, 600), system=pack.appraiser_system)
     print(calibration.report_appraiser(calibration.run_appraiser(appraiser, pack.venture_cases)))
 else:
     print(calibration.report(calibration.run(grader, pack.grader_cases)))

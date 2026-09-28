@@ -46,8 +46,10 @@ _TOOLS: list[dict[str, Any]] = [
     {"name": "commission", "description": "Have an awake member write the work for a part, for a job you are prime "
      "on (ref = job id) or a contract you won (ref = contract id). Returns a draft id and a preview. Costs a model "
      "call, charged to your purse. Optionally pass playbook_id to work from a library playbook; the draft then "
-     "cites it. Use the draft with do_part or deliver.", "input_schema": _obj(
-        {"ref": S, "capability": S, "instructions": S, "playbook_id": S}, ["ref", "capability", "instructions"])},
+     "cites it. Optionally pass sources: up to 3 archive passage ids (from search_archive) for the member to work "
+     "from; the member cites them as [archive: <id>]. Use the draft with do_part or deliver.", "input_schema": _obj(
+        {"ref": S, "capability": S, "instructions": S, "playbook_id": S, "sources": IDS},
+        ["ref", "capability", "instructions"])},
     {"name": "deliver", "description": "Deliver a draft for a contract you won. Uses one capacity. The prime then "
      "reviews it.", "input_schema": _obj({"contract_id": S, "draft_id": S}, ["contract_id", "draft_id"])},
     {"name": "do_part", "description": "Submit a draft as a part of a job you are prime on, for a capability you "

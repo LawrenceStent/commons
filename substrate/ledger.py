@@ -3,7 +3,7 @@
 Two currencies, never exchanged:
 
     SIM   created money. It exists only in simulations: seeded from `genesis`, paid out by the
-          mock `market`, burned by notional `compute`. The dashboard shows it as "cr", never "$".
+          mock `market` (or, in a grant economy, a `funder`), burned by notional `compute`. The dashboard shows it as "cr", never "$".
     USD   real money. Every unit traces to something that happened outside: capital the owner put
           in (`owner:capital`), a customer payment (`ext:stripe`), a real API bill (`ext:anthropic`),
           or a fee (`ext:fees`).
@@ -15,6 +15,7 @@ a SIM entry can't touch a USD external account or the other way round.
 Internal accounts, one set per currency:
     purse:<community>   a community's spendable balance (never negative)
     treasury            the shared treasury (never negative)
+    grants              a grant economy's pool for this cycle (never negative)
 
 A ledger has a default currency, the one its society runs on: SIM for simulations, USD for a
 live society. Calls that don't name a currency use it.
@@ -29,7 +30,7 @@ from substrate.telemetry import NULL, Hub
 
 SIM, USD = "SIM", "USD"
 EXTERNAL: dict[str, frozenset[str]] = {
-    SIM: frozenset({"genesis", "market", "compute"}),
+    SIM: frozenset({"genesis", "market", "funder", "compute"}),
     USD: frozenset({"owner:capital", "ext:stripe", "ext:anthropic", "ext:fees"}),
 }
 ALL_EXTERNAL = frozenset().union(*EXTERNAL.values())

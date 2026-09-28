@@ -24,10 +24,11 @@ from runtime.backends import AnthropicBackend, FakeBackend, LMStudioBackend
 from runtime.fakes import GOOD_GRADE, competent
 from runtime.steward import LLMStrategy
 from sim.engine import Params, World, summary
-from sim.grader import HybridGrader, LLMGrader
+from sim.grader import HybridGrader, LLMGrader, PanelGrader
 from sim.operator import Operator
 from sim.archive import Archive
 from sim.pack import load as load_pack
+from sim.ratings import Ratings
 from sim.ventures import LLMAppraiser
 from society.community import Community
 from substrate.meter import KillSwitch
@@ -46,6 +47,10 @@ ap.add_argument("--real-ceiling", type=float, default=1.00, help="real dollars p
 ap.add_argument("--yes-spend", action="store_true", help="required for the anthropic backend")
 ap.add_argument("--serve", action="store_true", help="watch it on the dashboard")
 ap.add_argument("--operator", help="folder of directives, context and limits for the co-ops (see operator.example/)")
+ap.add_argument("--panel", action="store_true",
+                help="grade every part with the pack's panel of graders (median of its lenses; costs one call per lens)")
+ap.add_argument("--rate-every", type=int, default=3,
+                help="with --society: set every Nth paid job aside for you to rate (python -m sim.rate NAME)")
 ap.add_argument("--reasoning", action="store_true",
                 help="the local model reasons before answering: give every call more room (thinking counts against max_tokens)")
 a = ap.parse_args()
@@ -124,13 +129,19 @@ if PID.exists():
 PID.write_text(str(os.getpid()))
 atexit.register(lambda: PID.read_text() == str(os.getpid()) and PID.unlink())
 RUN = dict(parallel_turns=True, grading_workers=4)  # stewards think at once; grading 4 calls at a time
+if a.panel and not pack.grader_panel:
+    sys.exit(f"the {pack.name} pack has no grader panel")
+lenses = pack.grader_panel if a.panel else (pack.grader_system,)
+judges = [LLMGrader(backend, model=grader, max_tokens=grader_tokens, system=s) for s in lenses]
+run_name = Path(ledger).stem
 world = World(Params(seed=a.seed, ledger_path=ledger,
                      activity_path=ledger.replace(".sqlite", ".activity.jsonl"), **{**pack.live_params, **RUN}),
               population=population, pack=pack,
-              grader=HybridGrader(LLMGrader(backend, model=grader, max_tokens=grader_tokens, system=pack.grader_system)),
+              grader=HybridGrader(PanelGrader(judges) if len(judges) > 1 else judges[0]),
               appraiser=LLMAppraiser(backend, model=grader, max_tokens=grader_tokens, system=pack.appraiser_system),
               operator=Operator(a.operator) if a.operator else None,
-              archive=Archive(society.folder / "archive") if society else None)
+              archive=Archive(society.folder / "archive") if society else None,
+              ratings=Ratings(society.folder, run=run_name, every=a.rate_every) if society else None)
 if society:
     seeded = society.seed_playbooks(world)
     print(f"society {society.name}: {len(population)} co-ops, {len(world.archive)} archive passages, {seeded} seeded playbooks")
@@ -193,3 +204,5 @@ if turns:
     print(f"turns {len(turns)}: {acted} used tools · tool calls {total} ({ok} succeeded) · "
           f"most used {Counter(n for e in turns for n in e.fields['names']).most_common(6)}")
 print(f"ledger: {ledger} · turns: {turns_path} · activity: {ledger.replace('.sqlite', '.activity.jsonl')}")
+if society and world.ratings and world.ratings.samples:
+    print(f"{len(world.ratings.samples)} pieces of work set aside for you to rate: uv run python -m sim.rate {society.name}")

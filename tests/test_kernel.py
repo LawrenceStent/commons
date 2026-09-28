@@ -1,7 +1,7 @@
 """K1: the kernel knows how any society works and nothing about what one is for.
 
 Everything specific to a domain lives in a pack under packs/. This test keeps it that way: it fails if a
-domain word from the earn-online pack creeps back into the kernel.
+domain word from a pack (earn online, tech for good) creeps into the kernel.
 """
 
 import re
@@ -13,7 +13,8 @@ from sim.pack import TemplateWorkSource, load
 ROOT = Path(__file__).parent.parent
 KERNEL = ["sim", "society", "runtime", "substrate", "protocol", "console"]
 DOMAIN = re.compile(r'"(research|build|design|write)"|product|bike|espresso|buyer|marketplace|launch kit|'
-                    r'coop-[abc]|"studio"|"lab"|tagline', re.IGNORECASE)
+                    r'coop-[abc]|"studio"|"lab"|tagline|'
+                    r'"(scout|assess)"|drinking water|volunteer|funder or council', re.IGNORECASE)  # packs 0 and 1
 
 
 def test_no_domain_words_in_the_kernel():

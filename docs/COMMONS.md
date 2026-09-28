@@ -94,7 +94,7 @@ Commons replaces the planner with **a market and a reputation**:
 | 1.3 | LLM grader, model backends (structured output), calibration set | ✅ Done 25 Sep; local Hermes 8B scores 8/9 and resists injection; Anthropic calibration optional |
 | 1.4 | LLM agent runtime: steward tool loop, members, observation renderer, live runner | ✅ Done 25 Sep (tested with fake models) |
 | 1.5 | Live runs: local first, then Anthropic with a spend cap | ⏳ In progress: local smoke run done 25 Sep; small local models can't trade |
-| K1–K8 | Framework: one kernel, many societies (packs, founding from a brief, tempo and efficiency) | K1–K3 done 28 Sep (kernel/pack split; allocation, bonds and efficiency; founding from a brief, the archive, doctrine); K4–K8 planned (`docs/FRAMEWORK.md`) |
+| K1–K8 | Framework: one kernel, many societies (packs, founding from a brief, tempo and efficiency) | K1–K4 done 28 Sep (kernel/pack split; allocation, bonds and efficiency; founding from a brief, the archive, doctrine; the tech-for-good pack with grants, a grader panel, a scorecard and your ratings); K5–K8 planned (`docs/FRAMEWORK.md`) |
 | 2 | One real channel: digital products, a storefront, Stripe, the human gate | Planned (becomes pack 0's live mode) |
 | 3 | More channels: content, services, affiliate | Planned |
 | 4 | On-chain settlement (Coinbase Agentic Wallets, x402) | Planned |
@@ -252,6 +252,17 @@ Grouped by area. Terms in **bold** are used throughout the code and this guide.
 - **Archive.** Large reference material split into passages, searched on demand (`search_archive`, `read_archive`),
   so it costs tokens only when someone reads it.
 
+### Grants, scorecards and ratings (K4)
+
+- **Grant economy.** Instead of a market paying each job, a funder puts a fixed budget into a pool each cycle and
+  the work that passed grading shares it by value (reward scaled by quality), never more than its value.
+- **Scorecard.** A society's measures of success beyond money, each measured by code, the grader or you, with a
+  target or a floor. The dashboard's headline; credits are only fuel.
+- **Rating.** Your 0–3 verdict on a sampled piece of work (`python -m sim.rate NAME`): it counts on the scorecard
+  and as reputation evidence about whoever did the work.
+- **Grader panel.** Several graders, each looking hardest at one thing (evidence, usefulness, harm); the median counts.
+- **Citation rule.** Work citing an archive passage that doesn't exist fails, before any grader sees it.
+
 ### Safety and control
 
 - **Gate.** Any action that touches the outside world (publish, post, spend, sign) waits for your
@@ -361,6 +372,9 @@ deadlines). Nothing below the society layer can assign work to a community that 
 | `sim/actions.py` | 267 | The actions executor: the only way a strategy touches the world |
 | `sim/market.py` | 116 | Job generator (parts and rubrics), `Grader` interface, `StubGrader` |
 | `sim/population.py` | 229 | Spawn, retire, fork, merge, learn, proposal expiry |
+| `sim/scorecard.py` | ~140 | Scorecards: mission metrics per pack plus general ones; statuses against targets and floors |
+| `sim/ratings.py`, `sim/rate.py` | ~110, ~70 | Work set aside for your ratings; the rating CLI |
+| `packs/tech_for_good/` | ~400 | Pack 1: scout, assess, design, write; grant economy; panel lenses; scorecard; calibration sets |
 | `sim/founding.py` | ~250 | Founding: drafting blueprints from a brief, the rules they must pass, approval, loading a `Society` |
 | `sim/found.py` | ~80 | CLI: `python -m sim.found NAME --brief FILE ...` and `NAME --approve` |
 | `sim/archive.py` | ~90 | The archive: passages, BM25 search, no model call |

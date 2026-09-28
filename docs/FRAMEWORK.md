@@ -409,6 +409,11 @@ Because no one is racing:
   - Not financial advice.
 
 ### 7.3 Tech-for-good
+
+*Built in K4 (28 Sep) as `packs/tech_for_good/`. As built: work comes from subjects (your `questions.md`), the panel
+is one model read through three lenses (evidence, usefulness, harm) rather than graders from other co-ops, you rate a
+sample from the command line, and evidence is the archive or marked (unverified) until K5 brings the web. Novelty,
+feasibility realism and follow-up accuracy from §5b are not measured yet.*
 - **Capabilities:** `scout` (find initiatives, gaps, needs), `assess` (evidence, feasibility,
   impact), `design` (interventions, prototypes), `write` (briefs, proposals).
 - **Work:** briefs you post (questions or areas), plus self-directed scouting jobs that co-ops propose
