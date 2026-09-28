@@ -37,14 +37,15 @@ from sim.goals import Plans
 from sim.operator import Operator
 from sim.ventures import AppraisalError, Appraiser, StubAppraiser, Venture, value as venture_value
 from sim.grader import GradingError
-from sim.market import CAPABILITIES, Grade, Grader, MarketJob, StubGrader, generate_job
+from sim.market import Grade, Grader, MarketJob, StubGrader
+from sim.pack import Pack
+from sim.pack import load as load_pack
 from sim.population import Proposal, expire_proposals
 from society.community import Community
 from society.observation import (
     BidView, ContractView, Event, GoalView, IdeaView, VentureView, JobView, Observation, Outcome, PartView, PeerView, PlaybookView,
     ProposalView,
 )
-from society.strategies import Cooperator, Defector, FreeRider
 from substrate.bus import MemoryBus, RateLimited
 from substrate.ledger import InsufficientFunds, Ledger, purse
 from substrate.meter import Meter
@@ -131,14 +132,8 @@ class Params:
 
 
 def default_population() -> list[Community]:
-    """Twelve scripted agents in five communities."""
-    return [
-        Community("coop-a", 3, {"research", "build"}, Cooperator(), charter="research-led tools"),
-        Community("coop-b", 3, {"build", "design"}, Cooperator(), charter="product studio"),
-        Community("coop-c", 3, {"design", "write"}, Cooperator(), charter="content house"),
-        Community("defector", 2, set(CAPABILITIES), Defector(), charter="we do everything"),
-        Community("freerider", 1, {"write"}, FreeRider(), charter="-"),
-    ]
+    """The default pack's scripted co-ops (kept for callers that predate packs)."""
+    return load_pack().population()
 
 
 @dataclass
@@ -192,13 +187,14 @@ class Snapshot:
 class World:
     def __init__(self, params: Params | None = None, population: list[Community] | None = None,
                  hub: Hub | None = None, grader: Grader | None = None, appraiser: Appraiser | None = None,
-                 operator: Operator | None = None):
+                 operator: Operator | None = None, pack: Pack | None = None):
         self.params = p = params or Params()
+        self.pack = pack or load_pack()  # what this society is for: its work, vocabulary and seed co-ops
         self.hub = hub or Hub()
         self.lock = threading.RLock()  # held for every state change; see parallel_turns
         self.rng = random.Random(p.seed)
         self.cycle = 0
-        self.communities = {c.name: c for c in (population or default_population())}
+        self.communities = {c.name: c for c in (population or self.pack.population())}
         self.ledger = Ledger(p.ledger_path, hub=self.hub)
         self.meter = Meter(self.ledger, daily_ceiling=p.daily_ceiling, hub=self.hub)
         self.rep = Reputation(decay=p.decay, hub=self.hub)
@@ -228,7 +224,7 @@ class World:
         self._plan_seq = 0
         self.activity = ActivityLog(p.activity_keep, p.activity_path)
         self.activity.watch(self.hub)
-        self.known_capabilities = set(CAPABILITIES).union(*(c.capabilities for c in self.communities.values()))
+        self.known_capabilities = set(self.pack.capabilities).union(*(c.capabilities for c in self.communities.values()))
         self._job_seq = self._proposal_seq = 0
         self._stats: dict[str, Counter] = {}
 
@@ -364,7 +360,8 @@ class World:
         p = self.params
         for _ in range(p.jobs_per_cycle):
             self._job_seq += 1
-            job = generate_job(self.rng, f"J{self._job_seq}", self.cycle, p.job_reward, p.board_ttl, p.parts_per_job)
+            job = self.pack.work_source.new_job(self.rng, f"J{self._job_seq}", self.cycle, p.job_reward, p.board_ttl,
+                                                p.parts_per_job)
             self.jobs[job.id] = job
             self.hub.emit("market.job", self.cycle, id=job.id, stage="posted", caps=sorted(job.parts), reward=job.reward)
 

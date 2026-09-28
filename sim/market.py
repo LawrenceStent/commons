@@ -1,8 +1,8 @@
-"""The mock market: synthetic demand and a grader that decides what it pays for.
+"""Jobs and grading: the shapes every society's work takes, whatever the pack.
 
-Jobs are small on purpose: every part is a few lines of text a model can write and a
-grader can judge in one cheap call. Scripted policies write artifacts that carry their
-quality in a tag, `<q=0.83>`, which `StubGrader` reads back; live runs use an LLM grader.
+A job has parts, one per capability, each with a spec and a rubric. Where jobs come from is a pack's
+`WorkSource` (sim/pack.py). Scripted policies write artifacts that carry their quality in a tag,
+`<q=0.83>`, which `StubGrader` reads back; live runs use an LLM grader.
 """
 
 from __future__ import annotations
@@ -13,37 +13,6 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from substrate.meter import Usage
-
-CAPABILITIES = ("research", "build", "design", "write")
-
-PRODUCTS = (
-    "a reusable coffee cup", "a budgeting app for students", "a bike repair kit",
-    "a sleep-tracking ring", "a sourdough starter kit", "a plant-watering sensor",
-    "a language-learning podcast", "a standing desk converter", "a trail running vest",
-    "a password manager for families", "a home composting bin", "a noise-cancelling kids' headset",
-)
-
-PART_TEMPLATES: dict[str, tuple[str, str]] = {
-    "research": (
-        "List the three considerations a buyer of {product} cares about most, one line each.",
-        "Exactly three lines; each is specific to {product}, not generic; no marketing fluff.",
-    ),
-    "build": (
-        "Write a Python function `validate_order(order: dict) -> list[str]` for {product} orders "
-        "with keys name, qty, unit_price. Return a list of error strings; empty if valid.",
-        "Valid Python; checks presence and types of all three keys; qty must be a positive int; "
-        "unit_price a non-negative number; at most 20 lines.",
-    ),
-    "design": (
-        "Propose a product name and a tagline of at most six words for {product}.",
-        "Name is original and pronounceable; tagline is at most six words and says what it does.",
-    ),
-    "write": (
-        "Write a product description of 50 to 70 words for {product}.",
-        "Between 50 and 70 words; concrete benefits; no invented certifications or statistics.",
-    ),
-}
-
 
 @dataclass
 class Part:
@@ -70,22 +39,6 @@ class MarketJob:
     @property
     def complete(self) -> bool:
         return all(p.artifact is not None for p in self.parts.values())
-
-
-def generate_job(rng: random.Random, job_id: str, cycle: int, reward: int, board_ttl: int, parts: int = 2) -> MarketJob:
-    product = rng.choice(PRODUCTS)
-    caps = sorted(rng.sample(CAPABILITIES, parts))
-    return MarketJob(
-        id=job_id,
-        title=f"Launch kit for {product}",
-        reward=reward,
-        parts={
-            c: Part(c, PART_TEMPLATES[c][0].format(product=product), PART_TEMPLATES[c][1].format(product=product))
-            for c in caps
-        },
-        posted=cycle,
-        deadline=cycle + board_ttl,
-    )
 
 
 @dataclass(frozen=True)

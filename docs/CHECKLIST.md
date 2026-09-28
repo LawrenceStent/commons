@@ -533,9 +533,14 @@ had nowhere to go (and the idea and goal tools went unused).
 
 **Principle added:** effectiveness and efficiency, not speed. No mechanism may reward being first.
 
-- [ ] K1 Kernel/pack split: move market, capabilities, job templates, grader choice, the preamble's market
-      section, seed population and param defaults into `packs/earn-online/`; `Pack`, `WorkSource`, `Evaluator`,
-      `Society`. Done when every existing test passes with pack 0 and no domain words remain in the kernel
+- [x] K1 Kernel/pack split (28 Sep). `sim/pack.py`: `Pack`, `WorkSource`, a generic `TemplateWorkSource`, `load(name)`.
+      `packs/earn_online/`: its skills, job templates and products, scripted and live co-ops, live economy, a brief
+      (now a cached block in every steward's prompt), its own grader, appraiser and member instructions, and both
+      calibration sets. The kernel's prompts are neutral defaults. `--pack NAME` on `sim`, `sim.live`, `sim.calibrate`.
+      **Done-when met:** all tests pass with pack 0; scripted runs on seeds 0, 3 and 7 are byte-identical to before;
+      `tests/test_kernel.py` fails if a domain word enters the kernel, and runs a toy garden pack on the kernel
+      unchanged. (The grader and appraiser interfaces stayed as they are; a separate `Evaluator` for delayed
+      outcomes comes with K2/K6, when a pack needs one.)
 - [ ] K2 Tempo and efficiency: proposals-then-allocation with a claim bond (fixes hoarding); value scaled by
       quality; deferred settlement with escrow; efficiency metrics (value per unit of thought) in observation
       and dashboard; pack-set deadlines

@@ -303,6 +303,10 @@ class Actions:
                         said=sum(e["kind"] == "say" for e in entries), errors=[e["text"] for e in entries if e["kind"] == "error"],
                         entries=entries[-80:], started=started, ended=time.time())
 
+    def pack(self):
+        """What this society is for (its brief, member instructions): the same for every co-op."""
+        return self.w.pack
+
     def operator_view(self):
         """What this co-op's operator has told it: directives, context, limits, runtime settings."""
         return self.w.operator.view(self.me.name)

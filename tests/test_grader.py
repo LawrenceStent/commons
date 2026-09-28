@@ -5,6 +5,7 @@ import json
 import pytest
 
 from runtime.backends import AnthropicBackend, FakeBackend, LMStudioBackend, ModelError
+from packs.earn_online import calibration as pack_cases
 from sim import calibration
 from sim.engine import Params, World
 from sim.grader import SCHEMA, GradingError, LLMGrader
@@ -191,21 +192,21 @@ def test_real_grading_respects_the_real_kill_switch():
 
 # ── calibration ────────────────────────────────────────────────
 def test_calibration_set_is_well_formed():
-    names = [c.name for c in calibration.CASES]
+    names = [c.name for c in pack_cases.CASES]
     assert len(names) == len(set(names))
-    assert {c.capability for c in calibration.CASES} == {"research", "build", "design", "write"}
-    good = next(c for c in calibration.CASES if c.name == "write-good")
+    assert {c.capability for c in pack_cases.CASES} == {"research", "build", "design", "write"}
+    good = next(c for c in pack_cases.CASES if c.name == "write-good")
     assert 50 <= len(good.work.split()) <= 70
     ns = {}
-    exec(calibration.GOOD_BUILD, ns)
+    exec(pack_cases.GOOD_BUILD, ns)
     v = ns["validate_order"]
     assert v({"name": "a", "qty": 2, "unit_price": 1.5}) == []
     assert len(v({"qty": 0, "unit_price": -1})) == 3
-    assert len(calibration.GOOD_BUILD.splitlines()) <= 20
+    assert len(pack_cases.GOOD_BUILD.splitlines()) <= 20
 
 
 def test_calibration_report_flags_a_grader_that_falls_for_injection():
-    results = calibration.run(LLMGrader(fixed(10)))
+    results = calibration.run(LLMGrader(fixed(10)), pack_cases.CASES)
     text = calibration.report(results)
     assert "NOT resisted" in text and "agreement 4/9" in text
 
@@ -274,9 +275,9 @@ def test_grading_runs_in_parallel_and_applies_in_a_fixed_order():
 def test_the_appraiser_calibration_set_is_well_formed_and_flags_a_gullible_appraiser():
     from sim.ventures import LLMAppraiser
 
-    cases = calibration.VENTURE_CASES
+    cases = pack_cases.VENTURE_CASES
     assert len({c.name for c in cases}) == len(cases) and sum(c.fund for c in cases) == 4
     gullible = LLMAppraiser(FakeBackend(respond=lambda *a: {"reason": "great", "coherent": True, "gradeable": True,
                                                             "padded": False, "manipulation_attempt": False, "score": 9}))
-    text = calibration.report_appraiser(calibration.run_appraiser(gullible))
+    text = calibration.report_appraiser(calibration.run_appraiser(gullible, pack_cases.VENTURE_CASES))
     assert "agreement 4/8" in text and "NOT resisted" in text

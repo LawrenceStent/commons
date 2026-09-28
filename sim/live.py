@@ -4,8 +4,7 @@
     uv run python -m sim.live --backend lmstudio --model <id> --cycles 10 --serve
     uv run python -m sim.live --backend anthropic --yes-spend --real-ceiling 1.00 --cycles 10
 
-The population: two LLM seed communities that need each other (studio: design+write; lab:
-research+build), one scripted cooperator, and the scripted defector.
+The population and the live economy come from the pack (`--pack`, default earn_online).
 
 Every run has limits: --cycles, --max-minutes, and for real models a real-dollar ceiling (the
 kill-switch). The ledger is written to runs/. With --serve the dashboard runs at
@@ -27,13 +26,14 @@ from runtime.steward import LLMStrategy
 from sim.engine import Params, World, summary
 from sim.grader import HybridGrader, LLMGrader
 from sim.operator import Operator
+from sim.pack import load as load_pack
 from sim.ventures import LLMAppraiser
 from society.community import Community
-from society.strategies import Cooperator, Defector
 from substrate.meter import KillSwitch
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--backend", choices=("fake", "lmstudio", "anthropic"), default="fake")
+ap.add_argument("--pack", default=None, help="which society to run (a folder under packs/; default earn_online)")
 ap.add_argument("--model", help="steward model (LM Studio: the loaded model's id)")
 ap.add_argument("--member-model")
 ap.add_argument("--grader-model")
@@ -47,6 +47,8 @@ ap.add_argument("--operator", help="folder of directives, context and limits for
 ap.add_argument("--reasoning", action="store_true",
                 help="the local model reasons before answering: give every call more room (thinking counts against max_tokens)")
 a = ap.parse_args()
+
+pack = load_pack(a.pack)
 
 if a.backend == "anthropic":
     if not a.yes_spend:
@@ -79,12 +81,9 @@ def llm(name, caps, charter):
     return Community(name, 3, caps, LLMStrategy(backend, steward_model=steward, member_model=member, **room), charter=charter)
 
 
-population = [
-    llm("studio", {"design", "write"}, "We make products people want to buy: names, taglines and copy that sell."),
-    llm("lab", {"research", "build"}, "We find out what buyers need and build the tools that serve it."),
-    Community("coop-b", 3, {"build", "design"}, Cooperator(), charter="product studio (scripted)"),
-    Community("defector", 2, {"research", "build", "design", "write"}, Defector(), charter="we do everything (scripted)"),
-]
+if pack.live_population is None:
+    sys.exit(f"the {pack.name} pack has no live population")
+population = pack.live_population(llm)
 Path("runs").mkdir(exist_ok=True)
 ledger = f"runs/live-{a.backend}-{time.strftime('%Y%m%d-%H%M%S')}.sqlite"
 # runs/live.pid is both this process's real pid (`uv run` wraps us, and a signal sent to the wrapper
@@ -103,23 +102,12 @@ if PID.exists():
         pass  # a stale file from a run that died
 PID.write_text(str(os.getpid()))
 atexit.register(lambda: PID.read_text() == str(os.getpid()) and PID.unlink())
-# The live economy, calibrated on the 1.5 local runs (26 Sep): a steward call costs about 4,500 µcr
-# (about 10,000 when the model reasons), a member call a few thousand, and handling one job takes a
-# few turns plus contractors. At the scripted defaults (reward 80k) thinking bankrupted every LLM
-# community within three cycles. A 400k reward covers a job's thinking and its contractors with a
-# margin, so good work pays and waste still hurts. Tokens are now the main cost of thinking, so upkeep
-# falls; deadlines lengthen (effectiveness, not speed); fees and scripted work costs scale with rewards.
-LIVE = dict(job_reward=400_000, purse_seed=400_000, treasury_seed=10_000_000, treasury_reserve=10_000_000,
-            upkeep=2_000, basic_budget=1_500, floor_cap=4_000, work_cost=40_000, publish_cost=60_000,
-            # spawn and learn were out of reach (1.5M and 2.5M against a 400k purse: a co-op tried to spawn and
-            # couldn't); now about 60% of one job's reward and about two jobs' worth
-            spawn_fee=250_000, learn_cost=800_000, audit_cost=20_000, venture_fee=20_000,
-            board_ttl=5, job_ttl=12, bid_window=4, deliver_ttl=5, review_ttl=3, dispute_window=4,
-            parallel_turns=True, grading_workers=4)  # stewards think at the same time; actions still apply one at a time
+RUN = dict(parallel_turns=True, grading_workers=4)  # stewards think at once; grading 4 calls at a time
 world = World(Params(seed=a.seed, ledger_path=ledger,
-                     activity_path=ledger.replace(".sqlite", ".activity.jsonl"), **LIVE), population=population,
-              grader=HybridGrader(LLMGrader(backend, model=grader, max_tokens=grader_tokens)),
-              appraiser=LLMAppraiser(backend, model=grader, max_tokens=grader_tokens),
+                     activity_path=ledger.replace(".sqlite", ".activity.jsonl"), **{**pack.live_params, **RUN}),
+              population=population, pack=pack,
+              grader=HybridGrader(LLMGrader(backend, model=grader, max_tokens=grader_tokens, system=pack.grader_system)),
+              appraiser=LLMAppraiser(backend, model=grader, max_tokens=grader_tokens, system=pack.appraiser_system),
               operator=Operator(a.operator) if a.operator else None)
 if world.operator.errors:
     sys.exit(f"the operator folder has a problem: {world.operator.errors[0]}")

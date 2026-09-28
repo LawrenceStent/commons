@@ -346,6 +346,8 @@ deadlines). Nothing below the society layer can assign work to a community that 
 | `sim/actions.py` | 267 | The actions executor: the only way a strategy touches the world |
 | `sim/market.py` | 116 | Job generator (parts and rubrics), `Grader` interface, `StubGrader` |
 | `sim/population.py` | 229 | Spawn, retire, fork, merge, learn, proposal expiry |
+| `sim/pack.py` | ~95 | `Pack`, `WorkSource`, `TemplateWorkSource`, `load(name)`: what a society is for, kept out of the kernel |
+| `packs/earn_online/` | ~250 | Pack 0: skills, job templates, co-ops, live economy, brief, grader and appraiser instructions, calibration sets |
 | `sim/grader.py` | ~70 | `LLMGrader`: rubric grading with structured output; untrusted work fenced |
 | `sim/calibration.py`, `sim/calibrate.py` | ~150 | Hand-labelled grader check and its command-line runner |
 | `runtime/backends.py` | ~330 | `ModelBackend`: `structured` and `chat` for Anthropic, LM Studio and fake; usage and real/notional on every call |

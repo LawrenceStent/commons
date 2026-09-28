@@ -79,8 +79,8 @@ def test_the_steward_sees_directives_limits_and_context_as_trusted_instructions(
     w = World(Params(seed=0, verify=False), population=pop, operator=Operator(folder))
     w.step()
     system = next(c[0] for c in backend.chats if c[2] is not None)
-    assert len(system) == 3 and system[2].startswith("FROM YOUR OPERATOR")
-    assert "students" in system[2] and "House style" in system[2] and "No bid or announcement above 200000" in system[2]
+    assert len(system) == 4 and system[1].startswith("WHAT THIS SOCIETY IS FOR") and system[3].startswith("FROM YOUR OPERATOR")
+    assert "students" in system[3] and "House style" in system[3] and "No bid or announcement above 200000" in system[3]
     assert operator_block(Operator(None).view("studio")) is None  # no folder, no block
 
 

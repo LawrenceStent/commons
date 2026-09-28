@@ -2,7 +2,7 @@
 
 Three kinds of input, handled differently because they need to be:
 
-    directives  plain-language instructions ("focus on products for students"). Stewards read them every
+    directives  plain-language instructions ("focus on work for students"). Stewards read them every
                 turn in a trusted block of their system prompt, marked as coming from you. They are guidance:
                 a model can still misjudge them.
     context     reference material (notes, research, style guides), included as reference and capped in
