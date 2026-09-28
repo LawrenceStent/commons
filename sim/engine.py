@@ -33,6 +33,7 @@ from protocol import Envelope, Message
 from protocol.reputation import Gossip
 from sim.actions import Actions
 from sim.activity import ActivityLog
+from sim.archive import Archive
 from sim.goals import Plans
 from sim.operator import Operator
 from sim.ventures import AppraisalError, Appraiser, StubAppraiser, Venture, value as venture_value
@@ -196,7 +197,7 @@ class Snapshot:
 class World:
     def __init__(self, params: Params | None = None, population: list[Community] | None = None,
                  hub: Hub | None = None, grader: Grader | None = None, appraiser: Appraiser | None = None,
-                 operator: Operator | None = None, pack: Pack | None = None):
+                 operator: Operator | None = None, pack: Pack | None = None, archive: Archive | None = None):
         self.params = p = params or Params()
         self.pack = pack or load_pack()  # what this society is for: its work, vocabulary and seed co-ops
         self.hub = hub or Hub()
@@ -213,6 +214,7 @@ class World:
         self.grader = grader or StubGrader(cost=p.grade_cost)
         self.appraiser = appraiser or StubAppraiser()
         self.operator = operator or Operator(None)
+        self.archive = archive or Archive(None)  # the society's reference material, searched on demand
         self.ventures: dict[str, Venture] = {}
         self._venture_seq = 0
         self.jobs: dict[str, MarketJob] = {}
@@ -784,7 +786,7 @@ class World:
         for part in job.parts.values():
             for pid in part.cites:
                 pb = self.library.get(pid)
-                if pb and pb.author != prime:
+                if pb and pb.author != prime and pb.author in self.communities:  # seeded playbooks earn no one royalties
                     weights[pb.author] += 1
                     pb.uses += 1
         # the commons takes only what it needs: no treasury share while the treasury is at its reserve
@@ -953,6 +955,8 @@ class World:
             ventures=tuple(VentureView(v.id, v.title, v.status, v.score, v.reward, v.reason, v.job_id, v.cycle)
                            for v in list(self.ventures.values()) if v.proposer == name)[-5:],
             efficiency=self.efficiency(name),
+            doctrine=me.doctrine,
+            archive=(len(self.archive), tuple(sorted({p.source for p in self.archive.passages.values()}))),
             pending_claims=tuple(self.pending_claims(name)),
             goals=tuple(GoalView(g.id, g.title, g.status, tuple((s.text, s.done, s.note) for s in g.steps), round(g.progress, 2))
                         for g in self.plans[name].active()),

@@ -26,6 +26,7 @@ from runtime.steward import LLMStrategy
 from sim.engine import Params, World, summary
 from sim.grader import HybridGrader, LLMGrader
 from sim.operator import Operator
+from sim.archive import Archive
 from sim.pack import load as load_pack
 from sim.ventures import LLMAppraiser
 from society.community import Community
@@ -34,6 +35,7 @@ from substrate.meter import KillSwitch
 ap = argparse.ArgumentParser()
 ap.add_argument("--backend", choices=("fake", "lmstudio", "anthropic"), default="fake")
 ap.add_argument("--pack", default=None, help="which society to run (a folder under packs/; default earn_online)")
+ap.add_argument("--society", help="run a founded society from societies/NAME (its pack, brief, co-ops, archive, operator)")
 ap.add_argument("--model", help="steward model (LM Studio: the loaded model's id)")
 ap.add_argument("--member-model")
 ap.add_argument("--grader-model")
@@ -48,7 +50,20 @@ ap.add_argument("--reasoning", action="store_true",
                 help="the local model reasons before answering: give every call more room (thinking counts against max_tokens)")
 a = ap.parse_args()
 
-pack = load_pack(a.pack)
+society = None
+if a.society:
+    from sim import founding
+
+    try:
+        society = founding.load(a.society)
+    except founding.FoundingError as e:
+        sys.exit(str(e))
+    pack = society.pack
+    a.seed = society.seed
+    if not a.operator and (society.folder / "operator").exists():
+        a.operator = str(society.folder / "operator")
+else:
+    pack = load_pack(a.pack)
 
 if a.backend == "anthropic":
     if not a.yes_spend:
@@ -77,15 +92,21 @@ else:
     grader_tokens = 6000 if a.reasoning else 400
 
 
-def llm(name, caps, charter):
-    return Community(name, 3, caps, LLMStrategy(backend, steward_model=steward, member_model=member, **room), charter=charter)
+def llm(name, caps, charter, members=3, doctrine=""):
+    c = Community(name, members, caps, LLMStrategy(backend, steward_model=steward, member_model=member, **room), charter=charter)
+    c.doctrine = doctrine
+    return c
 
 
-if pack.live_population is None:
+if society:
+    population = society.population(llm)
+elif pack.live_population is None:
     sys.exit(f"the {pack.name} pack has no live population")
-population = pack.live_population(llm)
-Path("runs").mkdir(exist_ok=True)
-ledger = f"runs/live-{a.backend}-{time.strftime('%Y%m%d-%H%M%S')}.sqlite"
+else:
+    population = pack.live_population(llm)
+runs = society.folder / "runs" if society else Path("runs")
+runs.mkdir(parents=True, exist_ok=True)
+ledger = str(runs / f"live-{a.backend}-{time.strftime('%Y%m%d-%H%M%S')}.sqlite")
 # runs/live.pid is both this process's real pid (`uv run` wraps us, and a signal sent to the wrapper
 # doesn't reach the world) and a lock: one live run at a time, per the resource guardrails. A second run
 # once overwrote and then deleted the first run's pid file; now it refuses to start.
@@ -108,7 +129,11 @@ world = World(Params(seed=a.seed, ledger_path=ledger,
               population=population, pack=pack,
               grader=HybridGrader(LLMGrader(backend, model=grader, max_tokens=grader_tokens, system=pack.grader_system)),
               appraiser=LLMAppraiser(backend, model=grader, max_tokens=grader_tokens, system=pack.appraiser_system),
-              operator=Operator(a.operator) if a.operator else None)
+              operator=Operator(a.operator) if a.operator else None,
+              archive=Archive(society.folder / "archive") if society else None)
+if society:
+    seeded = society.seed_playbooks(world)
+    print(f"society {society.name}: {len(population)} co-ops, {len(world.archive)} archive passages, {seeded} seeded playbooks")
 if world.operator.errors:
     sys.exit(f"the operator folder has a problem: {world.operator.errors[0]}")
 world.meter.real_ceiling = round(a.real_ceiling * 1e6)

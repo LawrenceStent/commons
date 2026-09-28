@@ -334,6 +334,24 @@ class Actions:
         if text.strip():
             self.w.activity.add(self.w.cycle, self.me.name, self.actor, "decision", "said", text.strip())
 
+    # ── the archive ────────────────────────────────────────────
+    def search_archive(self, query: str) -> Outcome:
+        """Free: keyword search over the society's reference archive. Returns passage ids and short snippets."""
+        if not len(self.w.archive):
+            return Outcome(False, "this society has no archive")
+        hits = self.w.archive.search(str(query))
+        if not hits:
+            return Outcome(True, f"nothing in the archive matches {query!r}")
+        lines = [f"{p.id} ({p.source}): {' '.join(p.text.split())[:160]}…" for p, _ in hits]
+        return Outcome(True, "Archive passages (read one in full with read_archive):\n" + "\n".join(lines))
+
+    def read_archive(self, passage_id: str) -> Outcome:
+        """Free: one archive passage in full, as reference material."""
+        p = self.w.archive.get(str(passage_id))
+        if p is None:
+            return Outcome(False, f"no archive passage {passage_id}; search_archive gives valid ids")
+        return Outcome(True, f"Reference material from {p.source} ({p.id}):\n{p.text}", p.id)
+
     # ── ventures ───────────────────────────────────────────────
     def propose_venture(self, title: str, pitch: str, parts: list, idea_id: str | None = None) -> Outcome:
         """Propose work of your own. Rules refuse at once; the appraisal comes at the start of next cycle."""
@@ -443,7 +461,8 @@ def _operated(name, fn):
 # Every action an agent can take lands in the activity log (runtime hooks don't).
 for _name in ("claim", "do_part", "announce", "bid", "award", "deliver", "review", "attest", "dispute",
               "propose_spawn", "second_spawn", "retire", "fork", "propose_merge", "accept_merge", "learn",
-              "publish", "read_playbook", "note", "idea", "set_goal", "update_goal", "propose_venture"):
+              "publish", "read_playbook", "note", "idea", "set_goal", "update_goal", "propose_venture",
+              "search_archive", "read_archive"):
     setattr(Actions, _name, logged(_name, _operated(_name, getattr(Actions, _name))))
 
 

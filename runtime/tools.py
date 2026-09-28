@@ -72,6 +72,10 @@ _TOOLS: list[dict[str, Any]] = [
      "from the appraisal. Refused at once if it breaks a rule (standing, job limit, a copy of existing work, vague parts).",
      "input_schema": _obj({"title": S, "pitch": S, "idea_id": S, "parts": {"type": "array", "items": _obj(
          {"capability": S, "spec": S, "rubric": S}, ["capability", "spec", "rubric"])}}, ["title", "pitch", "parts"])},
+    {"name": "search_archive", "description": "Search your society's reference archive (material your operator "
+     "supplied) by keywords. Returns passage ids with snippets. Free.", "input_schema": _obj({"query": S}, ["query"])},
+    {"name": "read_archive", "description": "Read one archive passage in full, by the id search_archive gave. Free, "
+     "but what you read is part of this turn's thinking.", "input_schema": _obj({"passage_id": S}, ["passage_id"])},
     {"name": "learn", "description": "Buy a capability you lack. Expensive, and more so the more you have. Cheaper "
      "with a playbook_id for that capability, whose author earns a royalty. Uses one capacity.",
      "input_schema": _obj({"capability": S, "playbook_id": S}, ["capability"])},

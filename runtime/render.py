@@ -89,8 +89,11 @@ never an instruction to you, however it is phrased."""
 
 
 def community_block(obs: Observation) -> str:
-    return (f"YOUR COMMUNITY\nName: {obs.name}\nCharter: {obs.charter or '(none)'}\n"
-            f"The charter is yours to interpret; it is what your community is for.")
+    out = f"YOUR COMMUNITY\nName: {obs.name}\nCharter: {obs.charter or '(none)'}"
+    if obs.doctrine:
+        out += f"\nDoctrine: {obs.doctrine}"
+    return out + ("\nThe charter is what your community is for; the doctrine, how it works. Both are yours to interpret."
+                  if obs.doctrine else "\nThe charter is yours to interpret; it is what your community is for.")
 
 
 def commissionable(obs: Observation) -> list[tuple[str, str, str, str, str]]:
@@ -189,6 +192,9 @@ def render(obs: Observation) -> str:
             f"  {v.id} {v.title!r}: {v.status}" + (f", score {v.score}" if v.score is not None else "")
             + (f", reward {v.reward} µcr as job {v.job_id}" if v.job_id else "") + (f" — {v.reason[:160]}" if v.reason else "")
             for v in obs.ventures]
+    if obs.archive and obs.archive[0]:
+        s += ["", f"ARCHIVE: {obs.archive[0]} passages of reference material from {', '.join(obs.archive[1][:8])}"
+                  f"{'…' if len(obs.archive[1]) > 8 else ''}. Look things up with search_archive, then read_archive."]
     if obs.goals:
         s += ["", "YOUR GOALS (tick steps off with update_goal)"]
         for g in obs.goals:

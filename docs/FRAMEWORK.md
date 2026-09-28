@@ -220,11 +220,18 @@ Three generalisations the kernel needs for these to work:
 The rule: **small and stable goes in the prompt; large or occasionally needed goes in the archive.**
 Stuffing documents into the prompt makes every call of every turn pay for them.
 
-### 5.2 Founding: from a brief to co-ops
+### 5.2 Founding: from a brief to co-ops (built in K3)
 
 ```
-commons found tech-for-good --brief brief.md --context ./material/ --coops 4
+uv run python -m sim.found tech-for-good --pack earn_online --brief brief.md --context ./material/ --coops 4 \
+    --backend lmstudio --model <id>
+uv run python -m sim.found tech-for-good --approve
+uv run python -m sim.live --society tech-for-good --backend lmstudio --model <id>
 ```
+
+As built: blueprints are TOML (`blueprints.toml`, `approved = false` until you approve), there is no starting purse per
+co-op yet (the pack's `purse_seed` applies), and "own ledger, bus, workspace" means a fresh world per run with its files
+under `societies/<name>/runs/`. See `society.example/`.
 
 1. **You write a brief**: purpose, what good looks like, what's off limits. For trading you also
    list the strategies you want tried, one per co-op.

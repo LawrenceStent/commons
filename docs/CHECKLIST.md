@@ -527,7 +527,7 @@ had nowhere to go (and the idea and goal tools went unused).
 - [x] Re-read every cycle; a broken config keeps the last good one and shows the error; every change is in the
       activity log. The dashboard's Operator panel shows each co-op's limits and context and edits directives live
 - [x] `sim.live --operator DIR`; 10 tests in `tests/test_operator.py`, including path escapes and unknown limits
-- [ ] Large material: the searchable archive (K3), so big documents don't ride along on every call
+- [x] Large material: the searchable archive (built in K3), so big documents don't ride along on every call
 
 ## Framework track: one kernel, many societies (planned 26 Sep; see `docs/FRAMEWORK.md`)
 
@@ -557,8 +557,25 @@ had nowhere to go (and the idea and goal tools went unused).
     price of removing the race. Economy is leaner: cooperators 1.9–2.6 per unit of thought, defector 0.02. Without
     reputation, bonds can collapse the whole economy (primes keep hiring the defector and forfeit), so the control-run
     check now accepts either "defection pays 10×" or "output below 10%"; both show reputation doing the work
-- [ ] K3 Context and founding: brief and charter/doctrine as cached system blocks; archive and `read_archive`;
-      `commons found` (blueprints drafted, you approve); per-society isolation and `runs/<society>/` layout
+- [x] K3 Context and founding (28 Sep):
+  - **Society folders:** `societies/<name>/` (git-ignored) holds `society.toml` (pack, seed), `brief.md`,
+    `blueprints.toml`, `archive/`, `playbooks/`, an optional `operator/`, and its own `runs/`. `society.example/` shows one
+  - **Founding:** `python -m sim.found NAME --pack P --brief FILE [--context DIR] [--coops N] --backend ...` makes one
+    structured model call that drafts blueprints (name, kind, members, capabilities, charter, doctrine). Doctrines named
+    in the brief are copied word for word; context is summarised into the call as untrusted reference. Founding happens
+    once: a folder with blueprints is refused
+  - **Approval is yours:** you edit `blueprints.toml`, then `--approve` checks it against rules (2–12 co-ops, unique
+    names, 1–7 members, capabilities from the pack, LLM co-ops need a charter; warnings for all-skill co-ops and
+    uncovered skills). `sim.live --society NAME` refuses unapproved or rule-breaking blueprints
+  - **Brief and doctrine as cached blocks:** the society's brief is added to the pack brief ("THIS SOCIETY, IN ITS
+    OPERATOR'S WORDS"); a co-op's doctrine (how it works) sits beside its charter (what it's for) in its own block
+  - **Archive:** `sim/archive.py` splits `.md`/`.txt` into ~800-character passages ranked with BM25 (no model call).
+    Stewards get free `search_archive(query)` and `read_archive(passage_id)` tools; the observation says how many
+    passages exist. Shown as reference, never as instructions
+  - **Seed playbooks:** `playbooks/<capability>--<title>.md` go into the library at genesis, authored by "operator",
+    earning no royalties
+  - **Done-when met (fake backend):** founded from `society.example/brief.md`, approved, and run with
+    `sim.live --society`; 6 tests in `tests/test_founding.py`. A real drafting call (Qwen) is still to do
 - [ ] K4 Second pack: tech-for-good (grant economy, brief-based work, panel + human-sample evaluator, calibration)
 - [ ] K5 Member tools and the gate (web search/fetch, archive), with egress allowlist and batch approval
 - [ ] K6 Trading pack: paper broker, forward-only, deterministic risk-adjusted evaluator, doctrine per co-op

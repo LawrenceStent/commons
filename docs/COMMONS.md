@@ -94,7 +94,7 @@ Commons replaces the planner with **a market and a reputation**:
 | 1.3 | LLM grader, model backends (structured output), calibration set | ✅ Done 25 Sep; local Hermes 8B scores 8/9 and resists injection; Anthropic calibration optional |
 | 1.4 | LLM agent runtime: steward tool loop, members, observation renderer, live runner | ✅ Done 25 Sep (tested with fake models) |
 | 1.5 | Live runs: local first, then Anthropic with a spend cap | ⏳ In progress: local smoke run done 25 Sep; small local models can't trade |
-| K1–K8 | Framework: one kernel, many societies (packs, founding from a brief, tempo and efficiency) | Planned 26 Sep (`docs/FRAMEWORK.md`) |
+| K1–K8 | Framework: one kernel, many societies (packs, founding from a brief, tempo and efficiency) | K1–K3 done 28 Sep (kernel/pack split; allocation, bonds and efficiency; founding from a brief, the archive, doctrine); K4–K8 planned (`docs/FRAMEWORK.md`) |
 | 2 | One real channel: digital products, a storefront, Stripe, the human gate | Planned (becomes pack 0's live mode) |
 | 3 | More channels: content, services, affiliate | Planned |
 | 4 | On-chain settlement (Coinbase Agentic Wallets, x402) | Planned |
@@ -239,6 +239,19 @@ Grouped by area. Terms in **bold** are used throughout the code and this guide.
   `operator/` folder, re-read every cycle, and can be edited from the dashboard. Directives are guidance a model
   can misjudge; limits are enforced.
 
+### Societies and founding (K3)
+
+- **Society.** One economy with its own folder (`societies/<name>/`): a pack, a seed, your brief, its co-ops'
+  blueprints, an archive, seed playbooks, an optional operator folder and its runs.
+- **Founding.** A one-off drafting call that turns your brief into blueprints. You edit and approve them; nothing runs
+  before that. Afterwards no one is in charge: new co-ops come only from spawn, fork and merge.
+- **Blueprint.** One co-op's constitution: name, kind (llm or a scripted test kind), members, capabilities, charter,
+  doctrine.
+- **Charter / doctrine.** What a co-op is for / how it works (a method, a strategy, a beat). Both sit in a cached
+  block of its steward's prompt.
+- **Archive.** Large reference material split into passages, searched on demand (`search_archive`, `read_archive`),
+  so it costs tokens only when someone reads it.
+
 ### Safety and control
 
 - **Gate.** Any action that touches the outside world (publish, post, spend, sign) waits for your
@@ -348,6 +361,9 @@ deadlines). Nothing below the society layer can assign work to a community that 
 | `sim/actions.py` | 267 | The actions executor: the only way a strategy touches the world |
 | `sim/market.py` | 116 | Job generator (parts and rubrics), `Grader` interface, `StubGrader` |
 | `sim/population.py` | 229 | Spawn, retire, fork, merge, learn, proposal expiry |
+| `sim/founding.py` | ~250 | Founding: drafting blueprints from a brief, the rules they must pass, approval, loading a `Society` |
+| `sim/found.py` | ~80 | CLI: `python -m sim.found NAME --brief FILE ...` and `NAME --approve` |
+| `sim/archive.py` | ~90 | The archive: passages, BM25 search, no model call |
 | `sim/pack.py` | ~95 | `Pack`, `WorkSource`, `TemplateWorkSource`, `load(name)`: what a society is for, kept out of the kernel |
 | `packs/earn_online/` | ~250 | Pack 0: skills, job templates, co-ops, live economy, brief, grader and appraiser instructions, calibration sets |
 | `sim/grader.py` | ~70 | `LLMGrader`: rubric grading with structured output; untrusted work fenced |

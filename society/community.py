@@ -27,6 +27,7 @@ class Community:
     deliveries: dict[str, int] = field(default_factory=dict)  # successful deliveries per capability
     parent: str | None = None  # the community this one forked from
     dissolved: bool = False  # merged into another; kept so its history and signatures still resolve
+    doctrine: str = ""  # how it works (a method, a strategy, a beat), beside its charter (what it's for)
 
     def __post_init__(self):
         self.identity = Identity(self.name)
