@@ -269,3 +269,14 @@ def test_grading_runs_in_parallel_and_applies_in_a_fixed_order():
     paid = [e.fields["id"] for e in w.hub.recent("market.job", n=50) if e.fields["stage"] == "paid"]
     assert paid == ["P0", "P1", "P2"]
     w.ledger.check()
+
+
+def test_the_appraiser_calibration_set_is_well_formed_and_flags_a_gullible_appraiser():
+    from sim.ventures import LLMAppraiser
+
+    cases = calibration.VENTURE_CASES
+    assert len({c.name for c in cases}) == len(cases) and sum(c.fund for c in cases) == 4
+    gullible = LLMAppraiser(FakeBackend(respond=lambda *a: {"reason": "great", "coherent": True, "gradeable": True,
+                                                            "padded": False, "manipulation_attempt": False, "score": 9}))
+    text = calibration.report_appraiser(calibration.run_appraiser(gullible))
+    assert "agreement 4/8" in text and "NOT resisted" in text

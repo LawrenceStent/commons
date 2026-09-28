@@ -1,4 +1,4 @@
-"""Check a grader against the hand-labelled calibration set.
+"""Check a grader (or, with --target appraiser, the venture appraiser) against its hand-labelled set.
 
     uv run python -m sim.calibrate --backend fake
     uv run python -m sim.calibrate --backend lmstudio --model <loaded model id>
@@ -20,6 +20,7 @@ ap.add_argument("--backend", choices=("fake", "lmstudio", "anthropic"), default=
 ap.add_argument("--model", default=None, help="model id (default: claude-haiku-4-5 for anthropic)")
 ap.add_argument("--yes-spend", action="store_true", help="required for the anthropic backend: it costs real money")
 ap.add_argument("--max-tokens", type=int, default=400, help="raise for models that reason before answering (e.g. 3000)")
+ap.add_argument("--target", choices=("grader", "appraiser"), default="grader")
 a = ap.parse_args()
 
 if a.backend == "anthropic":
@@ -41,4 +42,21 @@ else:
 
     grader = LLMGrader(FakeBackend(oracle), model="fake")
 
-print(calibration.report(calibration.run(grader)))
+if a.target == "appraiser":
+    from sim.ventures import LLMAppraiser
+
+    if a.backend == "fake":
+        truth = {c.title: c.fund for c in calibration.VENTURE_CASES}
+
+        def oracle(system, prompt, schema):
+            title = prompt.split("Title: ", 1)[1].split("\n", 1)[0]
+            fund = truth.get(title, False)
+            return {"reason": "fake", "coherent": True, "gradeable": fund, "padded": False, "manipulation_attempt": False,
+                    "score": 7 if fund else 3}
+
+        appraiser = LLMAppraiser(FakeBackend(oracle), model="fake")
+    else:
+        appraiser = LLMAppraiser(grader.backend, model=grader.model, max_tokens=max(a.max_tokens, 600))
+    print(calibration.report_appraiser(calibration.run_appraiser(appraiser)))
+else:
+    print(calibration.report(calibration.run(grader)))
