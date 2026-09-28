@@ -162,7 +162,9 @@ Grouped by area. Terms in **bold** are used throughout the code and this guide.
 - **Venture.** Work a co-op thinks up itself: it proposes a product or service in parts, deterministic
   rules refuse bad proposals at once, an appraiser scores the rest, a fixed formula sets the reward, and
   the market approves the best-scored within a budget. An approved venture becomes the proposer's own job.
-- **Claim.** Taking a job off the board. The claimant becomes the job's **prime** and must submit all
+- **Claim.** Asking for a job on the board. Since K2, claims are allocated at the end of the cycle to the most
+  trusted, best-fitting, least-loaded claimant, and the winner posts a bond (returned when paid, lost if the job
+  fails). Before K2: taking a job off the board. The claimant becomes the job's **prime** and must submit all
   parts by the job's deadline.
 - **Contract-net.** The protocol for buying work from peers:
   **announce → bid → award → deliver → review (settle)**. It is the only way to get help, because

@@ -541,9 +541,22 @@ had nowhere to go (and the idea and goal tools went unused).
       `tests/test_kernel.py` fails if a domain word enters the kernel, and runs a toy garden pack on the kernel
       unchanged. (The grader and appraiser interfaces stayed as they are; a separate `Evaluator` for delayed
       outcomes comes with K2/K6, when a pack needs one.)
-- [ ] K2 Tempo and efficiency: proposals-then-allocation with a claim bond (fixes hoarding); value scaled by
-      quality; deferred settlement with escrow; efficiency metrics (value per unit of thought) in observation
-      and dashboard; pack-set deadlines
+- [x] K2 Tempo and efficiency (28 Sep):
+  - **Allocation, not a race:** claims are registered during a cycle and allocated at its end: most trusted, then
+    best fit (parts it can do itself), then least loaded; ties by a draw seeded from the job. Tested: the first to
+    claim doesn't win, and swapping who asks first doesn't change the winner
+  - **Claim bond:** 10% of the reward into escrow on winning; returned when paid, forfeited to the treasury if the job
+    fails. **Tested: a hoarder that claims everything and works nothing loses bonds and ends poorer than a cooperator**
+  - **Pay scales with quality:** half the reward depends on the mean part score (`quality_pay`); every part must pass
+  - **Deferred settlement:** a grade may say `settle_after` N cycles; the job waits ("graded"), the grader may re-judge
+    via `settle(job)`, then it pays or fails. Groundwork for trading and OSINT
+  - **Efficiency:** earned per unit spent thinking, in every observation ("Efficiency: earned X for Y spent") and on a
+    dashboard panel (earned against spent, with the break-even line)
+  - **Pack-set deadlines:** already possible (deadlines are params a pack overrides)
+  - **Findings:** allocation costs scripted societies about 25% of jobs (a prime starts work the turn after winning), the
+    price of removing the race. Economy is leaner: cooperators 1.9–2.6 per unit of thought, defector 0.02. Without
+    reputation, bonds can collapse the whole economy (primes keep hiring the defector and forfeit), so the control-run
+    check now accepts either "defection pays 10×" or "output below 10%"; both show reputation doing the work
 - [ ] K3 Context and founding: brief and charter/doctrine as cached system blocks; archive and `read_archive`;
       `commons found` (blueprints drafted, you approve); per-society isolation and `runs/<society>/` layout
 - [ ] K4 Second pack: tech-for-good (grant economy, brief-based work, panel + human-sample evaluator, calibration)
