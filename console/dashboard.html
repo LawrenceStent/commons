@@ -180,13 +180,15 @@ pre { margin:0; font:12px/1.55 var(--mono); white-space:pre-wrap; }
   <section class="w6"><h2>Population <small>spawn · fork · merge · learn</small></h2><div id="population"></div></section>
   <section class="w6"><h2>Knowledge</h2><div id="knowledge"></div></section>
   <section class="w6"><h2>LLM calls</h2><div id="llm"></div></section>
-  <section class="w6"><h2>Grader &amp; gate</h2><div id="grader"></div></section>
+  <section class="w6"><h2>Grader</h2><div id="grader"></div></section>
 
   <section class="w6"><h2>Host</h2><div id="host"></div></section>
   <section class="w6"><h2>Telemetry <small>events since start, by kind</small></h2><div id="events"></div></section>
 
   <section class="w8"><h2>Goals &amp; progress <small>agents' own goals, and every job in progress</small></h2><div id="goals"></div></section>
   <section class="w4"><h2>Ventures &amp; ideas <small>work the co-ops thought up</small></h2><div id="ideas"></div></section>
+
+  <section class="w12"><h2>Gate <small id="gate-note">web access and anything else outside: nothing runs unless your policy allows it or you approve it</small></h2><div id="gate"></div></section>
 
   <section class="w12"><h2>Operator <small>your directives, context and limits for the co-ops; saved directives apply from the next turn</small></h2><div id="operator"></div></section>
 
@@ -258,6 +260,22 @@ function render(s) {
   $("banner").className = r.pause_reason || r.halted ? "on" : "";
   $("banner").textContent = r.halted ? `Kill-switch is on. ${r.pause_reason || ""}` : (r.pause_reason || "");
   $("s-cycle").textContent = r.cycle.toLocaleString();
+  // the gate: pending requests batched by co-op, tool and host; decide a whole batch at once
+  const g = s.gate || {groups: [], recent: [], standing: [], policy: {}};
+  const pol = g.policy || {};
+  $("gate-note").textContent = !g.web ? "this run has no web access"
+    : (pol.allow_hosts || []).length ? `reads: ${pol.read} · hosts: ${pol.allow_hosts.join(", ")} · at most ${pol.per_cycle} web calls per co-op per cycle`
+    : "no hosts allowed: add [gate] allow_hosts to the operator's config.toml";
+  $("gate").innerHTML = (g.groups.length ? `<table><tr><th>co-op</th><th>tool</th><th>host</th><th>asks for</th><th></th></tr>${g.groups.map(x =>
+      `<tr><td>${esc(x.coop)}</td><td class="mono">${esc(x.tool)}</td><td class="mono">${esc(x.host)}</td>
+       <td>${x.targets.map(t => `<div class="mono muted">${esc(t)}</div>`).join("")}${x.ids.length > x.targets.length ? `<div class="muted">and ${x.ids.length - x.targets.length} more</div>` : ""}</td>
+       <td style="white-space:nowrap"><button data-gate="approve" data-ids="${esc(x.ids.join(","))}">approve ${x.ids.length}</button>
+         <button data-gate="always" data-ids="${esc(x.ids.join(","))}" title="and let ${esc(x.coop)} read from ${esc(x.host)} from now on">always</button>
+         <button data-gate="deny" data-ids="${esc(x.ids.join(","))}">deny</button></td></tr>`).join("")}</table>`
+    : empty("Nothing waiting for you."))
+    + (g.standing.length ? `<p class="muted">Standing approvals: ${g.standing.map(([c, h]) =>
+        `${esc(c)} → ${esc(h)} <button data-revoke="${esc(c)}|${esc(h)}">revoke</button>`).join(" · ")}</p>` : "")
+    + (g.recent.length ? `<p class="muted">Recent: ${g.recent.slice(0, 8).map(x => `${esc(x.id)} ${esc(x.coop)} ${esc(x.tool)} <span class="${x.status === "done" ? "good" : x.status === "approved" ? "" : "warn"}">${esc(x.status)}</span>`).join(" · ")}</p>` : "");
   // scorecard: the society's mission metrics first, then the general ones; status in words and colour
   const so = s.society || {scorecard: []};
   const fmtMetric = m => m.value === null || m.value === undefined ? "–"
@@ -384,7 +402,7 @@ function render(s) {
        <td class="num ${g.score < 0.5 ? "bad" : ""}">${g.score.toFixed(2)}</td><td class="num">${g.real ? usd(g.cost) : amt(g.cost)}</td>
        <td class="muted" style="white-space:normal;min-width:220px">${esc(g.reason || (g.model ? "" : "scripted: quality read from the tag"))}</td></tr>`))
       : empty("No grading yet. Scripted runs declare their own quality.")) +
-    `<h2 style="margin-top:12px">Gate queue</h2>` + (s.gate.length ? "" : empty("No pending requests. Nothing touches the outside world until Phase 2."));
+    `<p class="muted">Gate: ${(s.gate.groups || []).reduce((n, x) => n + x.ids.length, 0)} request(s) waiting; see the Gate panel.</p>`;
 
   const H = s.host, lm = H.lmstudio || {};
   const frac = H.rss ? H.rss / r.rss_limit : 0;
@@ -477,6 +495,18 @@ document.addEventListener("click", async e => {
     if (!res.ok) alert((await res.json()).error);
   }
   if (c) drill(c.dataset.c);
+  const gb = e.target.closest("[data-gate]"), rv = e.target.closest("[data-revoke]");
+  if (gb) {
+    const kind = gb.dataset.gate;
+    const res = await fetch("/api/gate", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ids: gb.dataset.ids.split(","), approve: kind !== "deny", always: kind === "always"})});
+    gb.textContent = res.ok ? "done ✓" : "failed";
+  }
+  if (rv) {
+    const [coop, host] = rv.dataset.revoke.split("|");
+    await fetch("/api/gate", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({revoke: {coop, host}})});
+    rv.textContent = "revoked";
+  }
   const save = e.target.closest("[data-op-save]");
   if (save) {
     const key = save.dataset.opSave, text = document.querySelector(`textarea[data-op="${CSS.escape(key)}"]`).value;

@@ -40,6 +40,7 @@ from protocol.reputation import Gossip
 from sim.actions import Actions
 from sim.activity import ActivityLog
 from sim.archive import Archive, citations as archive_citations
+from sim.gate import Gate, Request as GateRequest
 from sim.goals import Plans
 from sim.operator import Operator
 from sim.ventures import AppraisalError, Appraiser, StubAppraiser, Venture, value as venture_value
@@ -212,7 +213,7 @@ class World:
     def __init__(self, params: Params | None = None, population: list[Community] | None = None,
                  hub: Hub | None = None, grader: Grader | None = None, appraiser: Appraiser | None = None,
                  operator: Operator | None = None, pack: Pack | None = None, archive: Archive | None = None,
-                 ratings: Ratings | None = None):
+                 ratings: Ratings | None = None, web=None, gate: Gate | None = None):
         self.params = p = params or Params()
         self.pack = pack or load_pack()  # what this society is for: its work, vocabulary and seed co-ops
         self.hub = hub or Hub()
@@ -231,6 +232,14 @@ class World:
         self.operator = operator or Operator(None)
         self.archive = archive or Archive(None)  # the society's reference material, searched on demand
         self.ratings = ratings  # your ratings of a sample of the paid work (sim/ratings.py)
+        # the web: a runtime.web.WebAccess (None = no web at all), behind the gate (sim/gate.py), whose policy is
+        # the operator's [gate] section
+        self.web = web
+        self.gate = gate or Gate()
+        self.gate.policy = self.operator.gate
+        if self.web:
+            self.web.set_hosts(self.gate.policy.allow_hosts)
+        self.web_pages: dict[str, list[str]] = {}  # url -> archive passage ids, for pages read this run
         self.outputs: deque[dict] = deque(maxlen=p.outputs_keep)  # paid work, newest last: who did what, how it scored
         self.citations: Counter[str] = Counter()  # archive citations checked: valid / invalid
         self._cite_lock = threading.Lock()  # grading runs in threads
@@ -328,6 +337,10 @@ class World:
             self.rep.cycle = self.cycle
             if self.operator.reload():  # your directives, context and limits, re-read every cycle
                 self.hub.emit("operator.update", self.cycle, coops=sorted(self.operator.views), errors=self.operator.errors)
+                self.gate.policy = self.operator.gate
+                if self.web:
+                    self.web.set_hosts(self.gate.policy.allow_hosts)
+            self._gate_cycle()
             self.bus.begin_cycle(self.cycle)
             self._stats = {n: Counter() for n in self.communities}
             self._fund_grants()
@@ -340,6 +353,7 @@ class World:
             order = self._active()
             self.rng.shuffle(order)  # turn order must not decide who wins
         self._appraise_ventures()
+        self._run_approved_web()
         if self.params.parallel_turns and len(order) > 1:
             # the lock is released here: each action takes it, model calls don't
             with ThreadPoolExecutor(max_workers=self.params.parallel_workers) as pool:
@@ -738,6 +752,100 @@ class World:
         self._charge_grade(g, job=c.job_id, part=c.capability, payers=("treasury", purse(c.winner)), audit=cid)
         self._apply_audit(c, g, entry["reason"])
 
+    # ── the web, behind the gate ───────────────────────────────
+    def _gate_cycle(self) -> None:
+        """A new cycle for the gate: fresh web budgets, your decisions from file, expired requests. Under the lock."""
+        self.gate.begin_cycle()
+        for r in self.gate.reload():
+            self._gate_decided(r)
+        for r in self.gate.expire(self.cycle):
+            self._tell(r.coop, "gate", f"{r.id} ({r.tool} {r.target[:80]}) expired without a decision", r.id)
+            self.hub.emit("gate.decision", self.cycle, id=r.id, coop=r.coop, status=r.status)
+
+    def gate_decide(self, ids, approve: bool, always: bool = False, reason: str = "") -> list[GateRequest]:
+        """Your decisions, from the dashboard. Approved requests run at the start of the next cycle."""
+        with self.lock:
+            done = self.gate.decide(ids, approve, always, reason)
+            for r in done:
+                self._gate_decided(r)
+            return done
+
+    def _gate_decided(self, r: GateRequest) -> None:
+        what = f"{r.tool} {r.target[:80]}"
+        if r.status == "denied":
+            self._tell(r.coop, "gate", f"the operator denied {r.id} ({what})" + (f": {r.reason}" if r.reason else ""), r.id)
+        else:
+            self._tell(r.coop, "gate", f"the operator approved {r.id} ({what}); it runs at the start of next cycle"
+                       + (f", and your reads from {r.host} no longer need approval" if r.always else ""), r.id)
+        self.activity.add(self.cycle, r.coop, "operator", "change", "gate", f"{r.status} {r.id}: {what}", r.status == "approved",
+                          {"id": r.id, "always": r.always})
+        self.hub.emit("gate.decision", self.cycle, id=r.id, coop=r.coop, status=r.status, always=r.always)
+
+    def web_call(self, coop: str, actor: str, tool: str, target: str):
+        """A web read an agent asked for. Called WITHOUT the world's lock: the network is slow, so the lock is taken
+        only to ask the gate and to record the result."""
+        from runtime.web import host_of
+
+        target = str(target).strip()[:500]
+        if not self.web or not self.gate.policy.allow_hosts:
+            return Outcome(False, "this society has no web access (the operator allows no hosts)")
+        if tool == "web_fetch":
+            with self.lock:
+                if target in self.web_pages:
+                    ids = self.web_pages[target]
+                    return Outcome(True, f"already read: {target} is archive passages {', '.join(ids)}; use read_archive",
+                                   ids[0] if ids else None)
+            host = host_of(target)
+        else:
+            if self.web.search is None or self.gate.policy.search == "none":
+                return Outcome(False, "this society has no web search; web_fetch a page on an allowed host instead")
+            host = self.web.search.host
+        with self.lock:
+            verdict, r = self.gate.ask(coop, actor, tool, target, host, self.cycle)
+            if isinstance(r, GateRequest):
+                self.hub.emit("gate.request", self.cycle, id=r.id, coop=coop, tool=tool, target=target, host=host,
+                              status=r.status)
+        if verdict == "deny":
+            return Outcome(False, f"the gate refused: {r}")
+        if verdict == "pending":
+            return Outcome(False, f"waiting for the operator's approval as {r.id}. If approved it runs at the start of a "
+                                  f"later cycle and you'll be told the result; don't ask again.", r.id)
+        return self._execute_web(r)
+
+    def _run_approved_web(self) -> None:
+        """Requests you approved since last cycle: run them (outside the lock) and tell whoever asked."""
+        with self.lock:
+            todo = self.gate.approved()
+        for r in todo:
+            out = self._execute_web(r)
+            with self.lock:
+                self._tell(r.coop, "gate", f"{r.id} ran: {out.message[:700]}", r.id)
+
+    def _execute_web(self, r: GateRequest):
+        from runtime.web import WebError
+
+        try:
+            if r.tool == "web_search":
+                results = self.web.search.search(r.target, k=5)
+                text = "\n".join(f"- {x.title}: {x.url}\n  {x.snippet[:200]}" for x in results) or "no results"
+                msg, ref = f"search results for {r.target!r} (web_fetch a url to read it):\n{text}", None
+            else:
+                page = self.web.fetcher.fetch(r.target)
+                with self.lock:
+                    ids = self.archive.add_page(page.url, page.title, page.text, fetched=f"cycle {self.cycle}")
+                    self.web_pages[r.target] = self.web_pages[page.url] = ids
+                first = self.archive.get(ids[0]).text if ids else ""
+                msg, ref = (f"read {page.url} ({page.title[:80]}) into the archive as {len(ids)} passage(s): "
+                            f"{', '.join(ids[:12])}{' …' if len(ids) > 12 else ''}. Cite them as [archive: <id>]. The "
+                            f"first:\n<untrusted>\n{first[:1500]}\n</untrusted>"), (ids[0] if ids else None)
+            ok = True
+        except WebError as e:
+            msg, ref, ok = f"{r.tool} failed: {e}", None, False
+        with self.lock:
+            r.status, r.result = ("done" if ok else "failed"), msg[:300]
+            self.hub.emit("web.call", self.cycle, id=r.id, coop=r.coop, tool=r.tool, target=r.target, ok=ok)
+        return Outcome(ok, msg, ref)
+
     def _appraise_ventures(self) -> None:
         """Appraise waiting ventures outside the lock (a model call must never stall other communities),
         then decide under it: best score first, up to the market's budget for this cycle."""
@@ -1055,6 +1163,7 @@ class World:
             doctrine=me.doctrine,
             archive=(len(self.archive), tuple(sorted({p.source for p in self.archive.passages.values()}))),
             grants=(self.ledger.balance("grants"), self.params.grant_budget) if self.params.economy == "grant" else None,
+            web=self.gate.policy.describe() if self.web else "",
             pending_claims=tuple(self.pending_claims(name)),
             goals=tuple(GoalView(g.id, g.title, g.status, tuple((s.text, s.done, s.note) for s in g.steps), round(g.progress, 2))
                         for g in self.plans[name].active()),

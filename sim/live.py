@@ -28,7 +28,9 @@ from sim.grader import HybridGrader, LLMGrader, PanelGrader
 from sim.operator import Operator
 from sim.archive import Archive
 from sim.pack import load as load_pack
+from sim.gate import Gate
 from sim.ratings import Ratings
+from runtime.web import WebAccess
 from sim.ventures import LLMAppraiser
 from society.community import Community
 from substrate.meter import KillSwitch
@@ -51,6 +53,7 @@ ap.add_argument("--panel", action="store_true",
                 help="grade every part with the pack's panel of graders (median of its lenses; costs one call per lens)")
 ap.add_argument("--rate-every", type=int, default=3,
                 help="with --society: set every Nth paid job aside for you to rate (python -m sim.rate NAME)")
+ap.add_argument("--no-web", action="store_true", help="no web access, whatever the operator's [gate] allows")
 ap.add_argument("--reasoning", action="store_true",
                 help="the local model reasons before answering: give every call more room (thinking counts against max_tokens)")
 a = ap.parse_args()
@@ -134,17 +137,24 @@ if a.panel and not pack.grader_panel:
 lenses = pack.grader_panel if a.panel else (pack.grader_system,)
 judges = [LLMGrader(backend, model=grader, max_tokens=grader_tokens, system=s) for s in lenses]
 run_name = Path(ledger).stem
+operator = Operator(a.operator) if a.operator else None
+web = None if a.no_web or a.backend == "fake" else WebAccess.default(operator.gate.search if operator else "wikipedia")
 world = World(Params(seed=a.seed, ledger_path=ledger,
                      activity_path=ledger.replace(".sqlite", ".activity.jsonl"), **{**pack.live_params, **RUN}),
               population=population, pack=pack,
               grader=HybridGrader(PanelGrader(judges) if len(judges) > 1 else judges[0]),
               appraiser=LLMAppraiser(backend, model=grader, max_tokens=grader_tokens, system=pack.appraiser_system),
-              operator=Operator(a.operator) if a.operator else None,
+              operator=operator, web=web,
+              gate=Gate(folder=society.folder if society else None, run=run_name),
               archive=Archive(society.folder / "archive") if society else None,
               ratings=Ratings(society.folder, run=run_name, every=a.rate_every) if society else None)
 if society:
     seeded = society.seed_playbooks(world)
     print(f"society {society.name}: {len(population)} co-ops, {len(world.archive)} archive passages, {seeded} seeded playbooks")
+if world.web and world.gate.policy.allow_hosts:
+    print(f"web: {world.gate.policy.read} reads from {', '.join(world.gate.policy.allow_hosts)}"
+          + (f" · decide requests on the dashboard or with: uv run python -m sim.approve {society.name}" if society else
+             " · decide requests on the dashboard (--serve)" if world.gate.policy.read == "ask" else ""))
 if world.operator.errors:
     sys.exit(f"the operator folder has a problem: {world.operator.errors[0]}")
 world.meter.real_ceiling = round(a.real_ceiling * 1e6)

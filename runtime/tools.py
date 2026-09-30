@@ -76,6 +76,14 @@ _TOOLS: list[dict[str, Any]] = [
          {"capability": S, "spec": S, "rubric": S}, ["capability", "spec", "rubric"])}}, ["title", "pitch", "parts"])},
     {"name": "search_archive", "description": "Search your society's reference archive (material your operator "
      "supplied) by keywords. Returns passage ids with snippets. Free.", "input_schema": _obj({"query": S}, ["query"])},
+    {"name": "web_search", "description": "Search the web through the gate (the operator's allowlist and approval "
+     "rules; see WEB in your observation). Returns titles, urls and snippets; then web_fetch a url to read it. Free "
+     "in credits; counts toward your web calls this cycle. If the operator must approve, it waits: don't ask again.",
+     "input_schema": _obj({"query": S}, ["query"])},
+    {"name": "web_fetch", "description": "Read one web page (https, on an allowed host) through the gate. The page "
+     "joins the archive as passages: cite them as [archive: <id>] (a citation to a page no one read fails). Free in "
+     "credits; counts toward your web calls this cycle. If the operator must approve, it waits: don't ask again.",
+     "input_schema": _obj({"url": S}, ["url"])},
     {"name": "read_archive", "description": "Read one archive passage in full, by the id search_archive gave. Free, "
      "but what you read is part of this turn's thinking.", "input_schema": _obj({"passage_id": S}, ["passage_id"])},
     {"name": "learn", "description": "Buy a capability you lack. Expensive, and more so the more you have. Cheaper "
@@ -103,3 +111,18 @@ for _t in _TOOLS:
 
 TOOLS: list[dict[str, Any]] = sorted(_TOOLS, key=lambda t: t["name"])
 NAMES = frozenset(t["name"] for t in TOOLS)
+WEB = frozenset({"web_search", "web_fetch"})
+OFFLINE: list[dict[str, Any]] = [t for t in TOOLS if t["name"] not in WEB]  # a society with no web isn't offered it
+# what a member may use while writing: look things up, nothing else
+MEMBER = ("search_archive", "read_archive", "web_search", "web_fetch")
+
+
+def steward_tools(web: bool) -> list[dict[str, Any]]:
+    """The same list object every call (it's in the cached prefix), with or without the web."""
+    return TOOLS if web else OFFLINE
+
+
+def member_tools(archive: bool, web: bool) -> list[dict[str, Any]]:
+    names = {"search_archive", "read_archive"} if archive or web else set()
+    names |= WEB if web else set()
+    return [t for t in TOOLS if t["name"] in names]

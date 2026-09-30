@@ -352,6 +352,15 @@ class Actions:
             return Outcome(False, f"no archive passage {passage_id}; search_archive gives valid ids")
         return Outcome(True, f"Reference material from {p.source} ({p.id}):\n{p.text}", p.id)
 
+    # ── the web (behind the gate; not under the world's lock, see World.web_call) ──
+    def web_search(self, query: str) -> Outcome:
+        """Search the web through the gate. Free in credits; the operator's policy may make it wait for approval."""
+        return self.w.web_call(self.me.name, self.actor, "web_search", query)
+
+    def web_fetch(self, url: str) -> Outcome:
+        """Read a page through the gate; it joins the archive, to cite as [archive: <id>]."""
+        return self.w.web_call(self.me.name, self.actor, "web_fetch", url)
+
     # ── ventures ───────────────────────────────────────────────
     def propose_venture(self, title: str, pitch: str, parts: list, idea_id: str | None = None) -> Outcome:
         """Propose work of your own. Rules refuse at once; the appraisal comes at the start of next cycle."""
@@ -462,7 +471,7 @@ def _operated(name, fn):
 for _name in ("claim", "do_part", "announce", "bid", "award", "deliver", "review", "attest", "dispute",
               "propose_spawn", "second_spawn", "retire", "fork", "propose_merge", "accept_merge", "learn",
               "publish", "read_playbook", "note", "idea", "set_goal", "update_goal", "propose_venture",
-              "search_archive", "read_archive"):
+              "search_archive", "read_archive", "web_search", "web_fetch"):
     setattr(Actions, _name, logged(_name, _operated(_name, getattr(Actions, _name))))
 
 
@@ -476,5 +485,7 @@ def _locked(fn):
     return wrapper
 
 
-for _name in [n for n, v in vars(Actions).items() if callable(v) and not n.startswith("_")]:
+UNLOCKED = {"web_search", "web_fetch"}  # they take the lock themselves, around everything but the network
+
+for _name in [n for n, v in vars(Actions).items() if callable(v) and not n.startswith("_") and n not in UNLOCKED]:
     setattr(Actions, _name, _locked(getattr(Actions, _name)))

@@ -24,7 +24,7 @@ from typing import Any
 
 from runtime.backends import ModelBackend, ModelError, ToolCall, ToolResult
 from runtime.render import PREAMBLE, commissionable, community_block, operator_block, render
-from runtime.tools import NAMES, TOOLS
+from runtime.tools import MEMBER, NAMES, TOOLS, member_tools, steward_tools
 from sim.market import strip_tags
 from society.observation import ActionsAPI, Observation, Outcome
 from society.strategies.base import Strategy
@@ -50,12 +50,14 @@ class LLMStrategy(Strategy):
 
     def __init__(self, backend: ModelBackend, steward_model: str = "claude-sonnet-5",
                  member_model: str = "claude-haiku-4-5", max_rounds: int = 8, turn_tokens: int = 80_000,
-                 max_tokens: int = 4096, member_max_tokens: int = 1200, keep_drafts: int = 20, **kw):
+                 max_tokens: int = 4096, member_max_tokens: int = 1200, keep_drafts: int = 20, member_rounds: int = 4,
+                 **kw):
         super().__init__(**kw)
         self.backend = backend
         self.steward_model, self.member_model = steward_model, member_model
         self.max_rounds, self.turn_tokens = max_rounds, turn_tokens
         self.max_tokens, self.member_max_tokens, self.keep_drafts = max_tokens, member_max_tokens, keep_drafts
+        self.member_rounds = member_rounds  # look-ups a member may make (archive, web) before it must write
         self.drafts: dict[str, Draft] = {}
         self._seq = 0
         self._commissions = 0
@@ -95,7 +97,7 @@ class LLMStrategy(Strategy):
                 log.append({"kind": "error", "text": f"the operator's thinking budget ({budget} µcr a turn) is spent; turn over"})
                 break
             try:
-                t = self.backend.chat(model=steward_model, system=system, messages=messages, tools=TOOLS,
+                t = self.backend.chat(model=steward_model, system=system, messages=messages, tools=steward_tools(bool(obs.web)),
                                       max_tokens=max_tokens)
             except ModelError as e:
                 log.append({"kind": "error", "text": f"steward call failed: {e}"})
@@ -237,18 +239,47 @@ class LLMStrategy(Strategy):
             method += ("\n\nSources from the archive (reference only; cite one as [archive: <id>] where you use it, and "
                        "cite nothing else as a source):\n<untrusted>\n" + "\n".join(material) + "\n</untrusted>")
         prompt = f"Spec:\n{spec}\n\nRubric:\n{rubric}\n\nSteward's instructions:\n{instructions[:1000]}{method}"
-        try:
-            # members write; they don't plan. Reasoning here only burned the allowance and returned nothing.
-            t = self.backend.chat(model=getattr(self, "_member_model", self.member_model),
-                                  system=[getattr(self, "_member_system", MEMBER_SYSTEM)],
-                                  reasoning=False, messages=[{"role": "user", "text": prompt}],
-                                  max_tokens=getattr(self, "_member_max_tokens", self.member_max_tokens))
-        except ModelError as e:
-            return Outcome(False, f"the member couldn't do it: {e}")
-        try:
-            act.record_call("member", t.model, t.price_as, t.usage, t.real, t.ms, t.cache_hit)
-        except InsufficientFunds:
-            return Outcome(False, "the purse couldn't pay for the member's work")
+        tools = member_tools(bool(obs.archive and obs.archive[0]), bool(obs.web))
+        if tools:
+            prompt += ("\n\nYou may look things up first (search_archive, read_archive"
+                       + (", web_search, web_fetch" if obs.web else "") + f"), at most {self.member_rounds} rounds, "
+                       "then write the deliverable as your final answer.")
+        messages: list[dict[str, Any]] = [{"role": "user", "text": prompt}]
+        for round_ in range(self.member_rounds + 1 if tools else 1):
+            last = round_ == self.member_rounds or not tools
+            if last and tools:
+                messages.append({"role": "user", "text": "No more look-ups: write the deliverable now."})
+            try:
+                # members write; they don't plan. Reasoning here only burned the allowance and returned nothing.
+                t = self.backend.chat(model=getattr(self, "_member_model", self.member_model),
+                                      system=[getattr(self, "_member_system", MEMBER_SYSTEM)], reasoning=False,
+                                      messages=messages, tools=None if last else tools,
+                                      max_tokens=getattr(self, "_member_max_tokens", self.member_max_tokens))
+            except ModelError as e:
+                return Outcome(False, f"the member couldn't do it: {e}")
+            try:
+                act.record_call("member", t.model, t.price_as, t.usage, t.real, t.ms, t.cache_hit)
+            except InsufficientFunds:
+                return Outcome(False, "the purse couldn't pay for the member's work")
+            if not t.tool_calls:
+                break
+            messages.append(t.as_message())
+            results = []
+            for call in t.tool_calls[:3]:
+                if call.name not in MEMBER:
+                    out = Outcome(False, f"members may only use {', '.join(MEMBER)}")
+                else:
+                    args = {k: v for k, v in call.input.items() if k != "why"}
+                    before, act.actor = act.actor, "member"
+                    try:
+                        out = getattr(act, call.name)(**args)
+                    except TypeError as e:
+                        out = Outcome(False, f"bad arguments for {call.name}: {e}")
+                    finally:
+                        act.actor = before
+                results.append(ToolResult(call.id, out.message, not out.ok))
+            results += [ToolResult(c.id, "skipped: at most 3 look-ups a round", True) for c in t.tool_calls[3:]]
+            messages.append({"role": "tool", "results": results})
         self._commissions += 1
         text = strip_tags(t.text).strip()
         if not text:

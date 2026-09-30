@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import threading
 import time
 from collections import deque
 from collections.abc import Callable
@@ -96,15 +97,17 @@ class ActivityLog:
         self.path = path
         self._file = open(path, "a") if path else None
         self._seq = 0
+        self._lock = threading.Lock()  # web calls log outside the world's lock
 
     def add(self, cycle, community, actor, kind, name, text, ok=None, args=None, why="") -> Entry:
-        self._seq += 1
-        e = Entry(self._seq, cycle, community, actor, kind, name, text[:500], ok, _short(args or {}), (why or "")[:300],
-                  round(time.time(), 3))
-        self.ring.append(e)
-        if self._file:
-            self._file.write(json.dumps(asdict(e)) + "\n")
-            self._file.flush()
+        with self._lock:
+            self._seq += 1
+            e = Entry(self._seq, cycle, community, actor, kind, name, text[:500], ok, _short(args or {}),
+                      (why or "")[:300], round(time.time(), 3))
+            self.ring.append(e)
+            if self._file:
+                self._file.write(json.dumps(asdict(e)) + "\n")
+                self._file.flush()
         return e
 
     def watch(self, hub: Hub) -> None:

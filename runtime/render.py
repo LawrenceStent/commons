@@ -192,6 +192,8 @@ def render(obs: Observation) -> str:
             f"  {v.id} {v.title!r}: {v.status}" + (f", score {v.score}" if v.score is not None else "")
             + (f", reward {v.reward} µcr as job {v.job_id}" if v.job_id else "") + (f" — {v.reason[:160]}" if v.reason else "")
             for v in obs.ventures]
+    if obs.web:
+        s += ["", obs.web]
     if obs.grants:
         s += ["", f"GRANTS: this society is paid by grants, not a market. The pool holds {obs.grants[0]} µcr (a budget of "
                   f"{obs.grants[1]} a cycle). At the end of each cycle, work that passed grading shares the pool by value "

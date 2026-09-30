@@ -601,7 +601,28 @@ had nowhere to go (and the idea and goal tools went unused).
     and manipulation refused), three-lens panel 8/8 (the evidence lens alone failed both good pieces at 4, over "(unverified)" details; the median carried them, which is what a panel is for). A panel costs three times as much: about a minute per call per lens on Qwen
   - **Not yet:** a live LLM run of this pack; rating from the dashboard (the CLI only for now); members still can't
     search the web (K5), so evidence is the archive or marked (unverified)
-- [ ] K5 Member tools and the gate (web search/fetch, archive), with egress allowlist and batch approval
+- [x] K5 Member tools and the gate (30 Sep). Nothing reaches the internet unless your policy allows it or you approved it,
+      enforced in two independent places:
+  - **The gate** (`sim/gate.py`, the tool layer): every web call is a request with a risk class (read; contact, publish
+    and spend are reserved and can never be "allow"). Your `[gate]` policy in the operator's config.toml: `read = ask |
+    allow | deny`, `allow_hosts`, `per_cycle` (a rule), `ttl`. "ask" queues the request; you decide on the dashboard's
+    Gate panel (batched by co-op, tool and host, with "always" for a standing approval and revoke) or with
+    `python -m sim.approve NAME` (decisions via `gate.jsonl` in the society folder). Approved requests run at the start
+    of the next cycle and the asker is told the result. Every request and decision is logged
+  - **The network layer** (`runtime/web.py`), independent of the gate: https only, allowlisted hosts only (each
+    redirect hop checked), no IP literals or private addresses, robots.txt respected (search APIs excepted), text only,
+    size caps, GET only, a User-Agent that says what it is
+  - **Web pages join the archive** (kept in `archive/web/` for later runs), so the citation rule covers them: citing a
+    page nobody read fails. Search is Wikipedia's API (free, no key), behind the same allowlist
+  - **Members use tools:** a commissioned member may look things up (search/read the archive, search/read the web) for
+    up to `member_rounds` (4) rounds before writing; nothing else. Stewards get the web tools only when the society has
+    web access (the tool list stays byte-stable for caching). `forbid = ["web"]` turns it off per co-op
+  - **Done-when met:** `tests/test_k5.py` (24 tests) proves a gated read never reaches the network without approval
+    (none when pending, denied or expired; approved runs next cycle), that the network layer refuses off-list hosts
+    even after the gate approved, and every egress rule. Real smoke test (30 Sep): a Wikipedia search and one page
+    read, each held until approved, the off-list host refused, 3 requests in all. Pack 0 still byte-identical
+  - **Not yet:** a live LLM run using the web; other search providers (a key-based one, if you want the whole web);
+    contact, publish and spend tools (Phase 2 builds the first, behind this gate)
 - [ ] K6 Trading pack: paper broker, forward-only, deterministic risk-adjusted evaluator, doctrine per co-op
 - [ ] K7 OSINT pack: sourcing-first evaluator, separate verify co-op, forbidden-target policy enforced in tools
 - [ ] K8 Many societies: registry, CLI, dashboard picker, per-society and total spend caps, slow-cadence scheduler

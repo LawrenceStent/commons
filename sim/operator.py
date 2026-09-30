@@ -37,6 +37,10 @@ config.toml:
     steward_model = "claude-sonnet-5"
     max_rounds = 6
 
+    [gate]                       # web access and anything else outside (see sim/gate.py)
+    read = "ask"
+    allow_hosts = ["en.wikipedia.org"]
+
 The world re-reads the folder at the start of every cycle; a change takes effect on the next turn and is
 recorded in the activity log.
 """
@@ -49,16 +53,20 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from sim.gate import GateError, GatePolicy
+
 MAX_DIRECTIVES = 4_000  # characters per co-op (all.md + its own file)
 MAX_CONTEXT = 12_000  # characters of reference material per co-op
 LIMIT_KEYS = {"forbid", "max_price", "max_jobs", "thinking_budget"}
 RUNTIME_KEYS = {"steward_model", "member_model", "max_rounds", "max_tokens", "member_max_tokens"}
 ACTIONS = {"claim", "do_part", "announce", "bid", "award", "deliver", "review", "attest", "dispute", "propose_spawn",
            "second_spawn", "retire", "fork", "propose_merge", "accept_merge", "learn", "publish", "read_playbook",
-           "note", "idea", "set_goal", "update_goal", "propose_venture", "commission", "search_archive", "read_archive"}
+           "note", "idea", "set_goal", "update_goal", "propose_venture", "commission", "search_archive", "read_archive",
+           "web_search", "web_fetch"}
 # natural names for groups of actions; a forbid list may use either
 ALIASES = {"merge": {"propose_merge", "accept_merge"}, "spawn": {"propose_spawn"}, "venture": {"propose_venture"},
-           "ventures": {"propose_venture"}, "contracting": {"announce", "award"}, "bidding": {"bid"}}
+           "ventures": {"propose_venture"}, "contracting": {"announce", "award"}, "bidding": {"bid"},
+           "web": {"web_search", "web_fetch"}}
 
 
 def _expand_forbid(names) -> frozenset[str]:
@@ -118,6 +126,7 @@ class Operator:
         self.views: dict[str, OperatorView] = {}
         self.all = OperatorView()
         self.errors: list[str] = []
+        self.gate = GatePolicy()  # no hosts: no web
         self.reload()
 
     # ── loading ────────────────────────────────────────────────
@@ -147,7 +156,7 @@ class Operator:
             return False
         self.fingerprint = fp
         if not self.root or not self.root.exists():
-            self.views, self.all, self.errors = {}, OperatorView(), []
+            self.views, self.all, self.errors, self.gate = {}, OperatorView(), [], GatePolicy()
             return True
         try:
             raw = self._read("config.toml")
@@ -157,8 +166,11 @@ class Operator:
             names |= {p.stem for p in (self.root / "coops").glob("*.md")} if (self.root / "coops").exists() else set()
             self.views = {n: self._view(config.get("coops", {}).get(n, {}), self._read(f"coops/{n}.md"), base=self.all)
                           for n in sorted(names)}
+            if unknown := set(config) - {"all", "coops", "gate"}:
+                raise OperatorError(f"unknown config sections {sorted(unknown)}")
+            self.gate = GatePolicy.parse(config.get("gate", {}))
             self.errors = []
-        except (OperatorError, tomllib.TOMLDecodeError, TypeError, ValueError) as e:
+        except (OperatorError, GateError, tomllib.TOMLDecodeError, TypeError, ValueError) as e:
             self.errors = [f"operator folder not applied: {e}"]
         return True
 

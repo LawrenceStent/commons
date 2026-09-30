@@ -5,7 +5,7 @@ import copy
 from runtime.backends import AnthropicBackend, FakeBackend, LMStudioBackend, ToolCall, ToolResult
 from runtime.render import PREAMBLE, render
 from runtime.steward import LLMStrategy
-from runtime.tools import TOOLS
+from runtime.tools import OFFLINE, TOOLS
 from sim.engine import Params, World, default_population
 from sim.grader import HybridGrader, LLMGrader
 from sim.market import MarketJob, Part
@@ -87,7 +87,8 @@ def test_the_prompt_prefix_is_stable_and_the_observation_goes_last():
     steward_calls = [c for c in backend.chats if c[2] is not None]
     systems = {tuple(c[0]) for c in steward_calls}
     assert len(systems) == 1 and steward_calls[0][0][0] == PREAMBLE
-    assert all(c[2] is TOOLS for c in steward_calls)
+    assert all(c[2] is OFFLINE for c in steward_calls)  # the same object every call; no web in this society
+    assert {"web_search", "web_fetch"} <= {t["name"] for t in TOOLS} and not {"web_search", "web_fetch"} & {t["name"] for t in OFFLINE}
     assert [t["name"] for t in TOOLS] == sorted(t["name"] for t in TOOLS)
     assert "CYCLE" in steward_calls[0][1][0]["text"] and "CYCLE" not in "".join(steward_calls[0][0])
 

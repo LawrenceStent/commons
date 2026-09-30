@@ -94,7 +94,7 @@ Commons replaces the planner with **a market and a reputation**:
 | 1.3 | LLM grader, model backends (structured output), calibration set | ✅ Done 25 Sep; local Hermes 8B scores 8/9 and resists injection; Anthropic calibration optional |
 | 1.4 | LLM agent runtime: steward tool loop, members, observation renderer, live runner | ✅ Done 25 Sep (tested with fake models) |
 | 1.5 | Live runs: local first, then Anthropic with a spend cap | ⏳ In progress: local smoke run done 25 Sep; small local models can't trade |
-| K1–K8 | Framework: one kernel, many societies (packs, founding from a brief, tempo and efficiency) | K1–K4 done 28 Sep (kernel/pack split; allocation, bonds and efficiency; founding from a brief, the archive, doctrine; the tech-for-good pack with grants, a grader panel, a scorecard and your ratings); K5–K8 planned (`docs/FRAMEWORK.md`) |
+| K1–K8 | Framework: one kernel, many societies (packs, founding from a brief, tempo and efficiency) | K1–K5 done 28–30 Sep (kernel/pack split; allocation, bonds and efficiency; founding from a brief, the archive, doctrine; the tech-for-good pack with grants, a grader panel, a scorecard and your ratings; web access for agents behind the gate); K6–K8 planned (`docs/FRAMEWORK.md`) |
 | 2 | One real channel: digital products, a storefront, Stripe, the human gate | Planned (becomes pack 0's live mode) |
 | 3 | More channels: content, services, affiliate | Planned |
 | 4 | On-chain settlement (Coinbase Agentic Wallets, x402) | Planned |
@@ -265,8 +265,10 @@ Grouped by area. Terms in **bold** are used throughout the code and this guide.
 
 ### Safety and control
 
-- **Gate.** Any action that touches the outside world (publish, post, spend, sign) waits for your
-  approval. Schemas exist; enforcement arrives in Phase 2.
+- **Gate.** Anything that touches the outside world goes through it (since K5). Reads (web search, web fetch)
+  follow your `[gate]` policy: ask (the default: each waits for your approval), allow, or deny. Contact, publish
+  and spend can only ever be ask or deny. You approve in batches on the dashboard or with `python -m sim.approve`.
+  A second, independent check in the network layer refuses any host not on your allowlist.
 - **Kill-switch.** There are two:
   - a notional daily ceiling on credits
   - a **real-dollar daily ceiling** ($5 by default) that halts everything when real API spend
@@ -372,6 +374,8 @@ deadlines). Nothing below the society layer can assign work to a community that 
 | `sim/actions.py` | 267 | The actions executor: the only way a strategy touches the world |
 | `sim/market.py` | 116 | Job generator (parts and rubrics), `Grader` interface, `StubGrader` |
 | `sim/population.py` | 229 | Spawn, retire, fork, merge, learn, proposal expiry |
+| `sim/gate.py`, `sim/approve.py` | ~250, ~60 | The gate: policy, requests, batch and standing approvals, file decisions; the approval CLI |
+| `runtime/web.py` | ~260 | The only way agents reach the web: egress allowlist, safe fetcher, robots, Wikipedia search |
 | `sim/scorecard.py` | ~140 | Scorecards: mission metrics per pack plus general ones; statuses against targets and floors |
 | `sim/ratings.py`, `sim/rate.py` | ~110, ~70 | Work set aside for your ratings; the rating CLI |
 | `packs/tech_for_good/` | ~400 | Pack 1: scout, assess, design, write; grant economy; panel lenses; scorecard; calibration sets |
@@ -407,7 +411,7 @@ doesn't support it.
 | `knowledge` | publish · cite · royalty | ✅ Playbooks and citations |
 | `population` | spawn · retire · fork · merge | ✅ Since 1.2 |
 | `governance` | propose · second · vote · enact | ⛔ Schemas only (§12) |
-| `gate` | request · approve · deny · revoke | ⛔ Schemas only (Phase 2) |
+| `gate` | request · approve · deny · revoke | Enforced in `sim/gate.py` since K5 (the world holds requests directly; these bus messages are still unused) |
 
 Every message is sealed in an envelope: sender, cycle, family, verb, body, an id that is the SHA-256
 of the canonical JSON, and an Ed25519 signature. The bus rejects anything unsigned or signed by an
@@ -853,8 +857,8 @@ Findings:
 5. **Decide:** vote-weighting cap, grader panel, charter mutability.
 
 ### Phase 2: One real channel (digital products)
-- Gate enforced in two places: a PreToolUse-style hook in the runtime, and a network egress
-  allowlist. Batch approval in the console, grouped by venture and risk class.
+- Gate enforced in two places (built in K5 for reads): the tool layer and a network egress allowlist, with batch
+  approval in the console. Phase 2 adds the first publish tool behind it.
 - Storefront plus Stripe; a live society on a USD ledger. Upkeep becomes the actual API bill, and
   publishing fees go to the treasury. Per-community daily caps.
 - `venture.py`: hypothesis, KPIs, artifacts, channel binding.

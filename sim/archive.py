@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import math
 import re
+import urllib.parse
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,6 +30,10 @@ _STOP = frozenset("the a an and or of to in on for with is are be it this that a
 
 def _terms(text: str) -> list[str]:
     return [w for w in _WORD.findall(text.lower()) if w not in _STOP and len(w) > 1]
+
+
+def _stem(rel: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", Path(rel).with_suffix("").as_posix().lower()).strip("-")
 
 
 def citations(text: str) -> list[str]:
@@ -55,9 +60,11 @@ class Archive:
                     self._add(path)
 
     def _add(self, path: Path) -> None:
-        rel = str(path.relative_to(self.root))
+        self._index(str(path.relative_to(self.root)), path.read_text(errors="replace"))
+
+    def _index(self, rel: str, text: str) -> list[str]:
         chunks, current = [], ""
-        for para in re.split(r"\n\s*\n", path.read_text(errors="replace")):
+        for para in re.split(r"\n\s*\n", text):
             if current and len(current) + len(para) > PASSAGE:
                 chunks.append(current)
                 current = ""
@@ -67,13 +74,33 @@ class Archive:
                 current = current[PASSAGE:]
         if current:
             chunks.append(current)
-        stem = re.sub(r"[^a-z0-9]+", "-", Path(rel).with_suffix("").as_posix().lower()).strip("-")
-        for n, text in enumerate(chunks, 1):
-            p = Passage(f"{stem}#{n}", rel, text)
+        stem = _stem(rel)
+        ids = []
+        for n, chunk in enumerate(chunks, 1):
+            p = Passage(f"{stem}#{n}", rel, chunk)
+            if p.id in self.passages:  # re-indexing the same source: replace its terms
+                self._df.subtract(self._tf[p.id].keys())
             self.passages[p.id] = p
-            tf = Counter(_terms(text))
+            tf = Counter(_terms(chunk))
             self._tf[p.id] = tf
             self._df.update(tf.keys())
+            ids.append(p.id)
+        return ids
+
+    def add_page(self, url: str, title: str, text: str, fetched: str = "") -> list[str]:
+        """A page read from the web joins the archive (and, if the archive has a folder, is kept in archive/web/ for
+        later runs). Returns its passage ids; a page already here isn't indexed twice."""
+        parts = urllib.parse.urlsplit(url)
+        slug = re.sub(r"[^a-z0-9]+", "-", f"{parts.hostname or ''}{parts.path}".lower()).strip("-")[:80]
+        rel = f"web/{slug}.md"
+        existing = sorted((p.id for p in self.passages.values() if p.source == rel), key=lambda i: int(i.rsplit("#", 1)[1]))
+        if existing:
+            return existing
+        body = f"# {title.strip()[:200]}\n\nSource: {url}{f' (read {fetched})' if fetched else ''}\n\n{text.strip()}"
+        if self.root:
+            (self.root / "web").mkdir(parents=True, exist_ok=True)
+            (self.root / rel).write_text(body)
+        return self._index(rel, body)
 
     def __len__(self) -> int:
         return len(self.passages)

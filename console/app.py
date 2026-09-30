@@ -94,6 +94,11 @@ def snapshot(state: dict) -> dict:
         },
         "money": {"currency": w.ledger.currency, "real": w.ledger.real(),
                   "real_spent_today": w.meter.real_spent_today, "real_ceiling": w.meter.real_ceiling},
+        "gate": {"web": bool(w.web), "policy": asdict(w.gate.policy), "groups": w.gate.groups(),
+                 "standing": sorted([c, h] for c, h in w.gate.standing),
+                 "recent": [{"id": r.id, "coop": r.coop, "tool": r.tool, "target": r.target, "status": r.status,
+                             "result": r.result, "cycle": r.cycle} for r in list(w.gate.requests.values())[-20:]
+                            if r.status != "pending"][::-1]},
         "society": {"pack": w.pack.title, "economy": w.params.economy, "scorecard": w.scorecard,
                     "grants": w.ledger.balance("grants") if w.params.economy == "grant" else None,
                     "grant_budget": w.params.grant_budget},
@@ -157,7 +162,6 @@ def snapshot(state: dict) -> dict:
         "llm": {"recent": llm[-10:][::-1], "calls": hub.counts["llm.call"],
                 "cost": sum(c.get("cost", 0) for c in llm)},
         "grader": {"recent": grades[-10:][::-1], "count": hub.counts["grader.grade"]},
-        "gate": [],
         "host": {**(hosts[-1].fields if hosts else {}),
                  "rss_series": _downsample([[round(e.at), e.fields["rss"]] for e in hosts])},
         "events": dict(hub.counts),
@@ -285,6 +289,21 @@ def create_app(world: World | None = None, cycles_per_second: float = 4.0, autos
         except ValueError as e:
             return JSONResponse({"error": str(e)}, status_code=400)
         return {"ok": True, "errors": w.operator.errors}
+
+    @app.post("/api/gate")
+    async def api_gate(request: Request):
+        """Approve or deny gate requests (`ids`), optionally `always` (a standing approval for co-op and host), or
+        `revoke` a standing approval ({coop, host}). Approved requests run at the start of the next cycle."""
+        body = await request.json()
+        w = state["world"]
+        if "revoke" in body:
+            rv = body["revoke"] or {}
+            ok = await asyncio.to_thread(locked, w.gate.revoke, str(rv.get("coop")), str(rv.get("host")))
+            return {"ok": ok}
+        ids = [str(i) for i in body.get("ids", [])][:500]
+        done = await asyncio.to_thread(w.gate_decide, ids, bool(body.get("approve")), bool(body.get("always")),
+                                       str(body.get("reason", ""))[:200])
+        return {"ok": True, "decided": [r.id for r in done]}
 
     @app.get("/stream")
     async def stream(request: Request, interval: float = 0.5, limit: int | None = None):
