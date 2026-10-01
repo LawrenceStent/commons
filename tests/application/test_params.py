@@ -26,7 +26,7 @@ READS = {
     "application/services/ventures.py": {"market", "ventures"},
     "application/society.py": {"contracts", "market", "money", "run", "storage", "trust"},
     "application/ventures.py": {"contracts"},
-    "interfaces/console/app.py": {"market", "money", "population", "run"},
+    "application/queries.py": {"market", "money", "population", "run"},
 }
 
 

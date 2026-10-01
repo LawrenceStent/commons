@@ -39,11 +39,10 @@ def _cycles(edges: dict[str, set[str]]) -> list[tuple[str, str]]:
     return sorted((a, b) for a in edges for b in edges[a] if a < b and a in edges.get(b, set()))
 
 
-def measure() -> dict[str, object]:
-    files = list(_sources())
-    packages = {_package(rel.parts) for rel, _ in files if len(rel.parts) > 1}
-    funcs, classes, nested, edges = [], [], 0, defaultdict(set)
-    private, status, economy = 0, 0, 0
+def _scan(files, packages):
+    """Per-file measurements: function and class sizes, package edges, hidden imports, and three code smells."""
+    funcs, classes, edges = [], [], defaultdict(set)
+    counts = dict(nested=0, private=0, status=0, economy=0)
     for rel, text in files:
         tree = ast.parse(text)
         top = _package(rel.parts)
@@ -61,15 +60,21 @@ def measure() -> dict[str, object]:
                 if (dep := _ours(m, packages)) and dep != top:
                     edges[top].add(dep)
                 if _ours(m, packages) and id(node) in inner:
-                    nested += 1
+                    counts["nested"] += 1
         # another object's private member: `x._name` where x isn't self/cls (module-private helpers excluded)
-        private += len(re.findall(r"\b(?!self\b|cls\b)[a-z_]+\.(?:w\.)?_[a-z][a-z_]*\b(?!\()", text)) + \
-                   len(re.findall(r"\bself\.w\._[a-z]", text))
-        status += len(re.findall(r"status\s*(?:==|!=|in)\s*\(?\"", text))
-        economy += len(re.findall(r"economy\s*(?:==|!=)", text))
-    lines = sum(t.count("\n") for _, t in files)
+        counts["private"] += len(re.findall(r"\b(?!self\b|cls\b)[a-z_]+\.(?:w\.)?_[a-z][a-z_]*\b(?!\()", text)) + \
+            len(re.findall(r"\bself\.w\._[a-z]", text))
+        counts["status"] += len(re.findall(r"status\s*(?:==|!=|in)\s*\(?\"", text))
+        counts["economy"] += len(re.findall(r"economy\s*(?:==|!=)", text))
+    return funcs, classes, edges, counts
+
+
+def measure() -> dict[str, object]:
+    files = list(_sources())
+    packages = {_package(rel.parts) for rel, _ in files if len(rel.parts) > 1}
+    funcs, classes, edges, counts = _scan(files, packages)
     return {
-        "lines (excluding tests)": lines,
+        "lines (excluding tests)": sum(t.count("\n") for _, t in files),
         "packages": len(packages),
         "package cycles": _cycles(edges),
         "largest class": max(classes),
@@ -77,10 +82,10 @@ def measure() -> dict[str, object]:
         "functions over 70 / 40 / 30 lines": (sum(n > 70 for n, _ in funcs), sum(n > 40 for n, _ in funcs),
                                               sum(n > 30 for n, _ in funcs)),
         "longest function": max(funcs),
-        "imports inside functions (ours)": nested,
-        "status string comparisons": status,
-        "economy flag checks": economy,
-        "cross-object private access (approx.)": private,
+        "imports inside functions (ours)": counts["nested"],
+        "status string comparisons": counts["status"],
+        "economy flag checks": counts["economy"],
+        "cross-object private access (approx.)": counts["private"],
     }
 
 
