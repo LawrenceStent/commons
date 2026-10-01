@@ -15,7 +15,7 @@ from commons.domain.ventures import value as venture_value
 from commons.substrate.ledger import purse
 
 if TYPE_CHECKING:
-    from commons.application.world import World
+    from commons.application.society import World
 
 
 class VentureDesk:
@@ -27,6 +27,13 @@ class VentureDesk:
         then decide under it: best score first, up to the market's budget for this cycle."""
         with self.w.lock:
             todo = [v for v in self.w.ventures.values() if v.status == VentureStatus.PENDING and v.score is None]
+        results = self._appraisals(todo)
+        with self.w.lock:
+            for vid, a in results.items():
+                self._price(self.w.ventures[vid], a)
+            self._approve_best()
+
+    def _appraisals(self, todo: list[Venture]) -> dict:
         def appraise(v):
             try:
                 return v, self.w.appraiser.appraise(v)
@@ -40,31 +47,34 @@ class VentureDesk:
                     self.w.tell(v.proposer, "venture_delayed", f"{v.id} couldn't be appraised yet: {a}", v.id)
             else:
                 results[v.id] = a
-        with self.w.lock:
-            p = self.w.params
-            for vid, a in results.items():
-                v = self.w.ventures[vid]
-                v.score, v.reason, v.reward = a.score, a.reason, venture_value(a.score, p.job_reward, p.venture_min_score)
-                if a.cost:
-                    payer = "treasury" if self.w.ledger.balance("treasury") >= a.cost else purse(v.proposer)
-                    self.w.ledger.transfer(payer, "compute", min(a.cost, self.w.ledger.balance(payer)), cycle=self.w.cycle,
-                                         kind="appraisal", memo=vid)
-                if a.model and a.usage:
-                    self.w.hub.emit("llm.call", self.w.cycle, community="appraiser", role="appraiser", model=a.model,
-                                  input_tokens=a.usage.input_tokens, output_tokens=a.usage.output_tokens,
-                                  cache_hit=None, cost=a.cost, ms=a.ms, real=a.real)
-                    if a.real:
-                        self.w.meter.record_real("appraiser", a.price_as or a.model, a.usage, cycle=self.w.cycle)
-                if v.reward == 0:
-                    self.decide(v, approved=False)
-            waiting = sorted((v for v in self.w.ventures.values() if v.status == VentureStatus.PENDING and v.score is not None),
-                             key=lambda v: (-v.score, v.id))
-            for i, v in enumerate(waiting):
-                if i < p.venture_budget:
-                    self.decide(v, approved=True)
-                else:
-                    self.w.tell(v.proposer, "venture_waiting", f"{v.id} scored {v.score} but the market's budget this "
-                               f"cycle went to better-scored ventures; it stays in line", v.id)
+        return results
+
+    def _price(self, v: Venture, a) -> None:
+        """Score and price a venture, pay for its appraisal, and refuse it at once if it's worth nothing."""
+        p = self.w.params
+        v.score, v.reason, v.reward = a.score, a.reason, venture_value(a.score, p.job_reward, p.venture_min_score)
+        if a.cost:
+            payer = "treasury" if self.w.ledger.balance("treasury") >= a.cost else purse(v.proposer)
+            self.w.ledger.transfer(payer, "compute", min(a.cost, self.w.ledger.balance(payer)), cycle=self.w.cycle,
+                                   kind="appraisal", memo=v.id)
+        if a.model and a.usage:
+            self.w.hub.emit("llm.call", self.w.cycle, community="appraiser", role="appraiser", model=a.model,
+                            input_tokens=a.usage.input_tokens, output_tokens=a.usage.output_tokens,
+                            cache_hit=None, cost=a.cost, ms=a.ms, real=a.real)
+            if a.real:
+                self.w.meter.record_real("appraiser", a.price_as or a.model, a.usage, cycle=self.w.cycle)
+        if v.reward == 0:
+            self.decide(v, approved=False)
+
+    def _approve_best(self) -> None:
+        waiting = sorted((v for v in self.w.ventures.values() if v.status == VentureStatus.PENDING and v.score is not None),
+                         key=lambda v: (-v.score, v.id))
+        for i, v in enumerate(waiting):
+            if i < self.w.params.venture_budget:
+                self.decide(v, approved=True)
+            else:
+                self.w.tell(v.proposer, "venture_waiting", f"{v.id} scored {v.score} but the market's budget this "
+                            f"cycle went to better-scored ventures; it stays in line", v.id)
 
     def decide(self, v: Venture, approved: bool) -> None:
         if not approved:

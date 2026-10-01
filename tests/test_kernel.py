@@ -7,7 +7,7 @@ domain word from a pack (earn online, tech for good) creeps into the kernel.
 import re
 from pathlib import Path
 
-from commons.application.world import Params, World
+from commons.application.society import Params, World
 from commons.domain.pack import TemplateWorkSource, load
 
 ROOT = Path(__file__).parent.parent

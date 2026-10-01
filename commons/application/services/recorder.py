@@ -17,7 +17,7 @@ from commons.domain.status import (
 from commons.substrate.ledger import purse
 
 if TYPE_CHECKING:
-    from commons.application.world import World
+    from commons.application.society import World
 
 
 class Recorder:

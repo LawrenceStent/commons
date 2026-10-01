@@ -33,7 +33,7 @@ from typing import TYPE_CHECKING
 from commons.application.population import expire_proposals
 
 if TYPE_CHECKING:
-    from commons.application.world import World
+    from commons.application.society import World
 
 
 @dataclass(frozen=True)

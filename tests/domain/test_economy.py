@@ -45,7 +45,7 @@ def test_a_new_economy_is_one_class():
     """A patron who pays a flat 50,000 for any passing job, at once: no other code changes."""
     from dataclasses import dataclass
 
-    from commons.application.world import Params, World
+    from commons.application.society import Params, World
 
     @dataclass(frozen=True)
     class Patron:

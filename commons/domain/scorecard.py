@@ -18,7 +18,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-World = Any  # the society (application/world.py), read through its public records; typed loosely so the domain
+World = Any  # the society (application/society.py), read through its public records; typed loosely so the domain
 #              doesn't depend on the application
 
 

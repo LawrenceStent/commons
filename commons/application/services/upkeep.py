@@ -10,7 +10,7 @@ from commons.domain.treasury import floor_top_up, members_to_wake
 from commons.substrate.ledger import InsufficientFunds, purse
 
 if TYPE_CHECKING:
-    from commons.application.world import World
+    from commons.application.society import World
 
 
 class Upkeep:

@@ -3,7 +3,7 @@
 
 from commons.agents.scripted import Strategy
 from commons.application.actions import Actions
-from commons.application.world import Params, World
+from commons.application.society import Params, World
 from commons.domain.community import Community
 from commons.domain.grading import tagged
 from commons.domain.market import MarketJob, Part

@@ -1,27 +1,23 @@
-"""The turn-based world: communities act through the actions executor, one turn per cycle.
+"""The society: its state, and the facade the rest of the code talks to.
 
-One cycle:
-    floor     treasury pays every community the flat basic budget
-    upkeep    each community pays for as many members to think as it can; none funded => silent
-    deadlines anything past its deadline expires, fails or defaults (see below)
-    market    new jobs go up on the board
-    turns     each active community, in random order, sees an Observation and acts
-    gossip    communities relay first-hand beliefs; everyone listens
-    decay     old evidence fades
+A society holds its co-ops, jobs, contracts, library, plans and records, and the infrastructure it runs on (ledger,
+bus, meter, reputation, telemetry). Its work is done by services, one responsibility each:
 
-The contract-net spans cycles, and every stage has a deadline, so no one can stall another:
-    open       bids arrive; the prime awards from the next cycle   -> expired after `bid_window`
-    awarded    advance paid; contractor delivers                    -> failed after `deliver_ttl`:
-               the prime keeps its complaint, the advance is gone
-    delivered  prime reviews and pays the remainder, or rejects     -> after `review_ttl` the
-               delivery is accepted by default; if the prime can't pay it has defaulted
-A claimed job must be complete by its deadline or it fails. A complete job is graded part by
-part; if every part passes, the market pays and revenue splits 70/20/10.
+    board         jobs posted, claimed (allocated by rule at cycle end), finished, failed    services/board.py
+    contract_net  parts bought from other co-ops: bids, awards, deliveries, audits           services/contract_net.py
+    grading       submitted work, deliveries and audits judged; the citation rule           services/grading.py
+    payments      passing work paid as the economy says; paid work recorded                services/payments.py
+    venture_desk  co-ops' own proposals appraised, priced and approved                       services/ventures.py
+    web_desk      web reads behind the gate                                                  services/web.py
+    upkeep        the floor and waking members                                               services/upkeep.py
+    rating_desk   your ratings applied as evidence                                           services/ratings.py
+    gossip        co-ops relay what they've seen                                             services/gossip.py
+    recorder      tallies, snapshots, the scorecard, cycle telemetry                         services/recorder.py
+    observer      what a co-op sees                                                          observe.py
 
-How passing work is paid is the economy's business (`Params.economy`, a policy from commons/domain/economy.py):
-a market pays each passing job at once; grants share a fixed pool among the cycle's passing work by value.
-
-Money in this world is created money (SIM credits); see commons/substrate/ledger.py.
+One cycle runs them in a fixed order (commons/application/cycle.py). Agents act only through the actions executor
+(commons/application/actions.py). Money in a simulated society is created money (SIM credits); see
+commons/substrate/ledger.py.
 """
 
 from __future__ import annotations
@@ -80,7 +76,7 @@ def default_population() -> list[Community]:
     return load_pack().population()
 
 
-class World:
+class Society:
     def __init__(self, params: Params | None = None, population: list[Community] | None = None,
                  hub: Hub | None = None, grader: Grader | None = None, appraiser: Appraiser | None = None,
                  operator: Operator | None = None, pack: Pack | None = None, archive: ArchiveIndex | None = None,
@@ -88,18 +84,28 @@ class World:
                  ledger: Ledger | None = None, bus: Bus | None = None, activity: ActivityLog | None = None,
                  payment: PaymentPolicy | None = None):
         """Everything outside the society's rules can be passed in (the model-backed grader and appraiser, the web,
-        the ledger, the bus, the activity log); what isn't is built from `params` (see `_default_*` below)."""
+        the ledger, the bus, the activity log, the economy); what isn't is built from `params`."""
         self.params = p = params or Params()
         self.pack = pack or load_pack()  # what this society is for: its work, vocabulary and seed co-ops
         self.hub = hub or Hub()
-        self.lock = threading.RLock()  # held for every state change; see parallel_turns
+        self.lock = threading.RLock()  # held for every state change; see cycle.py
         self.rng = random.Random(p.seed)
         self.cycle = 0
         self.communities = {c.name: c for c in (population or self.pack.population())}
-        self.ledger = ledger or _default_ledger(p, self.hub)
+        self._connect(ledger, bus, grader, appraiser, operator, archive, ratings, web, gate, payment)
+        self._open_records()
+        self.activity = activity or ActivityLog(p.activity_keep, p.activity_path)
+        self.activity.watch(self.hub)
+        self._start_services()
+        self._genesis()
+
+    def _connect(self, ledger, bus, grader, appraiser, operator, archive, ratings, web, gate, payment) -> None:
+        """The infrastructure and collaborators: given, or the defaults."""
+        p = self.params
+        self.ledger = ledger or Ledger(p.ledger_path, hub=self.hub)
         self.meter = Meter(self.ledger, daily_ceiling=p.daily_ceiling, hub=self.hub)
         self.rep = Reputation(decay=p.decay, hub=self.hub)
-        self.bus = bus or _default_bus(p, self.hub)
+        self.bus = bus or MemoryBus(Registry(), base_allowance=p.base_allowance, verify=p.verify, hub=self.hub)
         self.bus.standing = self.standing  # the bus rations messages by this society's trust
         self.registry = self.bus.registry
         self.grader = grader or StubGrader(cost=p.grade_cost)
@@ -107,16 +113,19 @@ class World:
         self.operator = operator or Operator(None)
         self.archive = archive or ArchiveIndex()  # the society's reference material, searched on demand
         self.ratings = ratings  # your ratings of a sample of the paid work (commons/application/ratings.py)
-        # the web (a WebPort; None = no web at all), behind the gate (commons/application/gate.py), whose policy is
-        # the operator's [gate] section
+        # the web (a WebPort; None = no web at all), behind the gate, whose policy is the operator's [gate] section
         self.web = web
         self.gate = gate or Gate()
         self.gate.policy = self.operator.gate
         if self.web:
             self.web.set_hosts(self.gate.policy.allow_hosts)
-        self.outputs: deque[dict] = deque(maxlen=p.outputs_keep)  # paid work, newest last: who did what, how it scored
         # how passing work is paid: given, or chosen once from the settings
         self.payment = payment or policy_for(p.economy, p.grant_budget, p.grant_cap_cycles)
+
+    def _open_records(self) -> None:
+        """The society's state: work, knowledge, plans, and what happened."""
+        p = self.params
+        self.outputs: deque[dict] = deque(maxlen=p.outputs_keep)  # paid work, newest last: who did what, how it scored
         self.scorecard: list[dict] = []  # the pack's mission metrics plus the general ones, as of the last cycle
         self.ventures: dict[str, Venture] = {}
         self.jobs: dict[str, MarketJob] = {}
@@ -128,12 +137,14 @@ class World:
         self.jobs_done = self.jobs_failed = self.jobs_expired = 0
         self.royalties_paid: dict[str, int] = {}
         self.proposals: dict[str, Proposal] = {}
-        # grading happens after the turns, outside the lock (see settle_grading)
         self.thinking_spend: Counter[str] = Counter()  # µcr of model calls, per co-op
         self.transcripts: defaultdict[str, deque] = defaultdict(lambda: deque(maxlen=2))  # LLM turns, newest last
         self.plans: defaultdict[str, Plans] = defaultdict(Plans)  # ideas and goals per community
-        self.activity = activity or _default_activity(p)
-        self.activity.watch(self.hub)
+        self.known_capabilities = set(self.pack.capabilities).union(*(c.capabilities for c in self.communities.values()))
+        self.turn_order: list[Community] = []  # this cycle's, shuffled (see cycle.py)
+
+    def _start_services(self) -> None:
+        """The world's work, one responsibility each (commons/application/services/)."""
         self.observer = ObservationBuilder(self)
         self.recorder = Recorder(self)
         self.gossip = GossipService(self)
@@ -146,9 +157,10 @@ class World:
         self.board = JobBoard(self)
         self.contract_net = ContractNet(self)
         self.grading = Grading(self)
-        self.known_capabilities = set(self.pack.capabilities).union(*(c.capabilities for c in self.communities.values()))
-        self.turn_order: list[Community] = []  # this cycle's, shuffled (see cycle.py)
 
+    def _genesis(self) -> None:
+        """Money in at the start: the treasury's seed and every co-op's purse; each co-op registers its key."""
+        p = self.params
         self.ledger.transfer("genesis", "treasury", p.treasury_seed, cycle=0, kind="genesis")
         for c in self.communities.values():
             c.strategy.rng = random.Random(f"{p.seed}:{c.name}")
@@ -205,7 +217,7 @@ class World:
         """One cycle, phase by phase (commons/application/cycle.py)."""
         run_cycle(self)
 
-    def run(self, cycles: int) -> World:
+    def run(self, cycles: int) -> Society:
         for _ in range(cycles):
             self.step()
         return self
@@ -234,13 +246,4 @@ class World:
 
     # ── gossip and records ─────────────────────────────────────
 
-def _default_ledger(p: Params, hub: Hub) -> Ledger:
-    return Ledger(p.ledger_path, hub=hub)
-
-
-def _default_bus(p: Params, hub: Hub) -> Bus:
-    return MemoryBus(Registry(), base_allowance=p.base_allowance, verify=p.verify, hub=hub)
-
-
-def _default_activity(p: Params) -> ActivityLog:
-    return ActivityLog(p.activity_keep, p.activity_path)
+World = Society  # the name the code grew up with; both mean the same class

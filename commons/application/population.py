@@ -34,7 +34,7 @@ from commons.protocol.population import Fork, Merge, Retire, Spawn
 from commons.substrate.ledger import InsufficientFunds, purse
 
 if TYPE_CHECKING:
-    from commons.application.world import World
+    from commons.application.society import World
 
 NAME = re.compile(r"^[a-z][a-z0-9-]{1,23}$")
 

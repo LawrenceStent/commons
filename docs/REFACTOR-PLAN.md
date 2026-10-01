@@ -210,9 +210,14 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
       `world.cycle` telemetry, `summary`)
 - [x] R6.6 `ObservationBuilder` (`application/observe.py`) replaces `World.observe`, built in five sections (the co-op,
       its work, its neighbours, its plans, its surroundings); `world.observe(c)` stays as a one-line facade
-- [ ] R6.7 `Society` facade with today's `World` API (`World` kept as an alias)
-- [ ] **Done when:** `Society` under 250 lines; no class over 300 or function over 40 lines (tables excepted); no
-      cross-module private access; golden identical
+- [x] R6.7 `Society` facade (`application/society.py`) with today's `World` API (`World` kept as an alias). Its
+      constructor is four named steps (connect, open records, start services, genesis); `VentureDesk.appraise` split
+      in three; the dashboard reads the meter through a public property
+- [x] **Done when:** `Society` under 250 lines; no class over 300 or function over 40 lines (tables excepted); no
+      cross-module private access; golden identical. 1 Oct: `Society` under 250 lines; in the application layer no function
+      is over 40 lines and no class over 300 except `Actions` (410, R8's job); no cross-module private access. Long
+      functions left elsewhere belong to R10 (the LLM agent), R11 (the dashboard) and, added here, two model-backend
+      `chat` methods (46 and 43 lines) for R12
 
 ### R7. Domain events (M) — D7
 - [ ] R7.1 Typed events and a dispatcher; subscribers for inbox, telemetry and activity

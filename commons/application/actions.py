@@ -30,7 +30,7 @@ from commons.substrate.bus import RateLimited
 from commons.substrate.ledger import InsufficientFunds, purse
 
 if TYPE_CHECKING:
-    from commons.application.world import World
+    from commons.application.society import World
     from commons.domain.community import Community
     from commons.domain.contract import Contract
 

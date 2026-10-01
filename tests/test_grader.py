@@ -9,7 +9,7 @@ from commons.agents.scripted import Strategy
 from commons.application import calibration
 from commons.application.graders import SCHEMA, GradingError, LLMGrader
 from commons.application.ports import ModelError
-from commons.application.world import Params, World
+from commons.application.society import Params, World
 from commons.domain.community import Community
 from commons.domain.market import MarketJob, Part
 from commons.substrate.ledger import USD

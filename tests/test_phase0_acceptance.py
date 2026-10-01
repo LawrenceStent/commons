@@ -5,7 +5,7 @@ every future change to the incentive rules.
 
 import pytest
 
-from commons.application.world import Params, World
+from commons.application.society import Params, World
 
 SEEDS = range(5)
 CYCLES = 200

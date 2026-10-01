@@ -17,7 +17,7 @@ from commons.agents.scripted import Cooperator
 from commons.application.actions import Actions
 from commons.application.gate import Gate, pending_in, record
 from commons.application.operator import Operator
-from commons.application.world import Params, World
+from commons.application.society import Params, World
 from commons.domain.community import Community
 from commons.domain.gate import GateError, GatePolicy
 from commons.domain.market import MarketJob, Part

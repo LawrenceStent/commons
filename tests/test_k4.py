@@ -13,7 +13,7 @@ from commons.application.archive import Archive
 from commons.application.calibration import run as run_calibration
 from commons.application.graders import GradingError, LLMGrader, PanelGrader
 from commons.application.ratings import Ratings, add
-from commons.application.world import Params, World
+from commons.application.society import Params, World
 from commons.domain.archive import citations
 from commons.domain.community import Community
 from commons.domain.market import MarketJob, Part

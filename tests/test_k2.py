@@ -3,7 +3,7 @@ scales with quality, and outcomes known only later can settle later."""
 
 from commons.agents.scripted import Cooperator, Strategy
 from commons.application.actions import Actions
-from commons.application.world import Params, World
+from commons.application.society import Params, World
 from commons.domain.community import Community
 from commons.domain.grading import Grade, StubGrader, tagged
 from commons.domain.market import MarketJob, Part

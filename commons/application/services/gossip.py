@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from commons.protocol.reputation import Gossip
 
 if TYPE_CHECKING:
-    from commons.application.world import World
+    from commons.application.society import World
 
 
 class GossipService:

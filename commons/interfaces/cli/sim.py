@@ -4,7 +4,7 @@ import argparse
 import time
 
 from commons.application.services.recorder import summary
-from commons.application.world import Params, World
+from commons.application.society import Params, World
 from commons.domain.pack import load as load_pack
 
 ap = argparse.ArgumentParser()

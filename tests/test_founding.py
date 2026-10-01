@@ -9,7 +9,7 @@ from commons.agents.llm.render import community_block, render
 from commons.agents.scripted import Cooperator
 from commons.application import founding
 from commons.application.archive import Archive
-from commons.application.world import Params, World
+from commons.application.society import Params, World
 from commons.domain.community import Community
 from commons.domain.pack import load as load_pack
 

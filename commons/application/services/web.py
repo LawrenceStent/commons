@@ -16,7 +16,7 @@ from commons.domain.status import (
 )
 
 if TYPE_CHECKING:
-    from commons.application.world import World
+    from commons.application.society import World
 
 
 class WebDesk:

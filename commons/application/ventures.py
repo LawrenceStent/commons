@@ -26,7 +26,7 @@ from commons.domain.status import JobStatus, VentureStatus
 from commons.domain.ventures import MAX_PARTS, MAX_TEXT, Appraisal, AppraisalError, Venture, similar
 
 if TYPE_CHECKING:
-    from commons.application.world import World
+    from commons.application.society import World
     from commons.domain.community import Community
 
 

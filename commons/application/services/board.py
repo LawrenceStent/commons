@@ -19,7 +19,7 @@ from commons.domain.treasury import bond_for
 from commons.substrate.ledger import InsufficientFunds, purse
 
 if TYPE_CHECKING:
-    from commons.application.world import World
+    from commons.application.society import World
 
 
 class JobBoard:

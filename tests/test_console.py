@@ -2,7 +2,7 @@ import json
 
 from fastapi.testclient import TestClient
 
-from commons.application.world import Params, World
+from commons.application.society import Params, World
 from commons.interfaces.console.app import create_app, snapshot
 from commons.substrate.telemetry import Hub
 

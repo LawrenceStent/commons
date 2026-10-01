@@ -67,7 +67,7 @@ def _recording_turns(world, told: list[str]):
 
 
 def _build(pack_name: str, seed: int, live: bool, tmp: Path):
-    from commons.application.world import Params, World
+    from commons.application.society import Params, World
     from commons.domain.pack import load
 
     pack = load(pack_name)

@@ -23,7 +23,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 
-from commons.application.world import Params, World
+from commons.application.society import Params, World
 from commons.domain.status import LIVE_CONTRACT, ContractStatus, GoalStatus, JobStatus, ProposalStatus, RequestStatus
 from commons.interfaces.console import host
 from commons.substrate.ledger import purse
@@ -89,7 +89,7 @@ def snapshot(state: dict) -> dict:
             "seed": w.params.seed, "reputation": w.params.reputation,
             "jobs_done": w.jobs_done, "jobs_failed": w.jobs_failed,
             "treasury": w.ledger.balance("treasury"), "halted": w.meter.halted,
-            "spent_today": w.meter._spent_today, "ceiling": w.meter.daily_ceiling,
+            "spent_today": w.meter.spent_today, "ceiling": w.meter.daily_ceiling,
             "rss_limit": state["rss_limit"],
         },
         "money": {"currency": w.ledger.currency, "real": w.ledger.real(),

@@ -40,6 +40,11 @@ class Meter:
         self._spent_today = 0
         self.by_community: dict[str, int] = {}
 
+    @property
+    def spent_today(self) -> int:
+        """Notional spend so far today, against `daily_ceiling`."""
+        return self._spent_today
+
     def charge(self, community: str, amount: Micros, *, cycle: int, memo: str = "") -> None:
         """Debit compute. Raises InsufficientFunds (silence) or KillSwitch."""
         if self.halted:
