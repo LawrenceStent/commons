@@ -252,8 +252,10 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
 - [x] R10.1 `Agent` protocol (`wake`, `turn`, `name`, `gossips`, `rng`); the LLM agent no longer inherits the scripted
       strategy. The waking rule both used is one function (`agents/waking.py`), which the scripted strategy calls with its
       own costs
-- [ ] R10.2 `StewardLoop`, `MemberWorker`, `prompts.py` split out of `LLMStrategy`
-- [ ] **Done when:** no function over 40 lines in `agents/`; golden identical
+- [x] R10.2 `StewardLoop` (one turn, round by round), `MemberWorker` (`agents/llm/member.py`: check, reference,
+      look-ups, drafts) and `prompts.py` split out of `LLMStrategy`; tool dispatch is a table of argument conversions;
+      the renderer is five sections. Every prompt is byte-identical (the golden fake run's token counts prove it)
+- [x] **Done when:** no function over 40 lines in `agents/`; golden identical
 
 ### R11. Interfaces and commands (M) — A5, S3, C1
 - [ ] R11.1 One `commons` CLI with subcommands and a testable `main(argv)`; nothing runs at import
