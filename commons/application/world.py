@@ -34,19 +34,10 @@ from commons.application.actions import Actions
 from commons.application.cycle import run_cycle
 from commons.application.gate import Gate
 from commons.application.observation import (
-    BidView,
-    ContractView,
     Event,
-    GoalView,
-    IdeaView,
-    JobView,
     Observation,
-    PartView,
-    PeerView,
-    PlaybookView,
-    ProposalView,
-    VentureView,
 )
+from commons.application.observe import ObservationBuilder
 from commons.application.operator import Operator
 from commons.application.params import Params
 from commons.application.population import Proposal
@@ -73,12 +64,6 @@ from commons.domain.knowledge import Playbook
 from commons.domain.market import MarketJob
 from commons.domain.pack import Pack
 from commons.domain.pack import load as load_pack
-from commons.domain.status import (
-    LIVE_CONTRACT,
-    ContractStatus,
-    JobStatus,
-    ProposalStatus,
-)
 from commons.domain.ventures import Appraiser, StubAppraiser, Venture
 from commons.protocol import Envelope, Message
 from commons.substrate.activity import ActivityLog
@@ -149,6 +134,7 @@ class World:
         self.plans: defaultdict[str, Plans] = defaultdict(Plans)  # ideas and goals per community
         self.activity = activity or _default_activity(p)
         self.activity.watch(self.hub)
+        self.observer = ObservationBuilder(self)
         self.recorder = Recorder(self)
         self.gossip = GossipService(self)
         self.upkeep = Upkeep(self)
@@ -190,12 +176,12 @@ class World:
         standing = self.standing(bidder)
         if standing < floor:
             return False, f"{bidder}'s standing in the commons is {standing:.2f}, below the {floor:.2f} line"
-        trust = self._trust(prime, bidder, capability)
+        trust = self.trust(prime, bidder, capability)
         if trust < floor:
             return False, f"{prime}'s record of {bidder} in {capability} is {trust:.2f}, below the {floor:.2f} line"
         return True, ""
 
-    def _trust(self, observer: str, subject: str, capability: str) -> float:
+    def trust(self, observer: str, subject: str, capability: str) -> float:
         return self.rep.score(observer, subject, capability) if self.params.reputation else 0.5
 
     def tell(self, name: str, kind: str, text: str, ref: str | None = None) -> None:
@@ -236,85 +222,15 @@ class World:
 
     # ── the web, behind the gate ───────────────────────────────
 
+    def observe(self, me: Community) -> Observation:
+        """What a co-op sees (commons/application/observe.py)."""
+        return self.observer.build(me)
+
     def add_playbook(self, pid: str, author: str, capability: str, title: str, text: str) -> None:
         self.library[pid] = Playbook(pid, author, capability, title, text)
         self.hub.emit("knowledge.publish", self.cycle, id=pid, author=author, capability=capability, title=title)
 
     # ── what a community sees ──────────────────────────────────
-    def observe(self, me: Community) -> Observation:
-        name, p = me.name, self.params
-        pending = {(c.job_id, c.capability): c.status for c in self.contracts.values() if c.status in LIVE_CONTRACT}
-
-        def job_view(j: MarketJob) -> JobView:
-            return JobView(j.id, j.title, j.reward, tuple(
-                PartView(cap, part.spec, part.rubric, part.artifact is not None, part.source, pending.get((j.id, cap)))
-                for cap, part in sorted(j.parts.items())), j.deadline)
-
-        def contract_view(c: Contract, as_prime: bool) -> ContractView:
-            bids = tuple(BidView(b, price, round(self._trust(name, b, c.capability), 3), round(self.standing(b), 3),
-                                 *self.eligible(name, b, c.capability))
-                         for b, price in sorted(c.bids.items())) if as_prime else ()
-            show = as_prime and c.status != ContractStatus.OPEN or c.winner == name
-            return ContractView(c.id, c.job_id, c.capability, c.prime, c.spec, c.rubric, c.max_price, c.advance_frac,
-                                c.announced, bids, c.bids.get(name), c.winner, c.price,
-                                c.artifact if show else None, c.deadline, c.status)
-
-        cs = self.contracts.values()
-        return Observation(
-            cycle=self.cycle, name=name, charter=me.charter, capabilities=tuple(sorted(me.capabilities)),
-            members=me.members, funded=me.thinking, capacity=me.capacity,
-            purse=self.ledger.balance(purse(name)), standing=round(self.standing(name), 3),
-            board=tuple(job_view(j) for j in self.jobs.values() if j.status == JobStatus.OPEN),
-            my_jobs=tuple(job_view(j) for j in self.jobs.values() if j.status == JobStatus.CLAIMED and j.prime == name),
-            # a world rule: contracts the commons would refuse my bid on aren't offered at all
-            open_contracts=tuple(contract_view(c, False) for c in cs
-                                 if c.status == ContractStatus.OPEN and c.prime != name and self.eligible(c.prime, name, c.capability)[0]),
-            refused_contracts=sum(1 for c in cs if c.status == ContractStatus.OPEN and c.prime != name and c.capability in me.capabilities
-                                  and not self.eligible(c.prime, name, c.capability)[0]),
-            claim_limit=max(2, me.thinking),
-            my_announcements=tuple(contract_view(c, True) for c in cs if c.status == ContractStatus.OPEN and c.prime == name),
-            to_deliver=tuple(contract_view(c, False) for c in cs if c.status == ContractStatus.AWARDED and c.winner == name),
-            to_review=tuple(contract_view(c, True) for c in cs if c.status == ContractStatus.DELIVERED and c.prime == name
-                            and not p.grader_reviews),
-            to_attest=tuple(contract_view(c, False) for c in cs
-                            if c.winner == name and c.closed is not None and c.status in (ContractStatus.ACCEPTED, ContractStatus.REJECTED, ContractStatus.FAILED)
-                            and not c.winner_attested),
-            peers=tuple(PeerView(o.name, tuple(sorted(o.capabilities)), o.members, round(self.standing(o.name), 3),
-                                 {cap: round(self._trust(name, o.name, cap), 3) for cap in sorted(o.capabilities)})
-                        for o in self.living() if o.name != name),
-            spawn_requests=tuple(ProposalView(x.id, x.kind, x.proposer, x.deadline, x.role, round(self.standing(x.proposer), 3))
-                                 for x in self.proposals.values()
-                                 if x.kind == "spawn" and x.status == ProposalStatus.OPEN and x.proposer != name),
-            merge_offers=tuple(ProposalView(x.id, x.kind, x.proposer, x.deadline, "", round(self.standing(x.proposer), 3))
-                               for x in self.proposals.values()
-                               if x.kind == "merge" and x.status == ProposalStatus.OPEN and x.target == name),
-            my_proposals=tuple(ProposalView(x.id, x.kind, x.proposer, x.deadline, x.role or x.target, 0.0)
-                               for x in self.proposals.values() if x.proposer == name and x.status == ProposalStatus.OPEN),
-            to_dispute=tuple(contract_view(c, False) for c in cs
-                             if not p.grader_reviews and c.winner == name and c.status == ContractStatus.REJECTED and not c.disputed
-                             and self.cycle <= c.closed + p.dispute_window),
-            library=tuple(PlaybookView(pb.id, pb.capability, pb.author, pb.title, pb.uses) for pb in self.library.values()),
-            events=tuple(self.inbox[name]),
-            journal=tuple(self.journal[name]),
-            params={"sub_share": p.sub_share, "work_cost": p.work_cost, "advance_frac": p.advance_frac, "publish_cost": p.publish_cost,
-                    "spawn_fee": p.spawn_fee, "venture_fee": p.venture_fee, "learn_cost": p.learn_cost, "audit_cost": p.audit_cost,
-                    "max_members": p.max_members, "pass_score": p.pass_score, "max_communities": p.max_communities,
-                    "communities": len(self.living()),
-                    "upkeep": p.upkeep, "actions_per_member": p.actions_per_member, "job_ttl": p.job_ttl},
-            track=dict(me.deliveries),
-            owed=sum(c.owed for c in cs if c.prime == name and c.status in (ContractStatus.AWARDED, ContractStatus.DELIVERED)),
-            ventures=tuple(VentureView(v.id, v.title, v.status, v.score, v.reward, v.reason, v.job_id, v.cycle)
-                           for v in list(self.ventures.values()) if v.proposer == name)[-5:],
-            efficiency=self.recorder.efficiency(name),
-            doctrine=me.doctrine,
-            archive=(len(self.archive), tuple(sorted({p.source for p in self.archive.passages.values()}))),
-            grants=self.payment.view(self.payments.pool_balance()),
-            web=self.gate.policy.describe() if self.web else "",
-            pending_claims=tuple(self.board.pending_claims(name)),
-            goals=tuple(GoalView(g.id, g.title, g.status, tuple((s.text, s.done, s.note) for s in g.steps), round(g.progress, 2))
-                        for g in self.plans[name].active()),
-            ideas=tuple(IdeaView(i.id, i.title, i.detail, i.cycle, i.status) for i in self.plans[name].ideas[-5:]),
-        )
 
     # ── gossip and records ─────────────────────────────────────
 

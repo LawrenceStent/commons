@@ -208,7 +208,8 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
       archive stay as world state (`library`, `archive`) with `add_playbook`: three lines don't need a service
 - [x] R6.5 Services: gossip (`GossipService`) and the recorder (`Recorder`: tallies, snapshots, the scorecard, the
       `world.cycle` telemetry, `summary`)
-- [ ] R6.6 `ObservationBuilder` replaces `World.observe`
+- [x] R6.6 `ObservationBuilder` (`application/observe.py`) replaces `World.observe`, built in five sections (the co-op,
+      its work, its neighbours, its plans, its surroundings); `world.observe(c)` stays as a one-line facade
 - [ ] R6.7 `Society` facade with today's `World` API (`World` kept as an alias)
 - [ ] **Done when:** `Society` under 250 lines; no class over 300 or function over 40 lines (tables excepted); no
       cross-module private access; golden identical
