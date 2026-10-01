@@ -635,6 +635,23 @@ checklists in the plan (R0 to R12), on branch `refactor/architecture`; no featur
     read, each held until approved, the off-list host refused, 3 requests in all. Pack 0 still byte-identical
   - **Not yet:** a live LLM run using the web; other search providers (a key-based one, if you want the whole web);
     contact, publish and spend tools (Phase 2 builds the first, behind this gate)
+  - **First live tech-for-good run with the web (1 Oct, Qwen 3.5 35B-A3B, 10 cycles, read-only Wikipedia allowed
+    without asking, 4 web calls per co-op per cycle).** Run 1 lost an hour: LM Studio's engine stalled mid-prompt
+    after cycle 1, and each call waited ~1,000s despite our 180s timeout. Fixed (9d3c4ee): a hard deadline per call,
+    and the run stops when every LLM turn in a cycle failed on a model error. Run 2 (`runs/t4g-live-2.log`) finished
+    10 cycles in 11 minutes, no stall. What happened:
+    - The web works end to end: 5 searches and 5 page reads (heat stress, loneliness in old age, air pollution) went
+      into the archive and were searched and read 82 times
+    - Both LLM co-ops did a part each (pilots wrote J1, fieldwork assessed J2), but neither job finished: pilots
+      contracted J1's scout part to the scripted defector, which delivered junk (graded 0.04, rejected, as it should
+      be); nobody bid on fieldwork's J2 write contract. Only the scripted cooperator's J3 was paid
+    - Both went bankrupt by cycle 6 (0.4 cr each, 0.72 cr of thinking): stewards read archive passages one call at a
+      time, so every read re-sends a growing conversation (627k tokens in, none cached in the local pricing)
+    - Bankrupt co-ops still called the model in cycles 7 to 10 (about 50s each) and then couldn't pay for it
+    - Drafts didn't cite the archive (0%) and named no risks (0%): the first drafts were written before the relevant
+      pages were read, and marked their claims (unverified). The grant pool went unused (1.8 cr left)
+    - Proposed next (your call): skip the model call when the purse can't pay for one (a rule); let `read_archive`
+      take several passage ids; price local calls with the prefix cache LM Studio actually reuses; then rerun
 - [ ] K6 Trading pack: paper broker, forward-only, deterministic risk-adjusted evaluator, doctrine per co-op
 - [ ] K7 OSINT pack: sourcing-first evaluator, separate verify co-op, forbidden-target policy enforced in tools
 - [ ] K8 Many societies: registry, CLI, dashboard picker, per-society and total spend caps, slow-cadence scheduler
