@@ -2,6 +2,7 @@
 
 Follows from `docs/ARCHITECTURE-AUDIT.md` (finding ids such as S1 or D3 refer to it). Branch:
 `refactor/architecture`, cut from `phase-1` at `85160fc`. No feature work on `phase-1` until this merges back.
+Decisions are in §5; progress is the checklists in §3.
 
 **The rule of this refactor: behaviour does not change.** Every commit passes the full test suite and a golden-master
 test that pins today's runs byte for byte. Anything that would change behaviour is out of scope, or goes to you as
@@ -104,137 +105,132 @@ as thin shims that call the new CLI, until you decide to drop them.
 
 ## 2. How we work
 
-1. **Golden master first** (stage 0). It runs scripted societies (seeds 0, 3 and 7, both packs, 200 cycles) and a
+1. **Golden master first** (R0). It runs scripted societies (seeds 0, 3 and 7, both packs, 200 cycles) and a
    fake-model live society (10 cycles, sequential), and stores, per run:
    - every ledger posting
    - every telemetry event (kind and fields, without wall-clock times)
    - every activity entry (without times)
-   - every event each co-op was told (captured by a recording wrapper around each strategy)
+   - every event each co-op was told
    - the summary text
 
-   Each stage must reproduce all of them exactly.
-2. **Every commit is green**: `uv run pytest` gated on its exit code (never piped), golden master included.
-3. **Behaviour changes are not refactoring.** If a stage finds a bug, it's noted in this file, and the fix goes in
-   its own commit, after the refactor, with your approval and a deliberate golden update.
-4. **TDD for the new domain types** (stages 4 and 5): write the aggregate's tests first (red), implement (green),
-   then move the world onto it (refactor) with the golden master watching.
-5. **Small steps**: one move or extraction per commit, with the stage named in the message ("R4: …").
-6. **Metrics after each stage** (`tools/arch_metrics.py`): the audit's numbers, so progress is visible.
-7. **Performance budget**: scripted runs stay within 25% of today's (200 cycles in about 0.7 s).
+   Every later commit must reproduce them exactly.
+2. **After every checklist item:** run the full test suite (gated on pytest's exit code, never piped) and the
+   golden master, then commit with the item named ("R1.3: …"), and tick the item in this file in the same commit.
+3. **At the end of each stage:** run the metrics, tick the stage's done-when, and push the branch (a backup; nothing
+   merges yet).
+4. **Merging:** once, at the end, as a fast-forward of `phase-1`. No feature work lands on `phase-1` meanwhile, so the
+   merge can't conflict, and `phase-1` never holds a half-refactored tree. If we pause midway, the branch is
+   usable as it stands: every commit is green and golden.
+5. **Behaviour changes are not refactoring.** A bug found on the way is written under §7 (found along the way) and
+   fixed after the merge, with your approval and a deliberate golden update.
+6. **TDD for new domain types** (R4, R5): tests first (red), implementation (green), then move the world onto them
+   with the golden master watching.
+7. **Performance budget:** scripted runs stay within 25% of today's (200 cycles in about 0.7 s of simulation).
 
 ---
 
 ## 3. Stages
 
-Sizes are relative (S, M, L, XL). The stages are ordered so that each leaves the code better on its own; we can stop
-after any of them.
+Sizes are relative (S, M, L, XL). Tick each item when it's committed.
 
 ### R0. Safety net (S)
-- `tests/golden/`: the harness and fixtures described in §2, plus `pytest -m golden` to run it alone.
-- A recording strategy wrapper for told events (only the test uses it).
-- `tests/test_layers.py`: the dependency rule from §1.1, checked from the AST, with today's violations listed as known
-  exceptions (each with its finding id).
-- `tools/arch_metrics.py`: the measurements behind the audit.
-- **Done when:** the golden master passes on an untouched tree twice in a row, and fails if one character of a
-  posting changes (a deliberate mutation test, then reverted).
+- [ ] R0.1 Golden-master harness and fixtures in `tests/golden/` (§2), run alone with `pytest -m golden`
+- [ ] R0.2 Recording wrapper that captures what each co-op is told (tests only)
+- [ ] R0.3 Mutation check: changing one posting fails the golden master (proved, then reverted)
+- [ ] R0.4 `tests/test_layers.py`: the dependency rule from the AST, with today's violations as named exceptions
+- [ ] R0.5 `tools/arch_metrics.py`: the audit's measurements, with a baseline recorded here
+- [ ] **Done when:** the golden master passes twice on an untouched tree and catches a one-character change
 
 ### R1. Quick wins, in place (M) — D1 to D6, C3 (part), A6
-- `JsonlLog`: append, plus incremental read from an offset, plus read-all. Used by ratings and the gate (D1, D6).
-- `backends.from_args(...)`: one place that builds a model backend and enforces the spend flag (D2, S5).
-- `LIVE_ECONOMY` defaults in the kernel; packs override only what differs (D3).
-- `LLMGrader` appends the answer format itself; pack prompts drop their copies (D4). This changes the prompt text
-  sent to models but not any scripted output; it needs a one-line note in the golden fake run if prompts are
-  pinned there.
-- `society_folder(name)` helper (D5).
-- StrEnums for job, contract, venture and request statuses, and constants for event kinds. StrEnum compares equal
-  to strings, so this is safe to do one at a time (C3).
-- `protocol.gate` and `protocol.governance`: delete, or mark reserved (your decision, §5).
-- **Done when:** duplicates gone, golden identical.
+- [ ] R1.1 `JsonlLog` (append, incremental read, read all), used by ratings and the gate (D1, D6)
+- [ ] R1.2 One backend factory with the spend check, used by every command (D2, S5)
+- [ ] R1.3 Live economy defaults in the kernel; packs override only what differs (D3)
+- [ ] R1.4 `LLMGrader` adds the answer format itself; packs drop their copies (D4)
+- [ ] R1.5 One `society_folder(name)` helper (D5)
+- [ ] R1.6 StrEnums for job, contract, venture and request statuses; constants for event kinds (C3)
+- [ ] R1.7 Delete `protocol.gate` and `protocol.governance` and any other unused code (A6)
+- [ ] **Done when:** these duplicates are gone; golden identical
 
 ### R2. Break the cycles, in place (M) — A1, A2, S8
-- Move `Grade`, `Grader`, `StubGrader` and the quality tags out of `sim/market.py` into a grading module that
-  `society` and `runtime` can both import without importing `sim`.
-- A neutral module for the model port (`ModelBackend`, `Completion`, `Turn`, `ToolCall`, `Usage`). `sim` depends on
-  the port; `runtime` implements it.
-- The world receives its web, ledger, bus and hub (A4). The defaults are built by a factory, so `World(Params())`
-  still works.
-- Remove all 11 in-function imports.
-- **Done when:** the import graph has no cycles, the layer test's exceptions shrink accordingly, golden identical.
+- [ ] R2.1 Grading types (`Grade`, `Grader`, `StubGrader`, quality tags) in a module that imports nothing of `sim`
+- [ ] R2.2 The model port (`ModelBackend`, `Completion`, `Turn`, `ToolCall`, `ToolResult`, `Usage`) in a neutral module
+- [ ] R2.3 The world receives its ledger, bus, hub, activity log and web; a factory builds the defaults
+- [ ] R2.4 No function-level imports of our own modules
+- [ ] **Done when:** no import cycles; the layer test's exceptions shrink; golden identical
 
 ### R3. The new layout (L, mechanical) — A3
-- `git mv` into `commons/{domain,application,adapters,agents,interfaces,protocol}` per §1.2, splitting files that
-  hold both rules and I/O (`gate`, `ventures`, `population`, `archive`, `founding`) along that line.
-- Rewrite imports with a script; update `pyproject.toml` (packages, a `commons` console script); add the old-path shims.
-- Move tests into the new tree (no test logic changes).
-- **Done when:** golden identical; every documented command still works through the shims; the layer test's
-  exceptions are only those R4 to R10 will remove.
+- [ ] R3.1 Create `commons/` with `domain`, `application`, `adapters`, `agents`, `interfaces`, `protocol`
+- [ ] R3.2 Move modules (`git mv`), splitting rule halves from I/O halves (`gate`, `ventures`, `population`, `archive`, `founding`)
+- [ ] R3.3 Rewrite imports by script; `pyproject.toml` packages and a `commons` console script
+- [ ] R3.4 Old entry points (`python -m sim`, `sim.live`, `sim.found`, `sim.rate`, `sim.approve`, `sim.calibrate`) as shims
+- [ ] R3.5 Tests moved into the new tree, unchanged in logic
+- [ ] R3.6 Docs: every path in `COMMONS.md`, `CHECKLIST.md`, `FRAMEWORK.md`, READMEs and examples updated
+- [ ] **Done when:** golden identical; every documented command works; layer exceptions are only those R4 to R10 remove
 
 ### R4. Aggregates, test-first (L) — C2, C3, C4 (part)
-- `Contract`: its states and transitions as a table (open → awarded → delivered → accepted | rejected | defaulted;
-  open → expired | withdrawn; awarded → failed), methods for each move, illegal moves raise. Unit tests first.
-- `Job`: open → claimed → graded → paid | failed; open → expired. Value with quality pay, bond, completeness,
-  deferral. Unit tests first.
-- The world's contract and job code calls the aggregates; the status checks disappear from services and commands.
-- **Done when:** no `status ==` string comparisons outside the aggregates; golden identical.
+- [ ] R4.1 `Contract` aggregate: transition table, a method per move, `DomainError` on illegal moves (tests first)
+- [ ] R4.2 Contract code in the world and executor uses the aggregate
+- [ ] R4.3 `Job` aggregate: lifecycle, value with quality pay, bond, completeness, deferral (tests first)
+- [ ] R4.4 Job code in the world and executor uses the aggregate
+- [ ] R4.5 `Micros` and id NewTypes on every public signature
+- [ ] **Done when:** no status comparisons outside the aggregates; golden identical
 
 ### R5. The economy as a policy, test-first (M) — S4
-- `PaymentPolicy` (fund at cycle start, handle passed work, settle at cycle end, describe for the observation).
-  `MarketPayment` pays at once; `GrantPayment` queues and shares the pool.
-- `Treasury` rules: floor, upkeep, revenue split, bonds.
-- `Params.economy` chooses the policy at construction; no other code checks it.
-- **Done when:** zero `economy ==` checks; adding an economy means adding one class; golden identical.
+- [ ] R5.1 `PaymentPolicy` with `MarketPayment` and `GrantPayment` (tests first)
+- [ ] R5.2 `Treasury` rules: floor, upkeep, revenue split, bonds (tests first)
+- [ ] R5.3 The world uses the policy; `economy ==` checks removed everywhere, dashboard included
+- [ ] **Done when:** adding an economy means adding one class; golden identical
 
 ### R6. Split the world (XL) — S1, C1, C4, C8
-- One service per responsibility (§1.2 `services/`), each owning its state and exposing a public API. No module
-  touches another's privates; the `_seq` counters move into the services that use them.
-- `cycle.py`: the phases in order, each declaring whether it runs inside the world's lock (state changes) or
-  outside it (model and web calls, results applied under the lock). The order is visible in one place.
-- `Society` keeps the `World` public API as a facade (`World` stays as an alias), so the console, packs and tests
-  are unchanged.
-- `ObservationBuilder` takes over `observe`.
-- **Done when:** `Society` under 250 lines; no class over 300 lines, no function over 40 (tables excepted); no
-  cross-module private access; golden identical.
+- [ ] R6.1 `cycle.py`: the phases in order, each marked inside or outside the lock
+- [ ] R6.2 Services: contract-net, claims, grading (with deferred settlement and audits)
+- [ ] R6.3 Services: ventures, grants and payment, ratings, scorecard
+- [ ] R6.4 Services: population (owns its counters; no private access), knowledge and archive, web and gate
+- [ ] R6.5 Services: gossip and the recorder (history, `world.cycle` telemetry)
+- [ ] R6.6 `ObservationBuilder` replaces `World.observe`
+- [ ] R6.7 `Society` facade with today's `World` API (`World` kept as an alias)
+- [ ] **Done when:** `Society` under 250 lines; no class over 300 or function over 40 lines (tables excepted); no
+      cross-module private access; golden identical
 
 ### R7. Domain events (M) — D7
-- Services emit typed events; three subscribers turn them into what exists today: the co-op's inbox messages,
-  telemetry events and activity entries, with the same text, fields and order.
-- **Done when:** no direct `_tell`, `hub.emit` or `activity.add` in services; golden identical (this is the stage
-  most likely to change event order, so it goes one event family per commit).
+- [ ] R7.1 Typed events and a dispatcher; subscribers for inbox, telemetry and activity
+- [ ] R7.2 Contract and job events moved onto it (one family per commit)
+- [ ] R7.3 Venture, population, grant, rating and gate events moved onto it
+- [ ] **Done when:** no direct `_tell`, `hub.emit` or `activity.add` in services; golden identical
 
 ### R8. Commands (M) — C6, S2, S7 (part)
-- The executor split by area (contracts, knowledge, population, planning, ventures, archive and web, accounting),
-  behind one facade with today's method names.
-- An explicit middleware chain per command: operator limits, then the lock (web commands declare that they manage it
-  themselves), then the activity log. No `setattr` at import.
-- Role interfaces for agents (`ContractActions`, `KnowledgeActions`, …); `ActionsAPI` becomes their union.
-- **Done when:** the call path of any command is readable from its definition; golden identical.
+- [ ] R8.1 Middleware chain (operator limits, lock, activity log) declared per command; no `setattr` at import
+- [ ] R8.2 The executor split by area behind one facade with today's method names
+- [ ] R8.3 Role interfaces for agents; `ActionsAPI` is their union
+- [ ] **Done when:** any command's call path is readable from its definition; golden identical
 
 ### R9. Configuration (S) — S7, D3
-- `Params` becomes grouped, typed configs (`EconomyConfig`, `ContractConfig`, `PopulationConfig`, `KnowledgeConfig`,
-  `RuntimeConfig`, `StorageConfig`), each read only by the services that need it. A compatibility constructor accepts
-  today's flat names, so packs and tests keep working.
-- **Done when:** no service reads a config group it doesn't own; golden identical.
+- [ ] R9.1 Grouped, typed configs (economy, contracts, population, knowledge, runtime, storage)
+- [ ] R9.2 Compatibility constructor for today's flat names; packs override by group
+- [ ] **Done when:** no service reads a group it doesn't own; golden identical
 
 ### R10. Agents (M) — S3, S6
-- `Agent` protocol (`turn(obs, act)`); scripted strategies and the LLM agent both implement it, and the LLM agent no
-  longer inherits the scripted hooks.
-- Split `LLMStrategy`: `StewardLoop` (rounds, nudges, refusal cache, budget), `MemberWorker` (prompt, look-up loop,
-  billing, drafts), `prompts.py`.
-- **Done when:** no function over 40 lines in `agents/`; golden identical (the fake live run covers this).
+- [ ] R10.1 `Agent` protocol; the LLM agent no longer inherits the scripted strategy
+- [ ] R10.2 `StewardLoop`, `MemberWorker`, `prompts.py` split out of `LLMStrategy`
+- [ ] **Done when:** no function over 40 lines in `agents/`; golden identical
 
-### R11. Interfaces (M) — A5, S3, C1
-- One CLI, `commons`, with subcommands and a testable `main(argv)`; each subcommand is a composition root. The old
-  `python -m` paths become shims.
-- Console: dashboard queries move to `application/queries.py`; panel builders replace the 122-line `snapshot`;
-  routes become thin. The dashboard's JSON stays identical (a test compares it).
-- **Done when:** nothing runs at import; `create_app` under 60 lines; golden identical.
+### R11. Interfaces and commands (M) — A5, S3, C1
+- [ ] R11.1 One `commons` CLI with subcommands and a testable `main(argv)`; nothing runs at import
+- [ ] R11.2 Scripts grouped: run, sim, found, approve, rate, calibrate, plus `metrics` and `golden` (the update
+      command, guarded); shims for the old paths print the new command
+- [ ] R11.3 `docs/COMMANDS.md`: every command and script, with its purpose, every option, examples, what it reads
+      and writes, what it costs, and its safety limits
+- [ ] R11.4 Dashboard: queries in `application/queries.py`, panel builders, thin routes; JSON identical by test
+- [ ] **Done when:** `create_app` under 60 lines; every command documented and tested through `main(argv)`
 
 ### R12. Tests and docs (M) — C5, C7
-- Tests regrouped by layer and context, with phase-acceptance tests kept under `tests/acceptance/`. Tests use public
-  APIs only; the five private methods tests use today become public seams or are tested through their services.
-- `docs/ARCHITECTURE.md`: the layers, the dependency rule, the patterns, and how to add a pack, an economy, a tool,
-  a backend or a metric. `COMMONS.md`'s module map and the checklist updated.
-- **Done when:** the layer test has zero exceptions; every audit finding is closed or explicitly deferred.
+- [ ] R12.1 Tests regrouped by layer and context; acceptance tests in `tests/acceptance/`
+- [ ] R12.2 No test touches a private member
+- [ ] R12.3 `docs/ARCHITECTURE.md`: layers, the dependency rule, patterns, and how to add a pack, economy, tool,
+      backend or metric
+- [ ] R12.4 `COMMONS.md`, `CHECKLIST.md`, `FRAMEWORK.md`, the review doc and memory updated
+- [ ] R12.5 Fast-forward `phase-1`, push
+- [ ] **Done when:** the layer test has no exceptions; every audit finding is closed or explicitly deferred
 
 ---
 
@@ -245,21 +241,19 @@ after any of them.
 | The golden master is too brittle (dict order, float formatting) | Normalise before comparing: sorted keys, fixed float rendering; R0 proves it catches real changes |
 | Thread timing changes results | The golden runs are sequential (`parallel_turns` off), as scripted runs are today; parallel behaviour is covered by existing tests |
 | Event order shifts in R7 | One event family per commit, golden after each |
-| The big move (R3) breaks docs and muscle memory | Shims for old commands; docs updated in the same stage |
-| Scope creep ("while we're here…") | Behaviour changes are written down here and done after the merge |
+| The big move (R3) breaks docs and muscle memory | Shims for old commands; docs updated in the same stage; `docs/COMMANDS.md` in R11 |
+| Scope creep ("while we're here…") | Behaviour changes are written under §7 and done after the merge |
 | Performance (events, indirection) | Measured at every stage against the 25% budget |
-| The branch drifts from `phase-1` | No feature work on `phase-1` meanwhile; merge back at the end, or at a stage boundary you choose |
 
-## 5. Decisions for you
+## 5. Decisions (1 Oct)
 
-1. **The pattern**: Ports and Adapters with DDD tactical patterns, golden-master protection, TDD for new code
-   (recommended), or a lighter "fix the hotspots" pass (stages R0, R1, R2, R5 and R6 only).
-2. **The layout**: move to `commons/{domain,application,adapters,agents,interfaces}` (recommended: the names say
-   what each layer is), or keep today's package names and enforce layers inside them.
-3. **Old commands**: keep the `python -m sim.*` shims for a while (recommended), or switch to `commons …` at once.
-4. **Unused protocol messages** (`gate`, `governance`): delete (recommended; the bus can grow them back when it
-   needs them) or keep as reserved.
-5. **Merging**: once at the end (recommended), or after R3 and again at the end.
+1. **Scope:** the full route, R0 to R12.
+2. **Layout:** move to `commons/{domain,application,adapters,agents,interfaces}`. The work so far is treated as the
+   proof of concept; this puts the proper architecture under it.
+3. **Commands:** the old `python -m sim.*` paths stay as shims that print the new command. Every command and script
+   is documented in full (`docs/COMMANDS.md`), and grouped into one `commons` CLI.
+4. **Unused code:** deleted when nothing needs it going forward.
+5. **Merging:** commit and full test after every item; push after every stage; one fast-forward merge at the end.
 
 ## 6. Done when (the whole refactor)
 
@@ -271,3 +265,7 @@ after any of them.
 - The golden master is unchanged from R0; all of today's tests pass, regrouped; tests for the new domain types were
   written first.
 - `docs/ARCHITECTURE.md` explains the result.
+
+## 7. Found along the way
+
+Behaviour issues noticed during the refactor, to fix after the merge (none yet).
