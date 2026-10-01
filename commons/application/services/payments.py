@@ -64,7 +64,7 @@ class Payments:
         self.w.board.settle_bond(job, returned=True)
         job.pay()
         self.w.jobs_done += 1
-        self.w.stat(prime, "earned", share)
+        self.w.recorder.stat(prime, "earned", share)
         track = self.w.communities[prime].deliveries
         for cap, part in job.parts.items():
             if part.source == "self":
@@ -79,7 +79,7 @@ class Payments:
         if self.w.ratings:
             self.w.ratings.sample(record)
         for author, amount in split.royalties.items():
-            self.w.stat(author, "earned", amount)
+            self.w.recorder.stat(author, "earned", amount)
             self.w.royalties_paid[author] = self.w.royalties_paid.get(author, 0) + amount
             self.w.tell(author, "royalty", f"your playbook was used in {job.id}: {amount}", job.id)
         self.w.hub.emit("market.job", self.w.cycle, id=job.id, stage="paid", prime=prime, caps=sorted(job.parts),

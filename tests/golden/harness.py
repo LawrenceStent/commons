@@ -93,7 +93,7 @@ def _build(pack_name: str, seed: int, live: bool, tmp: Path):
 
 
 def capture(name: str) -> dict[str, list[str]]:
-    from commons.application.world import summary
+    from commons.application.services.recorder import summary
 
     pack, seed, cycles, live = RUNS[name]
     with tempfile.TemporaryDirectory() as d:

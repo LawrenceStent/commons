@@ -25,7 +25,6 @@ parallel: with `parallel_turns`, model calls overlap and every action still take
 
 from __future__ import annotations
 
-from collections import Counter
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -54,7 +53,7 @@ def _start(w: World) -> None:
             w.web.set_hosts(w.gate.policy.allow_hosts)
     w.web_desk.begin_cycle()
     w.bus.begin_cycle(w.cycle)
-    w._stats = {n: Counter() for n in w.communities}
+    w.recorder.begin_cycle()
 
 
 def _deadlines(w: World) -> None:
@@ -82,7 +81,7 @@ def _turns(w: World) -> None:
 
 def _gossip(w: World) -> None:
     if w.cycle % w.params.gossip_every == 0:
-        w._gossip()
+        w.gossip.run()
 
 
 def _close(w: World) -> None:
@@ -90,7 +89,7 @@ def _close(w: World) -> None:
     w.bus.compact()
     w.board.prune()
     w.contract_net.prune()
-    w._record()
+    w.recorder.record()
 
 
 PHASES: tuple[Phase, ...] = (

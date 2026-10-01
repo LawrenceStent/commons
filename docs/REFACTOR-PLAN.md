@@ -206,7 +206,8 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
       world's privates: one sequencer (`world.ids`) numbers jobs, ventures, ideas and goals, and proposals, and the
       world's shared helpers are public (`tell`, `send`, `stat`, `standing`, `add_community`, `turn`). Knowledge and the
       archive stay as world state (`library`, `archive`) with `add_playbook`: three lines don't need a service
-- [ ] R6.5 Services: gossip and the recorder (history, `world.cycle` telemetry)
+- [x] R6.5 Services: gossip (`GossipService`) and the recorder (`Recorder`: tallies, snapshots, the scorecard, the
+      `world.cycle` telemetry, `summary`)
 - [ ] R6.6 `ObservationBuilder` replaces `World.observe`
 - [ ] R6.7 `Society` facade with today's `World` API (`World` kept as an alias)
 - [ ] **Done when:** `Society` under 250 lines; no class over 300 or function over 40 lines (tables excepted); no

@@ -80,8 +80,8 @@ class ContractNet:
 
     def award(self, c: Contract, bidder: str, price: Micros, advance: Micros) -> None:
         c.award(bidder, price, advance, deliver_by=self.w.cycle + self.w.params.deliver_ttl)
-        self.w.stat(bidder, "won")
-        self.w.stat(bidder, "earned", advance)
+        self.w.recorder.stat(bidder, "won")
+        self.w.recorder.stat(bidder, "earned", advance)
         self.w.tell(bidder, "awarded", f"you won {c.id} at {price}; advance {advance} paid; deliver by cycle {c.deadline}", c.id)
         for loser in c.bids:
             if loser != bidder:
@@ -103,7 +103,7 @@ class ContractNet:
             self.w.ledger.transfer(purse(c.prime), purse(c.winner), owed, cycle=self.w.cycle, kind="contract", memo=f"settle {c.id}")
         except InsufficientFunds:
             return False
-        self.w.stat(c.winner, "earned", owed)
+        self.w.recorder.stat(c.winner, "earned", owed)
         return True
 
     def close_review(self, c: Contract, accept: bool, reason: str) -> None:
@@ -111,7 +111,7 @@ class ContractNet:
         self.stage(c, c.status)
         self.w.rep.attest(c.prime, c.winner, c.capability, 1.0 if accept else 0.0)
         if accept:
-            self.w.stat(c.winner, "ok")
+            self.w.recorder.stat(c.winner, "ok")
             track = self.w.communities[c.winner].deliveries
             track[c.capability] = track.get(c.capability, 0) + 1
             self.w.tell(c.winner, "accepted", f"{c.prime} accepted {c.id} and paid {c.owed}", c.id)
@@ -156,8 +156,8 @@ class ContractNet:
             self.stage(c, c.status)
             self.w.tell(c.winner, "audit", f"the audit found for you on {c.id}, but {c.prime} can't pay", c.id)
             return
-        self.w.stat(c.winner, "earned", owed + p.audit_cost)
-        self.w.stat(c.winner, "ok")
+        self.w.recorder.stat(c.winner, "earned", owed + p.audit_cost)
+        self.w.recorder.stat(c.winner, "ok")
         c.overturn(f"overturned on audit ({g.score:.2f}): {reason}", at=self.w.cycle)
         self.stage(c, c.status)
         self.stage(c, "audit_overturned", score=g.score)

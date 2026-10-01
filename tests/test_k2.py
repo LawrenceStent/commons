@@ -171,7 +171,7 @@ def test_efficiency_is_earned_against_spent_and_each_coop_sees_its_own():
     from commons.agents.llm.render import render
 
     w = World(Params(seed=0, verify=False)).run(60)
-    e = w.efficiency("coop-a")
+    e = w.recorder.efficiency("coop-a")
     assert e["spent"] > 0 and e["ratio"] == round(e["earned"] / e["spent"], 3)
     assert "Efficiency: earned" in render(w.observe(w.communities["coop-a"]))
-    assert w.efficiency("freerider")["earned"] == 0
+    assert w.recorder.efficiency("freerider")["earned"] == 0

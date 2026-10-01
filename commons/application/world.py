@@ -29,7 +29,6 @@ from __future__ import annotations
 import random
 import threading
 from collections import Counter, defaultdict, deque
-from dataclasses import dataclass
 
 from commons.application.actions import Actions
 from commons.application.cycle import run_cycle
@@ -55,9 +54,11 @@ from commons.application.ports import WebPort
 from commons.application.ratings import Ratings
 from commons.application.services.board import JobBoard
 from commons.application.services.contract_net import ContractNet
+from commons.application.services.gossip import GossipService
 from commons.application.services.grading import Grading
 from commons.application.services.payments import Payments
 from commons.application.services.ratings import RatingDesk
+from commons.application.services.recorder import Recorder, Snapshot
 from commons.application.services.upkeep import Upkeep
 from commons.application.services.ventures import VentureDesk
 from commons.application.services.web import WebDesk
@@ -72,9 +73,6 @@ from commons.domain.knowledge import Playbook
 from commons.domain.market import MarketJob
 from commons.domain.pack import Pack
 from commons.domain.pack import load as load_pack
-from commons.domain.scorecard import GENERAL
-from commons.domain.scorecard import evaluate as evaluate_scorecard
-from commons.domain.scorecard import report as scorecard_report
 from commons.domain.status import (
     LIVE_CONTRACT,
     ContractStatus,
@@ -83,7 +81,6 @@ from commons.domain.status import (
 )
 from commons.domain.ventures import Appraiser, StubAppraiser, Venture
 from commons.protocol import Envelope, Message
-from commons.protocol.reputation import Gossip
 from commons.substrate.activity import ActivityLog
 from commons.substrate.bus import Bus, MemoryBus, RateLimited
 from commons.substrate.ledger import Ledger, purse
@@ -96,19 +93,6 @@ from commons.substrate.telemetry import Hub
 def default_population() -> list[Community]:
     """The default pack's scripted co-ops (kept for callers that predate packs)."""
     return load_pack().population()
-
-
-@dataclass
-class Snapshot:
-    cycle: int
-    purse: int
-    standing: float
-    allowance: int
-    active: bool
-    thinking: int
-    won: int
-    delivered_ok: int
-    earned: int
 
 
 class World:
@@ -165,6 +149,8 @@ class World:
         self.plans: defaultdict[str, Plans] = defaultdict(Plans)  # ideas and goals per community
         self.activity = activity or _default_activity(p)
         self.activity.watch(self.hub)
+        self.recorder = Recorder(self)
+        self.gossip = GossipService(self)
         self.upkeep = Upkeep(self)
         self.web_desk = WebDesk(self)
         self.rating_desk = RatingDesk(self)
@@ -175,7 +161,6 @@ class World:
         self.contract_net = ContractNet(self)
         self.grading = Grading(self)
         self.known_capabilities = set(self.pack.capabilities).union(*(c.capabilities for c in self.communities.values()))
-        self._stats: dict[str, Counter] = {n: Counter() for n in self.communities}
         self.turn_order: list[Community] = []  # this cycle's, shuffled (see cycle.py)
 
         self.ledger.transfer("genesis", "treasury", p.treasury_seed, cycle=0, kind="genesis")
@@ -192,7 +177,7 @@ class World:
         self.journal[c.name] = deque(maxlen=p.journal_keep)
         self.inbox[c.name] = deque(maxlen=p.events_keep)
         self.history[c.name] = []
-        self._stats[c.name] = Counter()
+        self.recorder.track(c.name)
 
     # ── helpers ────────────────────────────────────────────────
     def standing(self, name: str) -> float:
@@ -215,9 +200,6 @@ class World:
 
     def tell(self, name: str, kind: str, text: str, ref: str | None = None) -> None:
         self.inbox[name].append(Event(self.cycle, kind, text, ref))
-
-    def stat(self, name: str, key: str, n: int = 1) -> None:
-        self._stats[name][key] += n
 
     def send(self, c: Community, msg: Message) -> bool:
         try:
@@ -253,14 +235,6 @@ class World:
     # ── called by the actions executor ────────────────────────
 
     # ── the web, behind the gate ───────────────────────────────
-
-    def efficiency(self, name: str) -> dict[str, float]:
-        """Value per unit of thought: what a co-op has earned against what it has spent to think (upkeep, work
-        and model calls). Above 1.0 it earns more than its thinking costs."""
-        earned = sum(s.earned for s in self.history.get(name, []))
-        spent = self.meter.by_community.get(name, 0)
-        return {"earned": earned, "spent": spent, "thinking": self.thinking_spend[name],
-                "ratio": round(earned / spent, 3) if spent else 0.0}
 
     def add_playbook(self, pid: str, author: str, capability: str, title: str, text: str) -> None:
         self.library[pid] = Playbook(pid, author, capability, title, text)
@@ -331,7 +305,7 @@ class World:
             owed=sum(c.owed for c in cs if c.prime == name and c.status in (ContractStatus.AWARDED, ContractStatus.DELIVERED)),
             ventures=tuple(VentureView(v.id, v.title, v.status, v.score, v.reward, v.reason, v.job_id, v.cycle)
                            for v in list(self.ventures.values()) if v.proposer == name)[-5:],
-            efficiency=self.efficiency(name),
+            efficiency=self.recorder.efficiency(name),
             doctrine=me.doctrine,
             archive=(len(self.archive), tuple(sorted({p.source for p in self.archive.passages.values()}))),
             grants=self.payment.view(self.payments.pool_balance()),
@@ -343,54 +317,6 @@ class World:
         )
 
     # ── gossip and records ─────────────────────────────────────
-    def _gossip(self) -> None:
-        for c in self.active():
-            if not c.strategy.gossips:
-                continue
-            beliefs = sorted(self.rep.beliefs(c.name), key=lambda b: -b[3])[: self.params.gossip_fanout]
-            for subject, cap, score, n in beliefs:
-                self.send(c, Gossip(subject=subject, capability=cap, score=round(score, 4), evidence=round(n, 3)))
-        # every community consumes the reputation stream through its own consumer group
-        heard = 0
-        for listener in self.communities.values():
-            for env in self.bus.read("reputation", listener.name):
-                if env.verb == "gossip":
-                    g = env.open()
-                    self.rep.hear(listener.name, env.sender, g.subject, g.capability, g.score, g.evidence)
-                    heard += 1
-        self.hub.emit("reputation.gossip", self.cycle, heard=heard)
-
-    def _record(self) -> None:
-        for name, c in self.communities.items():
-            s = self._stats[name]
-            self.history[name].append(Snapshot(
-                cycle=self.cycle, purse=self.ledger.balance(purse(name)), standing=self.standing(name),
-                allowance=self.bus.allowance(name), active=c.active, thinking=c.thinking,
-                won=s["won"], delivered_ok=s["ok"], earned=s["earned"],
-            ))
-        self.scorecard = evaluate_scorecard(self, tuple(self.pack.scorecard) + GENERAL)
-        for row in self.scorecard:
-            if row["status"] == "breach":
-                self.hub.emit("scorecard.breach", self.cycle, metric=row["key"], value=row["value"], floor=row["floor"])
-        pipeline = Counter(c.status for c in self.contracts.values() if c.status in LIVE_CONTRACT)
-        self.hub.emit(
-            "world.cycle", self.cycle,
-            treasury=self.ledger.balance("treasury"),
-            jobs_done=self.jobs_done, jobs_failed=self.jobs_failed, jobs_expired=self.jobs_expired,
-            board=sum(j.status == JobStatus.OPEN for j in self.jobs.values()),
-            in_progress=sum(j.status == JobStatus.CLAIMED for j in self.jobs.values()),
-            pipeline=dict(pipeline),
-            grants=self.payments.pool_balance() if self.payment.pool else None,
-            scorecard={r["key"]: r["value"] for r in self.scorecard},
-            bus_sent=dict(self.bus.sent),
-            communities={
-                n: {"purse": h[-1].purse, "standing": round(h[-1].standing, 4), "allowance": h[-1].allowance,
-                    "active": h[-1].active, "thinking": h[-1].thinking, "won": h[-1].won,
-                    "ok": h[-1].delivered_ok, "earned": h[-1].earned}
-                for n, h in self.history.items()
-            },
-        )
-
 
 def _default_ledger(p: Params, hub: Hub) -> Ledger:
     return Ledger(p.ledger_path, hub=hub)
@@ -402,22 +328,3 @@ def _default_bus(p: Params, hub: Hub) -> Bus:
 
 def _default_activity(p: Params) -> ActivityLog:
     return ActivityLog(p.activity_keep, p.activity_path)
-
-
-def summary(world: World, window: int = 50) -> str:
-    rows = [f"{'community':<10} {'strategy':<11} {'purse cr':>9} {'standing':>8} {'allow':>5} {'active%':>7} {'won':>5} {'ok':>5}"]
-    for name, hist in world.history.items():
-        c = world.communities[name]
-        tail = hist[-window:]
-        rows.append(
-            f"{name:<10} {c.strategy.name:<11} {hist[-1].purse / 1e6:>9.3f} {hist[-1].standing:>8.3f} "
-            f"{hist[-1].allowance:>5} {100 * sum(s.active for s in tail) / len(tail):>6.0f}% "
-            f"{sum(s.won for s in hist):>5} {sum(s.delivered_ok for s in hist):>5}"
-        )
-    rows.append(f"jobs paid {world.jobs_done}, failed {world.jobs_failed}, expired on board {world.jobs_expired}, "
-                f"treasury {world.ledger.balance('treasury') / 1e6:.3f} cr, playbooks {len(world.library)}, "
-                f"royalties {sum(world.royalties_paid.values()) / 1e6:.3f} cr"
-                + (f", grants left {world.payments.pool_balance() / 1e6:.3f} cr" if world.payment.pool else ""))
-    if world.scorecard:
-        rows += ["", "scorecard", scorecard_report(world.scorecard)]
-    return "\n".join(rows)
