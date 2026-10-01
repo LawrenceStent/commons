@@ -163,10 +163,7 @@ class StewardLoop:
     def _round(self) -> bool:
         """One model call and the tools it asked for. False ends the turn."""
         a, act, log = self.agent, self.act, self.log
-        if self.budget is not None and self.cost >= self.budget:
-            log.append({"kind": "error", "text": f"the operator's thinking budget ({self.budget} µcr a turn) is spent; turn over"})
-            return False
-        if why := act.thinking_refusal():
+        if why := self._may_not_think():
             log.append({"kind": "error", "text": why})
             return False
         try:
@@ -203,6 +200,12 @@ class StewardLoop:
         if t.stop == "max_tokens":
             log.append({"kind": "error", "text": "the steward ran out of output tokens"})
         return True
+
+    def _may_not_think(self) -> str | None:
+        """Why the next model call can't happen: the operator's budget for the turn, or a purse that can't pay."""
+        if self.budget is not None and self.cost >= self.budget:
+            return f"the operator's thinking budget ({self.budget} µcr a turn) is spent; turn over"
+        return self.act.thinking_refusal()
 
     def _run_tools(self, calls) -> tuple[list[ToolResult], bool]:
         results, done = [], False
