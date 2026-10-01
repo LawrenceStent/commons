@@ -14,8 +14,9 @@ from commons.application.society import Params, World
 from commons.domain.pack import load
 from commons.interfaces.console.app import community_detail, snapshot
 from tests.golden.harness import _clean
+from tests.paths import ROOT
 
-FIXTURES = Path(__file__).parent.parent / "golden" / "fixtures"
+FIXTURES = ROOT / "tests" / "golden" / "fixtures"
 CASES = {"earn_online": "coop-a", "tech_for_good": "scouts"}
 
 

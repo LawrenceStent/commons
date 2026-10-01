@@ -275,7 +275,7 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
       not the telemetry hub (promised in §1.2)
 - [x] R12.0b The two model-backend `chat` methods (46 and 43 lines) lose their message translation to functions; no
       function in the codebase is over 40 lines
-- [ ] R12.1 Tests regrouped by layer and context; acceptance tests in `tests/acceptance/`
+- [x] R12.1 Tests regrouped by layer and context; acceptance tests in `tests/acceptance/`
 - [ ] R12.2 No test touches a private member
 - [ ] R12.3 `docs/ARCHITECTURE.md`: layers, the dependency rule, patterns, and how to add a pack, economy, tool,
       backend or metric

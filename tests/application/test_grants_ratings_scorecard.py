@@ -2,7 +2,6 @@
 sampled ratings, and a rule against made-up citations."""
 
 import json
-from pathlib import Path
 
 import pytest
 
@@ -20,8 +19,9 @@ from commons.domain.market import MarketJob, Part
 from commons.domain.pack import load
 from commons.domain.scorecard import GENERAL, Metric, evaluate
 from packs.tech_for_good import CAPABILITIES, PACK, SCORECARD
+from tests.paths import ROOT
 
-EXAMPLE = Path(__file__).parent.parent / "society.example"
+EXAMPLE = ROOT / "society.example"
 SEEDS = range(3)
 
 

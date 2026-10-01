@@ -5,12 +5,11 @@ domain word from a pack (earn online, tech for good) creeps into the kernel.
 """
 
 import re
-from pathlib import Path
 
 from commons.application.society import Params, World
 from commons.domain.pack import TemplateWorkSource, load
+from tests.paths import ROOT
 
-ROOT = Path(__file__).parent.parent
 KERNEL = ["sim", "society", "runtime", "substrate", "protocol", "console"]
 DOMAIN = re.compile(r'"(research|build|design|write)"|product|bike|espresso|buyer|marketplace|launch kit|'
                     r'coop-[abc]|"studio"|"lab"|tagline|'

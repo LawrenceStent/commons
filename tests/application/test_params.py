@@ -3,13 +3,13 @@ the groups declared for it below (a new need is a deliberate edit here, not an a
 
 import dataclasses
 import re
-from pathlib import Path
 
 import pytest
 
 from commons.application.params import GROUPS, Params
+from tests.paths import ROOT
 
-ROOT = Path(__file__).parent.parent.parent / "commons"
+COMMONS = ROOT / "commons"
 READS = {
     "application/commands/knowledge.py": {"knowledge"},
     "application/commands/market.py": {"contracts", "market"},
@@ -46,8 +46,8 @@ def test_groups_mirror_the_flat_settings_and_nothing_changes_after():
 def test_modules_read_only_their_groups_and_never_flat_names():
     flat = "|".join(sorted((n for g in GROUPS.values() for n in g), key=len, reverse=True))
     groups = "|".join(GROUPS)
-    for path in ROOT.rglob("*.py"):
-        rel = path.relative_to(ROOT).as_posix()
+    for path in COMMONS.rglob("*.py"):
+        rel = path.relative_to(COMMONS).as_posix()
         if rel == "application/params.py":
             continue
         text = path.read_text()

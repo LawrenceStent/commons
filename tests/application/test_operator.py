@@ -1,7 +1,6 @@
 """The operator: directives and context reach the stewards; limits are enforced by the world."""
 
 import shutil
-from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -12,8 +11,9 @@ from commons.application.operator import Operator
 from commons.application.society import Params, World
 from commons.domain.community import Community
 from commons.domain.pack import default_population
+from tests.paths import ROOT
 
-EXAMPLE = Path(__file__).parent.parent / "operator.example"
+EXAMPLE = ROOT / "operator.example"
 
 
 @pytest.fixture

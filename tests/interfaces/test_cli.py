@@ -3,13 +3,11 @@ folder (societies/ and runs/ are relative to where commands run)."""
 
 import importlib
 import shutil
-from pathlib import Path
 
 import pytest
 
 from commons.interfaces.cli import main as cli
-
-ROOT = Path(__file__).parent.parent.parent
+from tests.paths import ROOT
 
 
 @pytest.fixture

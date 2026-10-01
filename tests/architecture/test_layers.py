@@ -10,9 +10,9 @@ deleted when it's fixed.
 """
 
 import ast
-from pathlib import Path
 
-ROOT = Path(__file__).parent.parent
+from tests.paths import ROOT
+
 RANK = {"protocol": 0, "domain": 1, "substrate": 2, "application": 3, "agents": 4, "adapters": 5, "interfaces": 6,
         "packs": 7}
 

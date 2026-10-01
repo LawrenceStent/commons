@@ -1,6 +1,5 @@
 """K3: founding a society from a brief (you approve the constitution), doctrine, and the archive."""
 
-from pathlib import Path
 
 import pytest
 
@@ -12,8 +11,9 @@ from commons.application.archive import Archive
 from commons.application.society import Params, World
 from commons.domain.community import Community
 from commons.domain.pack import load as load_pack
+from tests.paths import ROOT
 
-EXAMPLE = Path(__file__).parent.parent / "society.example"
+EXAMPLE = ROOT / "society.example"
 
 
 def drafter(coops):

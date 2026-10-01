@@ -5,6 +5,7 @@ import inspect
 
 from commons.application import events as handlers
 from commons.domain import events as ev
+from tests.paths import ROOT
 
 
 def test_every_event_says_what_follows_from_it():
@@ -16,9 +17,9 @@ def test_every_event_says_what_follows_from_it():
 
 
 def test_services_report_only_through_events():
-    from pathlib import Path
+    pass
 
-    root = Path(__file__).parent.parent.parent / "commons" / "application"
+    root = ROOT / "commons" / "application"
     files = list((root / "services").glob("*.py")) + [root / "population.py", root / "society.py", root / "cycle.py"]
     for f in files:
         text = f.read_text()
