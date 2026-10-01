@@ -59,8 +59,7 @@ def _live(w: World, name: str) -> bool:
 
 
 def _new_id(w: World, kind: str) -> str:
-    w._proposal_seq += 1
-    return f"{kind[0].upper()}{w._proposal_seq}"
+    return f"{kind[0].upper()}{w.ids.next('proposal')}"
 
 
 # ── spawn / retire ─────────────────────────────────────────────

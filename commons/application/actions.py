@@ -385,8 +385,7 @@ class Actions:
         except InsufficientFunds:
             self.me.capacity += 1
             return Outcome(False, f"proposing a venture costs {fee}; you can't afford it")
-        self.w._venture_seq += 1
-        v = ventures_mod.Venture(f"P{self.w._venture_seq}", self.me.name, title, pitch, norm, self.w.cycle, idea_id=idea_id)
+        v = ventures_mod.Venture(f"P{self.w.ids.next('venture')}", self.me.name, title, pitch, norm, self.w.cycle, idea_id=idea_id)
         self.w.ventures[v.id] = v
         for i in self.w.plans[self.me.name].ideas:
             if i.id == idea_id:
@@ -397,8 +396,7 @@ class Actions:
     # ── ideas and goals ────────────────────────────────────────
     def idea(self, title: str, detail: str = "") -> Outcome:
         plans = self.w.plans[self.me.name]
-        self.w._plan_seq += 1
-        i = Idea(f"I{self.w._plan_seq}", title[:120], detail[:600], self.w.cycle)
+        i = Idea(f"I{self.w.ids.next('plan')}", title[:120], detail[:600], self.w.cycle)
         plans.ideas.append(i)
         plans.trim()
         return Outcome(True, f"idea {i.id} recorded", i.id)
@@ -410,8 +408,7 @@ class Actions:
         steps = [str(s)[:200] for s in steps if str(s).strip()][:MAX_STEPS]
         if not steps:
             return Outcome(False, "a goal needs at least one step")
-        self.w._plan_seq += 1
-        g = Goal(f"G{self.w._plan_seq}", title[:120], [Step(s) for s in steps], self.w.cycle, self.w.cycle, idea_id=idea_id)
+        g = Goal(f"G{self.w.ids.next('plan')}", title[:120], [Step(s) for s in steps], self.w.cycle, self.w.cycle, idea_id=idea_id)
         plans.goals[g.id] = g
         for i in plans.ideas:
             if i.id == idea_id:

@@ -64,6 +64,7 @@ from commons.domain.economy import PaymentPolicy, policy_for
 from commons.domain.gate import Request as GateRequest
 from commons.domain.goals import Plans
 from commons.domain.grading import Grader, StubGrader
+from commons.domain.ids import Sequences
 from commons.domain.knowledge import Playbook
 from commons.domain.market import MarketJob, Part
 from commons.domain.money import Micros
@@ -154,7 +155,6 @@ class World:
         self.payment_queue: list[str] = []  # passing jobs waiting to be paid at the end of the cycle
         self.scorecard: list[dict] = []  # the pack's mission metrics plus the general ones, as of the last cycle
         self.ventures: dict[str, Venture] = {}
-        self._venture_seq = 0
         self.jobs: dict[str, MarketJob] = {}
         self.contracts: dict[str, Contract] = {}
         self.library: dict[str, Playbook] = {}
@@ -168,14 +168,13 @@ class World:
         self.thinking_spend: Counter[str] = Counter()  # µcr of model calls, per co-op
         self.transcripts: defaultdict[str, deque] = defaultdict(lambda: deque(maxlen=2))  # LLM turns, newest last
         self.plans: defaultdict[str, Plans] = defaultdict(Plans)  # ideas and goals per community
-        self._plan_seq = 0
         self.activity = activity or _default_activity(p)
         self.activity.watch(self.hub)
+        self.ids = Sequences()  # numbered ids: jobs, ventures, ideas and goals, proposals
         self.board = JobBoard(self)
         self.contract_net = ContractNet(self)
         self.grading = Grading(self)
         self.known_capabilities = set(self.pack.capabilities).union(*(c.capabilities for c in self.communities.values()))
-        self._proposal_seq = 0
         self._stats: dict[str, Counter] = {n: Counter() for n in self.communities}
         self.turn_order: list[Community] = []  # this cycle's, shuffled (see cycle.py)
 
@@ -426,8 +425,7 @@ class World:
             self.hub.emit("venture.decided", self.cycle, id=v.id, proposer=v.proposer, title=v.title, status=VentureStatus.REJECTED,
                           score=v.score, reward=0, reason=v.reason)
             return
-        self._venture_seq += 1
-        job = MarketJob(f"V{self._venture_seq}", v.title, v.reward,
+        job = MarketJob(f"V{self.ids.next('venture')}", v.title, v.reward,
                         {c: Part(c, spec, rubric) for c, spec, rubric in v.parts}, posted=self.cycle, deadline=self.cycle)
         job.claim(v.proposer, deadline=self.cycle + self.params.job_ttl)
         self.jobs[job.id] = job

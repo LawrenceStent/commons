@@ -26,13 +26,11 @@ class JobBoard:
     def __init__(self, world: World):
         self.w = world
         self.claims = {}  # job id -> {claimant: cycle claimed}, allocated at cycle end
-        self._job_seq = 0
 
     def post(self) -> None:
         p = self.w.params
         for _ in range(p.jobs_per_cycle):
-            self._job_seq += 1
-            job = self.w.pack.work_source.new_job(self.w.rng, f"J{self._job_seq}", self.w.cycle, p.job_reward, p.board_ttl,
+            job = self.w.pack.work_source.new_job(self.w.rng, f"J{self.w.ids.next('job')}", self.w.cycle, p.job_reward, p.board_ttl,
                                                 p.parts_per_job)
             self.w.jobs[job.id] = job
             self.w.hub.emit("market.job", self.w.cycle, id=job.id, stage="posted", caps=sorted(job.parts), reward=job.reward)
