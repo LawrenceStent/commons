@@ -169,7 +169,8 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
       (there are none: the layer test passes with an empty exception list)
 
 ### R4. Aggregates, test-first (L) — C2, C3, C4 (part)
-- [ ] R4.1 `Contract` aggregate: transition table, a method per move, `DomainError` on illegal moves (tests first)
+- [x] R4.1 `Contract` aggregate: transition table, a method per move, `DomainError` on illegal moves (tests first:
+      `tests/domain/test_contract.py`, 21 tests, written red then made green)
 - [ ] R4.2 Contract code in the world and executor uses the aggregate
 - [ ] R4.3 `Job` aggregate: lifecycle, value with quality pay, bond, completeness, deferral (tests first)
 - [ ] R4.4 Job code in the world and executor uses the aggregate
