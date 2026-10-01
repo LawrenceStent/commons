@@ -23,9 +23,10 @@ ap.add_argument("--rating", type=int, choices=sorted(SCALE))
 ap.add_argument("--note", default="")
 a = ap.parse_args()
 
-folder = founding.ROOT / a.name
-if not (folder / "society.toml").exists():
-    sys.exit(f"no society at {folder}")
+try:
+    folder = founding.society_folder(a.name)
+except founding.FoundingError as e:
+    sys.exit(str(e))
 waiting = unrated(folder)
 
 if a.id or a.rating is not None:

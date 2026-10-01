@@ -26,9 +26,10 @@ ap.add_argument("--always", action="store_true", help="with approval: that co-op
 ap.add_argument("--reason", default="")
 a = ap.parse_args()
 
-folder = founding.ROOT / a.name
-if not (folder / "society.toml").exists():
-    sys.exit(f"no society at {folder}")
+try:
+    folder = founding.society_folder(a.name)
+except founding.FoundingError as e:
+    sys.exit(str(e))
 waiting = pending_in(folder)
 groups: dict[tuple, list[dict]] = {}
 for r in waiting:

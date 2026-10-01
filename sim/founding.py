@@ -186,7 +186,7 @@ def found(name: str, pack_name: str | None, brief: str, context_dir: Path | None
 
 
 def approve(name: str, root: Path = ROOT) -> tuple[list[str], list[str]]:
-    folder = root / name
+    folder = society_folder(name, root)
     pack = load_pack(society_config(folder)["pack"])
     blueprints, _ = read_blueprints(folder / "blueprints.toml")
     errors, warnings = check(blueprints, pack)
@@ -209,9 +209,15 @@ def read_questions(path: Path) -> list[str]:
     return out
 
 
-def society_config(folder: Path) -> dict[str, Any]:
+def society_folder(name: str, root: Path = ROOT) -> Path:
+    """The folder of an existing society, or FoundingError."""
+    folder = root / name
     if not (folder / "society.toml").exists():
         raise FoundingError(f"no society at {folder} (found one with python -m sim.found)")
+    return folder
+
+
+def society_config(folder: Path) -> dict[str, Any]:
     return tomllib.loads((folder / "society.toml").read_text())
 
 
@@ -253,7 +259,7 @@ class Society:
 
 
 def load(name: str, root: Path = ROOT, require_approved: bool = True) -> Society:
-    folder = root / name
+    folder = society_folder(name, root)
     cfg = society_config(folder)
     pack = load_pack(cfg.get("pack"))
     blueprints, approved = read_blueprints(folder / "blueprints.toml")
