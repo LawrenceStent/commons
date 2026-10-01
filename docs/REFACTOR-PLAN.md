@@ -258,9 +258,11 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
 - [x] **Done when:** no function over 40 lines in `agents/`; golden identical
 
 ### R11. Interfaces and commands (M) — A5, S3, C1
-- [ ] R11.1 One `commons` CLI with subcommands and a testable `main(argv)`; nothing runs at import
-- [ ] R11.2 Scripts grouped: run, sim, found, approve, rate, calibrate, plus `metrics` and `golden` (the update
-      command, guarded); shims for the old paths print the new command
+- [x] R11.1 One `commons` CLI with subcommands and a testable `main(argv)`; nothing runs at import. Each command is a
+      parser plus small functions (`commons run` went from a 213-line script to ten functions)
+- [x] R11.2 Scripts grouped: run, sim, found, approve, rate, calibrate, plus `console` (the dashboard on a scripted
+      society), `metrics` (moved from `tools/`) and `golden` (check, or regenerate with `--update --approved "why"`);
+      shims for the old paths print the new command. `tests/interfaces/test_cli.py` runs every command through `main`
 - [ ] R11.3 `docs/COMMANDS.md`: every command and script, with its purpose, every option, examples, what it reads
       and writes, what it costs, and its safety limits
 - [ ] R11.4 Dashboard: queries in `application/queries.py`, panel builders, thin routes; JSON identical by test
@@ -322,3 +324,9 @@ Behaviour issues noticed during the refactor, to fix after the merge. Each is ke
    that part's open contracts without setting `closed` or emitting the `contract.stage` event, so they are never
    pruned and the dashboard never sees the withdrawal. When a job fails, its open contracts are withdrawn properly.
    Fix: `withdraw(at=self.w.cycle)` plus the stage event in `do_part`.
+2. **Two live runs started in the same second share one ledger file** (R11). The run's files are named by the second it
+   started (`live-<backend>-<YYYYmmdd-HHMMSS>`), so a second run within that second appends to the first's ledger: its
+   genesis doubles the treasury. Fix: add the pid or a counter to the name, or refuse an existing ledger file.
+3. **`commons run --society NAME` fails where there's no `runs/` folder** (R11). The run lock is `runs/live.pid`, but
+   only the society's own `runs/` is created, so writing the lock raises `FileNotFoundError` in a fresh checkout or
+   another directory. Fix: create the lock's folder before writing it.

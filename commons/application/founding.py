@@ -168,7 +168,7 @@ def society_folder(name: str, root: Path = ROOT) -> Path:
     """The folder of an existing society, or FoundingError."""
     folder = root / name
     if not (folder / "society.toml").exists():
-        raise FoundingError(f"no society at {folder} (found one with commons found)")
+        raise FoundingError(f"no society at {folder} (found one with: uv run commons found NAME --brief FILE)")
     return folder
 
 

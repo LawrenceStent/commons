@@ -68,14 +68,16 @@ class LLMStrategy:
         self.max_rounds, self.turn_tokens = max_rounds, turn_tokens
         self.max_tokens, self.member_max_tokens, self.keep_drafts = max_tokens, member_max_tokens, keep_drafts
         self.member_rounds = member_rounds  # look-ups a member may make (archive, web) before it must write
-        self.drafts: dict[str, Draft] = {}
-        self._seq = 0
-        self._commissions = 0
+        self.members = MemberWorker(backend, member_model, member_max_tokens, member_rounds, keep_drafts)
+
+    @property
+    def drafts(self) -> dict[str, Draft]:
+        return self.members.drafts
 
     def __deepcopy__(self, memo):
         """A fork gets its own drafts and counters but shares the backend (and its client)."""
         clone = copy.copy(self)
-        clone.drafts, clone._seq, clone._commissions = {}, 0, 0
+        clone.members = self.members.fresh()
         return clone
 
     def wake(self, obs: Observation) -> int:
@@ -122,7 +124,7 @@ class LLMStrategy:
 
     def commission(self, obs: Observation, act: ActionsAPI, ref: str, capability: str, instructions: str,
                    playbook_id: PlaybookId | None, sources=()) -> Outcome:
-        return MemberWorker(self).commission(act, ref, capability, instructions, playbook_id, sources)
+        return self.members.commission(act, ref, capability, instructions, playbook_id, sources)
 
 
 @dataclass
@@ -146,15 +148,13 @@ class StewardLoop:
         act.actor = "steward"
         op, pack = act.operator_view(), act.pack()
         self.system = steward_system(pack, self.obs, op)
-        a._member_system = pack.member_system or MEMBER_SYSTEM
         rt = op.runtime  # per-co-op runtime settings from the operator override the defaults for this turn
         self.model = rt.get("steward_model", a.steward_model)
-        a._member_model = rt.get("member_model", a.member_model)
         self.max_tokens = int(rt.get("max_tokens", a.max_tokens))
-        a._member_max_tokens = int(rt.get("member_max_tokens", a.member_max_tokens))
+        a.members.begin_turn(pack.member_system or MEMBER_SYSTEM, rt.get("member_model", a.member_model),
+                             int(rt.get("member_max_tokens", a.member_max_tokens)))
         self.budget = op.limits.thinking_budget
         self.messages = [{"role": "user", "text": render(self.obs)}]
-        a._commissions = 0
         for _ in range(int(rt.get("max_rounds", a.max_rounds))):
             if not self._round():
                 break

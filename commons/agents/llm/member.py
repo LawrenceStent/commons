@@ -5,7 +5,7 @@ so the artifact never travels back through the steward's context. Every call is 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from commons.agents.llm.prompts import (
     MEMBER_SYSTEM,
@@ -17,13 +17,10 @@ from commons.agents.llm.prompts import (
 from commons.agents.llm.render import commissionable
 from commons.agents.llm.tools import MEMBER, member_tools
 from commons.application.observation import ActionsAPI, Observation, Outcome
-from commons.application.ports import ModelError, ToolResult, Turn
+from commons.application.ports import ModelBackend, ModelError, ToolResult, Turn
 from commons.domain.grading import strip_tags
 from commons.domain.ids import PlaybookId
 from commons.substrate.ledger import InsufficientFunds
-
-if TYPE_CHECKING:
-    from commons.agents.llm.steward import LLMStrategy
 
 
 @dataclass(frozen=True)
@@ -36,8 +33,22 @@ class Draft:
 
 
 class MemberWorker:
-    def __init__(self, agent: LLMStrategy):
-        self.agent = agent
+    """A co-op's members: the drafts they've written, and how they're set up this turn."""
+
+    def __init__(self, backend: ModelBackend, model: str, max_tokens: int, rounds: int, keep: int):
+        self.backend, self.model, self.max_tokens, self.rounds, self.keep = backend, model, max_tokens, rounds, keep
+        self.system = MEMBER_SYSTEM
+        self.drafts: dict[str, Draft] = {}
+        self.seq = 0  # drafts written, ever: D1, D2, …
+        self.commissions = 0  # this turn
+
+    def begin_turn(self, system: str, model: str, max_tokens: int) -> None:
+        """A new turn: the pack's member instructions and the operator's runtime settings, and a fresh count."""
+        self.system, self.model, self.max_tokens, self.commissions = system, model, max_tokens, 0
+
+    def fresh(self) -> MemberWorker:
+        """For a fork: the same setup, no drafts."""
+        return MemberWorker(self.backend, self.model, self.max_tokens, self.rounds, self.keep)
 
     def commission(self, act: ActionsAPI, ref: str, capability: str, instructions: str,
                    playbook_id: PlaybookId | None, sources=()) -> Outcome:
@@ -50,7 +61,7 @@ class MemberWorker:
             return reference
         tools = member_tools(bool(obs.archive and obs.archive[0]), bool(obs.web))
         prompt = member_prompt(*checked, instructions, reference, lookups=bool(tools), web=bool(obs.web),
-                               rounds=self.agent.member_rounds)
+                               rounds=self.rounds)
         t = self._write(act, prompt, tools)
         if isinstance(t, Outcome):
             return t
@@ -58,17 +69,16 @@ class MemberWorker:
 
     def _check(self, obs: Observation, ref: str, capability: str) -> tuple[str, str] | Outcome:
         """The part's (spec, rubric), or why it can't be commissioned."""
-        a = self.agent
         if capability not in obs.capabilities:
             return Outcome(False, f"none of your members can do {capability}; announce a contract instead")
-        if obs.funded < 1 or a._commissions >= max(2, 2 * obs.funded):
+        if obs.funded < 1 or self.commissions >= max(2, 2 * obs.funded):
             return Outcome(False, "every awake member is already busy this turn")
         options = commissionable(obs)
         match = next(((s, r) for ref_, cap, s, r, _ in options if ref_ == ref and cap == capability), None)
         if match is None:
             valid = ", ".join(f"{r} {c}" for r, c, *_ in options) or "nothing right now"
             return Outcome(False, f"you can't commission {ref} {capability}; you can commission for: {valid}")
-        waiting = next((d for d in a.drafts.values() if d.ref == ref and d.capability == capability), None)
+        waiting = next((d for d in self.drafts.values() if d.ref == ref and d.capability == capability), None)
         if waiting:
             how = "do_part" if any(r == ref and h == "do_part" for r, _, _, _, h in options) else "deliver"
             return Outcome(False, f"you already have draft {waiting.id} for {ref} {capability}; submit it with {how}")
@@ -92,18 +102,15 @@ class MemberWorker:
 
     def _write(self, act: ActionsAPI, prompt: str, tools: list) -> Turn | Outcome:
         """Look-up rounds, then the deliverable: the member's last turn, or why it failed."""
-        a = self.agent
         messages: list[dict[str, Any]] = [{"role": "user", "text": prompt}]
-        for round_ in range(a.member_rounds + 1 if tools else 1):
-            last = round_ == a.member_rounds or not tools
+        for round_ in range(self.rounds + 1 if tools else 1):
+            last = round_ == self.rounds or not tools
             if last and tools:
                 messages.append({"role": "user", "text": NO_MORE_LOOKUPS})
             try:
                 # members write; they don't plan. Reasoning here only burned the allowance and returned nothing.
-                t = a.backend.chat(model=getattr(a, "_member_model", a.member_model),
-                                   system=[getattr(a, "_member_system", MEMBER_SYSTEM)], reasoning=False,
-                                   messages=messages, tools=None if last else tools,
-                                   max_tokens=getattr(a, "_member_max_tokens", a.member_max_tokens))
+                t = self.backend.chat(model=self.model, system=[self.system], reasoning=False, messages=messages,
+                                      tools=None if last else tools, max_tokens=self.max_tokens)
             except ModelError as e:
                 return Outcome(False, f"the member couldn't do it: {e}")
             try:
@@ -134,16 +141,15 @@ class MemberWorker:
         return results + [ToolResult(c.id, "skipped: at most 3 look-ups a round", True) for c in calls[3:]]
 
     def _keep(self, t: Turn, ref: str, capability: str, playbook_id: PlaybookId | None) -> Outcome:
-        a = self.agent
-        a._commissions += 1
+        self.commissions += 1
         text = strip_tags(t.text).strip()
         if not text:
             why = " (it spent its whole allowance reasoning)" if t.stop == "max_tokens" else ""
             return Outcome(False, f"the member returned nothing{why}; the call was still charged")
-        a._seq += 1
-        d = Draft(f"D{a._seq}", capability, text, (playbook_id,) if playbook_id else (), ref)
-        a.drafts[d.id] = d
-        while len(a.drafts) > a.keep_drafts:
-            a.drafts.pop(next(iter(a.drafts)))
+        self.seq += 1
+        d = Draft(f"D{self.seq}", capability, text, (playbook_id,) if playbook_id else (), ref)
+        self.drafts[d.id] = d
+        while len(self.drafts) > self.keep:
+            self.drafts.pop(next(iter(self.drafts)))
         preview = text if len(text) <= 400 else text[:400] + " …"
         return Outcome(True, f"draft {d.id} for {capability} ({len(text)} chars):\n{preview}", d.id)

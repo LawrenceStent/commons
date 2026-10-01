@@ -426,7 +426,7 @@ def test_the_world_lists_what_can_be_commissioned_and_refuses_the_rest():
     assert f"commission(ref={job.id}, capability=research) then do_part" in text
     assert "capability=build" not in text.split("YOU CAN COMMISSION")[1].split("\n\n")[0]
     s = me.strategy
-    s._commissions = 0
+    s.members.commissions = 0
     out = s.commission(obs, act, job.id, "research", "go", None)
     assert out and out.id == "D1"
     again = s.commission(obs, act, job.id, "research", "go", None)

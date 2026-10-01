@@ -291,7 +291,7 @@ def test_a_member_looks_things_up_through_the_gate_then_writes(tmp_path):
     me.capacity = 5
     a.claim(job.id)
     w.board.allocate()
-    me.strategy._commissions = 0
+    me.strategy.members.commissions = 0
     out = me.strategy.commission(w.observe(me), a, "X1", "research", "go", None)
     assert out and "[archive: web-example-org-pumps#1]" in out.message
     assert seen[0][0] == {"search_archive", "read_archive", "web_search", "web_fetch"}  # no claim, no commission

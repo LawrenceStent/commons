@@ -1,6 +1,6 @@
 """Architecture metrics: the measurements behind docs/ARCHITECTURE-AUDIT.md, re-run after every refactor stage.
 
-    uv run python -m tools.arch_metrics
+    uv run commons metrics
 
 Everything is read from the source (ast and regular expressions); nothing is imported or run.
 """
@@ -12,8 +12,8 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
-ROOT = Path(__file__).parent.parent
-SKIP = {"tests", "tools", ".venv", "runs", "societies", "operator", "docs", "sim"}  # sim/: shims only
+ROOT = Path.cwd()  # the repository it runs in
+SKIP = {"tests", ".venv", "runs", "societies", "operator", "docs", "sim"}  # sim/: shims only
 
 
 def _sources():
@@ -84,6 +84,10 @@ def measure() -> dict[str, object]:
     }
 
 
-if __name__ == "__main__":
+def main(argv: list[str] | None = None) -> None:
     for k, v in measure().items():
         print(f"{k:<40} {v}")
+
+
+if __name__ == "__main__":
+    main()

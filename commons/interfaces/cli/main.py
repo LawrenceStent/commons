@@ -1,35 +1,36 @@
-"""`commons`: one command for every tool. Each subcommand runs its module with the remaining arguments.
+"""`commons`: one command for every tool.
 
-    uv run commons run ...         a live society (interfaces/cli/live.py)
-    uv run commons sim ...         a scripted society (interfaces/cli/sim.py)
+    uv run commons run ...         a live society, with LLM co-ops
+    uv run commons sim ...         a scripted society (no models)
+    uv run commons console ...     the dashboard on a scripted society
     uv run commons found ...       found a society from a brief, or approve its blueprints
     uv run commons approve ...     decide the gate's requests
     uv run commons rate ...        rate the work a society set aside for you
     uv run commons calibrate ...   check a grader or appraiser against its hand-labelled cases
+    uv run commons metrics         architecture measurements (development)
+    uv run commons golden ...      check or regenerate the golden master (development)
 
-`docs/COMMANDS.md` documents every option.
+`uv run commons <command> --help` lists a command's options; docs/COMMANDS.md documents them all.
 """
 
-import runpy
 import sys
+from importlib import import_module
 
 COMMANDS = {
-    "run": "commons.interfaces.cli.live",
-    "sim": "commons.interfaces.cli.sim",
-    "found": "commons.interfaces.cli.found",
-    "approve": "commons.interfaces.cli.approve",
-    "rate": "commons.interfaces.cli.rate",
-    "calibrate": "commons.interfaces.cli.calibrate",
+    "run": "live", "sim": "sim", "console": "console", "found": "found", "approve": "approve", "rate": "rate",
+    "calibrate": "calibrate", "metrics": "metrics", "golden": "golden",
 }
 
 
 def main(argv: list[str] | None = None) -> None:
     argv = sys.argv[1:] if argv is None else argv
-    if not argv or argv[0] in ("-h", "--help") or argv[0] not in COMMANDS:
+    if not argv or argv[0] in ("-h", "--help"):
         print(__doc__.strip())
-        sys.exit(0 if not argv or argv[0] in ("-h", "--help") else f"unknown command {argv[0]!r}")
-    sys.argv = [f"commons {argv[0]}", *argv[1:]]
-    runpy.run_module(COMMANDS[argv[0]], run_name="__main__", alter_sys=True)
+        return
+    if argv[0] not in COMMANDS:
+        print(__doc__.strip())
+        sys.exit(f"unknown command {argv[0]!r}")
+    import_module(f"commons.interfaces.cli.{COMMANDS[argv[0]]}").main(argv[1:])
 
 
 if __name__ == "__main__":

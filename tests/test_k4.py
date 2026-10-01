@@ -216,7 +216,7 @@ def test_a_commission_can_hand_the_member_archive_sources():
     act.claim(job.id)
     w.board.allocate()
     s = me.strategy
-    s._commissions = 0
+    s.members.commissions = 0
     calls = len(backend.chats)
     missing = s.commission(w.observe(me), act, job.id, "scout", "go", None, ["nope#1"])
     assert not missing and "no archive passage" in missing.message and len(backend.chats) == calls  # nothing spent
