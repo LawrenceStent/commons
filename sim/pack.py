@@ -11,7 +11,7 @@ A pack supplies:
     live_params      overrides of the live economy (`LIVE_ECONOMY`) for live runs; `pack.live` is the result
     grader_system / appraiser_system / member_system   how this society judges and does its work
     grader_cases / venture_cases   hand-labelled calibration sets for its grader and appraiser
-    grader_panel     optional lenses (one system prompt each) for a panel of graders; the part gets the median
+    grader_panel     optional lenses (what each grader of a panel looks hardest at); the part gets the median
     scorecard        mission metrics (sim/scorecard.py): what success means for this society, beyond money
 
 Packs are found by name: `load("earn_online")` imports `packs.earn_online` and returns its `PACK`. The

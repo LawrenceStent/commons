@@ -128,15 +128,15 @@ atexit.register(lambda: PID.read_text() == str(os.getpid()) and PID.unlink())
 RUN = dict(parallel_turns=True, grading_workers=4)  # stewards think at once; grading 4 calls at a time
 if a.panel and not pack.grader_panel:
     sys.exit(f"the {pack.name} pack has no grader panel")
-lenses = pack.grader_panel if a.panel else (pack.grader_system,)
-judges = [LLMGrader(backend, model=grader, max_tokens=grader_tokens, system=s) for s in lenses]
+judge = (PanelGrader.of(backend, grader, grader_tokens, pack.grader_system, pack.grader_panel) if a.panel
+         else LLMGrader(backend, model=grader, max_tokens=grader_tokens, system=pack.grader_system))
 run_name = Path(ledger).stem
 operator = Operator(a.operator) if a.operator else None
 web = None if a.no_web or a.backend == "fake" else WebAccess.default(operator.gate.search if operator else "wikipedia")
 world = World(Params(seed=a.seed, ledger_path=ledger,
                      activity_path=ledger.replace(".sqlite", ".activity.jsonl"), **{**pack.live, **RUN}),
               population=population, pack=pack,
-              grader=HybridGrader(PanelGrader(judges) if len(judges) > 1 else judges[0]),
+              grader=HybridGrader(judge),
               appraiser=LLMAppraiser(backend, model=grader, max_tokens=grader_tokens, system=pack.appraiser_system),
               operator=operator, web=web,
               gate=Gate(folder=society.folder if society else None, run=run_name),

@@ -47,8 +47,7 @@ if a.panel and a.backend != "fake":
 
     if not pack.grader_panel:
         sys.exit(f"the {pack.name} pack has no grader panel")
-    grader = PanelGrader([LLMGrader(grader.backend, model=grader.model, max_tokens=a.max_tokens, system=s)
-                          for s in pack.grader_panel])
+    grader = PanelGrader.of(backend, model, a.max_tokens, pack.grader_system, pack.grader_panel)
 
 if a.target == "appraiser":
     from sim.ventures import LLMAppraiser

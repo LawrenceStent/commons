@@ -34,7 +34,9 @@ def test_the_pack_loads_by_name_and_brings_its_own_economy():
     assert load("tech_for_good") is PACK
     assert CAPABILITIES == ("scout", "assess", "design", "write")
     assert PACK.params["economy"] == "grant" and PACK.live_params["economy"] == "grant"
-    assert len(PACK.grader_panel) == 3 and all(PACK.grader_system in s for s in PACK.grader_panel)
+    assert len(PACK.grader_panel) == 3
+    panel = PanelGrader.of(FakeBackend(), "fake", 400, PACK.grader_system, PACK.grader_panel)
+    assert all(g.system.startswith(PACK.grader_system) and "one of three graders" in g.system for g in panel.graders)
 
 
 @pytest.fixture(scope="module", params=SEEDS)
