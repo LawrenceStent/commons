@@ -13,7 +13,6 @@ RANK = {"protocol": 0, "substrate": 1, "society": 2, "sim": 3, "runtime": 4, "co
 
 # (file, imported module): why it's allowed for now
 OUTWARD = {
-    ("sim/engine.py", "runtime.web"): "S8: R2.3 injects the web",
     ("sim/calibrate.py", "runtime.backends"): "A5: R3 moves CLIs to interfaces",
     ("sim/found.py", "runtime.backends"): "A5: R3",
     ("sim/live.py", "runtime.backends"): "A5: R3",
@@ -26,7 +25,7 @@ OUTWARD = {
 # imports of our own modules inside functions (A2): each one hides a dependency
 IN_FUNCTIONS = {
     ("sim/calibration.py", "sim.grader"), ("sim/calibration.py", "sim.ventures"), ("sim/engine.py", "sim.scorecard"),
-    ("sim/engine.py", "runtime.web"), ("sim/engine.py", "sim.market"), ("sim/founding.py", "society.community"),
+    ("sim/engine.py", "sim.market"), ("sim/founding.py", "society.community"),
     ("sim/founding.py", "society.strategies"), 
 }
 

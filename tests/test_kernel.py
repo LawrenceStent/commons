@@ -56,3 +56,21 @@ def test_packs_load_by_name_and_unknown_ones_are_refused():
     assert load("earn_online").name == "earn_online"
     with pytest.raises(ValueError, match="no pack called"):
         load("nonexistent")
+
+
+def test_the_world_runs_on_infrastructure_it_is_given(tmp_path):
+    """R2.3: the ledger, bus and activity log are passed in (adapters), not built inside the world."""
+    from sim.activity import ActivityLog
+    from substrate.bus import MemoryBus
+    from substrate.ledger import Ledger
+    from substrate.registry import Registry
+    from substrate.telemetry import Hub
+
+    hub = Hub()
+    ledger, bus = Ledger(str(tmp_path / "ledger.sqlite"), hub=hub), MemoryBus(Registry(), hub=hub)
+    activity = ActivityLog(path=str(tmp_path / "activity.jsonl"))
+    w = World(Params(seed=0), hub=hub, ledger=ledger, bus=bus, activity=activity).run(10)
+    assert w.ledger is ledger and w.bus is bus and w.registry is bus.registry and w.activity is activity
+    assert bus.standing("coop-a") == w._standing("coop-a")  # the bus rations by this society's trust
+    ledger.check()
+    assert (tmp_path / "activity.jsonl").read_text().count("\n") == len(w.activity.ring)

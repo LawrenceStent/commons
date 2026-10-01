@@ -48,6 +48,7 @@ from sim.grader import GradingError
 from sim.market import MarketJob
 from society.grading import Grade, Grader, StubGrader
 from sim.pack import Pack
+from sim.ports import WebError, WebPort, host_of
 from sim.pack import load as load_pack
 from sim.ratings import EVIDENCE, Ratings
 from sim.status import LIVE_CONTRACT, ContractStatus, JobStatus, ProposalStatus, RequestStatus, VentureStatus
@@ -58,7 +59,7 @@ from society.observation import (
     BidView, ContractView, Event, GoalView, IdeaView, VentureView, JobView, Observation, Outcome, PartView, PeerView, PlaybookView,
     ProposalView,
 )
-from substrate.bus import MemoryBus, RateLimited
+from substrate.bus import Bus, MemoryBus, RateLimited
 from substrate.ledger import InsufficientFunds, Ledger, purse
 from substrate.meter import Meter
 from substrate.registry import Registry
@@ -213,7 +214,10 @@ class World:
     def __init__(self, params: Params | None = None, population: list[Community] | None = None,
                  hub: Hub | None = None, grader: Grader | None = None, appraiser: Appraiser | None = None,
                  operator: Operator | None = None, pack: Pack | None = None, archive: Archive | None = None,
-                 ratings: Ratings | None = None, web=None, gate: Gate | None = None):
+                 ratings: Ratings | None = None, web: WebPort | None = None, gate: Gate | None = None,
+                 ledger: Ledger | None = None, bus: Bus | None = None, activity: ActivityLog | None = None):
+        """Everything outside the society's rules can be passed in (the model-backed grader and appraiser, the web,
+        the ledger, the bus, the activity log); what isn't is built from `params` (see `_default_*` below)."""
         self.params = p = params or Params()
         self.pack = pack or load_pack()  # what this society is for: its work, vocabulary and seed co-ops
         self.hub = hub or Hub()
@@ -221,18 +225,18 @@ class World:
         self.rng = random.Random(p.seed)
         self.cycle = 0
         self.communities = {c.name: c for c in (population or self.pack.population())}
-        self.ledger = Ledger(p.ledger_path, hub=self.hub)
+        self.ledger = ledger or _default_ledger(p, self.hub)
         self.meter = Meter(self.ledger, daily_ceiling=p.daily_ceiling, hub=self.hub)
         self.rep = Reputation(decay=p.decay, hub=self.hub)
-        self.registry = Registry()
-        self.bus = MemoryBus(self.registry, standing=self._standing, base_allowance=p.base_allowance,
-                             verify=p.verify, hub=self.hub)
+        self.bus = bus or _default_bus(p, self.hub)
+        self.bus.standing = self._standing  # the bus rations messages by this society's trust
+        self.registry = self.bus.registry
         self.grader = grader or StubGrader(cost=p.grade_cost)
         self.appraiser = appraiser or StubAppraiser()
         self.operator = operator or Operator(None)
         self.archive = archive or Archive(None)  # the society's reference material, searched on demand
         self.ratings = ratings  # your ratings of a sample of the paid work (sim/ratings.py)
-        # the web: a runtime.web.WebAccess (None = no web at all), behind the gate (sim/gate.py), whose policy is
+        # the web (a WebPort; None = no web at all), behind the gate (sim/gate.py), whose policy is
         # the operator's [gate] section
         self.web = web
         self.gate = gate or Gate()
@@ -266,7 +270,7 @@ class World:
         self.transcripts: defaultdict[str, deque] = defaultdict(lambda: deque(maxlen=2))  # LLM turns, newest last
         self.plans: defaultdict[str, Plans] = defaultdict(Plans)  # ideas and goals per community
         self._plan_seq = 0
-        self.activity = ActivityLog(p.activity_keep, p.activity_path)
+        self.activity = activity or _default_activity(p)
         self.activity.watch(self.hub)
         self.known_capabilities = set(self.pack.capabilities).union(*(c.capabilities for c in self.communities.values()))
         self._job_seq = self._proposal_seq = 0
@@ -784,8 +788,6 @@ class World:
     def web_call(self, coop: str, actor: str, tool: str, target: str):
         """A web read an agent asked for. Called WITHOUT the world's lock: the network is slow, so the lock is taken
         only to ask the gate and to record the result."""
-        from runtime.web import host_of
-
         target = str(target).strip()[:500]
         if not self.web or not self.gate.policy.allow_hosts:
             return Outcome(False, "this society has no web access (the operator allows no hosts)")
@@ -797,9 +799,9 @@ class World:
                                    ids[0] if ids else None)
             host = host_of(target)
         else:
-            if self.web.search is None or self.gate.policy.search == "none":
+            if self.web.search_host is None or self.gate.policy.search == "none":
                 return Outcome(False, "this society has no web search; web_fetch a page on an allowed host instead")
-            host = self.web.search.host
+            host = self.web.search_host
         with self.lock:
             verdict, r = self.gate.ask(coop, actor, tool, target, host, self.cycle)
             if isinstance(r, GateRequest):
@@ -822,15 +824,13 @@ class World:
                 self._tell(r.coop, "gate", f"{r.id} ran: {out.message[:700]}", r.id)
 
     def _execute_web(self, r: GateRequest):
-        from runtime.web import WebError
-
         try:
             if r.tool == "web_search":
-                results = self.web.search.search(r.target, k=5)
+                results = self.web.search(r.target, k=5)
                 text = "\n".join(f"- {x.title}: {x.url}\n  {x.snippet[:200]}" for x in results) or "no results"
                 msg, ref = f"search results for {r.target!r} (web_fetch a url to read it):\n{text}", None
             else:
-                page = self.web.fetcher.fetch(r.target)
+                page = self.web.fetch(r.target)
                 with self.lock:
                     ids = self.archive.add_page(page.url, page.title, page.text, fetched=f"cycle {self.cycle}")
                     self.web_pages[r.target] = self.web_pages[page.url] = ids
@@ -1218,6 +1218,18 @@ class World:
                 for n, h in self.history.items()
             },
         )
+
+
+def _default_ledger(p: Params, hub: Hub) -> Ledger:
+    return Ledger(p.ledger_path, hub=hub)
+
+
+def _default_bus(p: Params, hub: Hub) -> Bus:
+    return MemoryBus(Registry(), base_allowance=p.base_allowance, verify=p.verify, hub=hub)
+
+
+def _default_activity(p: Params) -> ActivityLog:
+    return ActivityLog(p.activity_keep, p.activity_path)
 
 
 def summary(world: World, window: int = 50) -> str:

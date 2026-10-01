@@ -25,8 +25,9 @@ import urllib.parse
 import urllib.request
 import urllib.robotparser
 from collections.abc import Callable
-from dataclasses import dataclass
 from html.parser import HTMLParser
+
+from sim.ports import Page, SearchResult, WebError, host_of
 
 USER_AGENT = "CommonsResearchBot/0.1 (a small research simulation; read-only, rate-limited)"
 TEXT_TYPES = ("text/html", "text/plain", "application/json", "application/xml", "text/xml", "application/xhtml+xml")
@@ -35,33 +36,11 @@ TEXT_TYPES = ("text/html", "text/plain", "application/json", "application/xml", 
 Transport = Callable[[str, dict], tuple[int, dict, bytes]]
 
 
-class WebError(Exception):
-    """A read that couldn't be done (a refusal, or the site failed). The message is safe to show an agent."""
-
-
 class EgressDenied(WebError):
     pass
 
 
-@dataclass(frozen=True)
-class Page:
-    url: str  # the final url, after redirects
-    title: str
-    text: str
-
-
-@dataclass(frozen=True)
-class Result:
-    title: str
-    url: str
-    snippet: str
-
-
 # ── the allowlist ──────────────────────────────────────────────
-def host_of(url: str) -> str:
-    return (urllib.parse.urlsplit(url).hostname or "").lower().rstrip(".")
-
-
 def _private(host: str) -> bool:
     try:
         infos = socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)
@@ -229,7 +208,7 @@ class WikipediaSearch:
     def __init__(self, fetcher: Fetcher, lang: str = "en"):
         self.fetcher, self.host = fetcher, f"{lang}.wikipedia.org"
 
-    def search(self, query: str, k: int = 5) -> list[Result]:
+    def search(self, query: str, k: int = 5) -> list[SearchResult]:
         q = urllib.parse.urlencode({"action": "query", "list": "search", "srsearch": query[:200], "srlimit": k,
                                     "format": "json", "utf8": 1})
         data = self.fetcher.json(f"https://{self.host}/w/api.php?{q}")
@@ -237,21 +216,31 @@ class WikipediaSearch:
         for hit in data.get("query", {}).get("search", [])[:k]:
             title = hit.get("title", "")
             snippet = html.unescape(re.sub(r"<[^>]+>", "", hit.get("snippet", "")))
-            out.append(Result(title, f"https://{self.host}/wiki/{urllib.parse.quote(title.replace(' ', '_'))}", snippet))
+            out.append(SearchResult(title, f"https://{self.host}/wiki/{urllib.parse.quote(title.replace(' ', '_'))}", snippet))
         return out
 
 
 class WebAccess:
-    """What a world is given for the web: a fetcher (behind the allowlist) and an optional search provider. The
+    """The web port (sim.ports.WebPort): a fetcher behind the allowlist, and an optional search provider. The
     allowlist follows the operator's [gate] policy, re-read every cycle."""
 
-    def __init__(self, fetcher: Fetcher, search=None):
-        self.fetcher, self.search = fetcher, search
-        if search is not None:
-            search.host = getattr(search, "host", "")
+    def __init__(self, fetcher: Fetcher, searcher=None):
+        self.fetcher, self.searcher = fetcher, searcher
+
+    @property
+    def search_host(self) -> str | None:
+        return getattr(self.searcher, "host", None) if self.searcher is not None else None
 
     def set_hosts(self, hosts) -> None:
         self.fetcher.egress.allow = frozenset(h.lower().strip().rstrip(".") for h in hosts if h.strip())
+
+    def fetch(self, url: str) -> Page:
+        return self.fetcher.fetch(url)
+
+    def search(self, query: str, k: int = 5) -> list[SearchResult]:
+        if self.searcher is None:
+            raise WebError("this society has no web search")
+        return self.searcher.search(query, k)
 
     @classmethod
     def default(cls, search: str = "wikipedia") -> WebAccess:

@@ -17,6 +17,7 @@ ModelError with a readable reason; callers decide whether to retry.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import urllib.parse
 from typing import Any, Protocol
 
 from substrate.meter import Usage
@@ -89,3 +90,37 @@ class ModelBackend(Protocol):
     def chat(self, *, model: str, system: list[str], messages: list[dict[str, Any]],
              tools: list[dict[str, Any]] | None = None, max_tokens: int = 4096, reasoning: bool = True) -> Turn: ...
     # reasoning=False asks the model to answer without thinking first (members write; they don't plan)
+
+
+# ── the web ────────────────────────────────────────────────────
+class WebError(Exception):
+    """A read that couldn't be done (a refusal, or the site failed). The message is safe to show an agent."""
+
+
+@dataclass(frozen=True)
+class Page:
+    url: str  # the final url, after redirects
+    title: str
+    text: str
+
+
+@dataclass(frozen=True)
+class SearchResult:
+    title: str
+    url: str
+    snippet: str
+
+
+class WebPort(Protocol):
+    """Reads only, behind the operator's allowlist (which the adapter enforces on its own, as a second check)."""
+    search_host: str | None  # the host searches go to; None when there's no search
+
+    def set_hosts(self, hosts) -> None: ...
+
+    def fetch(self, url: str) -> Page: ...
+
+    def search(self, query: str, k: int = 5) -> list[SearchResult]: ...
+
+
+def host_of(url: str) -> str:
+    return (urllib.parse.urlsplit(url).hostname or "").lower().rstrip(".")

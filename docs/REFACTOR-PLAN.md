@@ -170,7 +170,9 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
       (`society/grading.py` for now; R3 moves it to `domain/market/grading.py`). The sim↔society cycle is gone
 - [x] R2.2 The model port (`ModelBackend`, `Completion`, `Turn`, `ToolCall`, `ToolResult`, `Usage`) in a neutral module
       (`sim/ports.py`; `Usage` stays in `substrate/meter.py`, below both). `sim` no longer imports the runtime's backends
-- [ ] R2.3 The world receives its ledger, bus, hub, activity log and web; a factory builds the defaults
+- [x] R2.3 The world receives its ledger, bus, hub, activity log and web; a factory builds the defaults
+      (`_default_ledger`, `_default_bus`, `_default_activity`). The web is a port (`sim.ports.WebPort`, with `Page`,
+      `SearchResult`, `WebError`, `host_of`); `runtime.web.WebAccess` implements it
 - [ ] R2.4 No function-level imports of our own modules
 - [ ] **Done when:** no import cycles; the layer test's exceptions shrink; golden identical
 
