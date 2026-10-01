@@ -119,11 +119,11 @@ def test_citations_are_parsed_once_each():
 
 def test_a_made_up_citation_fails_the_part_by_rule():
     w = World(Params(seed=0, verify=False), archive=Archive(EXAMPLE / "archive"))
-    bad = w._try_grade("s", "r", "<q=0.9> as shown in [archive: invented#4]")
+    bad = w.grading.try_grade("s", "r", "<q=0.9> as shown in [archive: invented#4]")
     assert bad.score == 0.0 and "invented#4" in bad.reason
-    good = w._try_grade("s", "r", "<q=0.9> as shown in [archive: repairs#1]")
+    good = w.grading.try_grade("s", "r", "<q=0.9> as shown in [archive: repairs#1]")
     assert good.score == pytest.approx(0.9)
-    assert w.citations == {"valid": 1, "invalid": 1}
+    assert w.grading.citations == {"valid": 1, "invalid": 1}
 
 
 # ── the panel ──────────────────────────────────────────────────
@@ -214,7 +214,7 @@ def test_a_commission_can_hand_the_member_archive_sources():
     act = Actions(w, me)
     me.capacity = 5
     act.claim(job.id)
-    w._allocate_claims()
+    w.board.allocate()
     s = me.strategy
     s._commissions = 0
     calls = len(backend.chats)

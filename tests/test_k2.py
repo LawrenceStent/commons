@@ -48,7 +48,7 @@ def test_the_first_to_claim_does_not_win_the_most_trusted_does():
     assert act(w, "a").claim(j.id)  # a asks first
     assert act(w, "b").claim(j.id)
     assert j.status == "open"  # nothing is decided mid-cycle
-    w._allocate_claims()
+    w.board.allocate()
     assert j.prime == "b" and j.status == "claimed"
     assert any(e.kind == "claim_lost" and "went to b" in e.text for e in w.inbox["a"])
 
@@ -58,7 +58,7 @@ def test_ties_go_to_the_better_fit_then_a_seeded_draw_never_arrival_order():
     j = job(w, caps=("research", "write"))
     act(w, "a").claim(j.id)
     act(w, "c").claim(j.id)  # c can do both parts
-    w._allocate_claims()
+    w.board.allocate()
     assert j.prime == "c"
     results = set()
     for order in (("a", "b"), ("b", "a")):
@@ -66,7 +66,7 @@ def test_ties_go_to_the_better_fit_then_a_seeded_draw_never_arrival_order():
         j2 = job(w2)
         for name in order:
             act(w2, name).claim(j2.id)
-        w2._allocate_claims()
+        w2.board.allocate()
         results.add(j2.prime)
     assert len(results) == 1  # the same winner whichever asked first
 
@@ -77,11 +77,11 @@ def test_the_bond_is_escrowed_returned_when_paid_and_forfeited_when_the_job_fail
     for jid in ("G1", "B1"):
         act(w, "a").claim(jid)
     before = w.ledger.balance(purse("a"))
-    w._allocate_claims()
+    w.board.allocate()
     bond = round(80_000 * w.params.claim_bond)
     assert w.ledger.balance("escrow") == 2 * bond and w.ledger.balance(purse("a")) == before - 2 * bond
     act(w, "a").do_part("G1", "research", tagged(0.9, " good"))
-    w.settle_grading()
+    w.grading.settle()
     assert good.status == "paid" and w.ledger.balance("escrow") == bond
     treasury = w.ledger.balance("treasury")
     for _ in range(w.params.job_ttl + 1):
@@ -122,7 +122,7 @@ def test_pay_scales_with_quality():
         j = job(w, reward=100_000)
         act(w, "a").claim(j.id)
         act(w, "a").do_part(j.id, "research", tagged(score, " work"))
-        w.settle_grading()
+        w.grading.settle()
         paid = [e.fields["payout"] for e in w.hub.recent("market.job", n=20) if e.fields.get("stage") == "paid"]
         assert paid == [round(100_000 * share)]
 
@@ -148,11 +148,11 @@ def test_deferred_outcomes_hold_the_money_until_they_settle():
     j = job(w)
     act(w, "a").claim(j.id)
     act(w, "a").do_part(j.id, "research", tagged(0.9, " work"))
-    w.settle_grading()
-    assert j.status == "graded" and j.id in w.deferred and w.jobs_done == 0
+    w.grading.settle()
+    assert j.status == "graded" and j.id in w.grading.deferred and w.jobs_done == 0
     for _ in range(3):
         w.step()
-    assert j.status == "paid" and j.id not in w.deferred
+    assert j.status == "paid" and j.id not in w.grading.deferred
 
 
 def test_a_deferred_outcome_can_turn_out_badly():

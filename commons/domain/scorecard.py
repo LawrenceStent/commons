@@ -91,8 +91,8 @@ def _cooperation(w: World) -> float | None:
 
 
 def _citations(w: World) -> float | None:
-    n = w.citations["valid"] + w.citations["invalid"]
-    return round(w.citations["valid"] / n, 3) if n else None
+    n = w.grading.citations["valid"] + w.grading.citations["invalid"]
+    return round(w.grading.citations["valid"] / n, 3) if n else None
 
 
 GENERAL = (

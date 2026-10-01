@@ -79,8 +79,8 @@ def test_the_grader_accepts_a_good_delivery_and_its_grade_counts_for_the_job():
     job = claimed_job_needing_build(w)
     c = announce_and_award(w, job)
     act(w, "sub").deliver(c.id, tagged(0.9, " build"))
-    assert c.status == "delivered" and c.id in w.pending_reviews
-    w.settle_grading()
+    assert c.status == "delivered" and c.id in w.grading.pending_reviews
+    w.grading.settle()
     assert c.status == "accepted" and "passed grading" in c.reason
     assert job.parts["build"].artifact and job.scores["build"] == 0.9
     assert w.rep.score("prime", "sub", "build") > 0.5
@@ -89,7 +89,7 @@ def test_the_grader_accepts_a_good_delivery_and_its_grade_counts_for_the_job():
     graded = []
     real_grade = w.grader.grade
     w.grader.grade = lambda *a: graded.append(a) or real_grade(*a)
-    w.settle_grading()
+    w.grading.settle()
     assert len(graded) == 1  # only research: the build part's delivery grade was reused
     assert job.status == "paid" and w.jobs_done == 1 and w.ledger.balance(purse("prime")) > before
     w.ledger.check()
@@ -100,7 +100,7 @@ def test_the_grader_rejects_a_bad_delivery_and_the_prime_pays_nothing_more():
     c = announce_and_award(w, claimed_job_needing_build(w))
     act(w, "sub").deliver(c.id, tagged(0.2, " junk"))
     sub_before = w.ledger.balance(purse("sub"))
-    w.settle_grading()
+    w.grading.settle()
     assert c.status == "rejected" and "failed grading" in c.reason
     assert w.ledger.balance(purse("sub")) == sub_before
     assert w.rep.score("prime", "sub", "build") < 0.5
@@ -126,9 +126,9 @@ def test_a_grader_outage_accepts_the_delivery_by_default_after_retries():
         raise GradingError("model not loaded")
 
     w.grader.grade = down
-    w.settle_grading()
+    w.grading.settle()
     assert c.status == "delivered"
-    w.settle_grading()
+    w.grading.settle()
     assert c.status == "accepted" and "grader was unavailable" in c.reason
 
 
@@ -137,7 +137,7 @@ def test_a_prime_that_cannot_pay_for_passing_work_defaults():
     c = announce_and_award(w, claimed_job_needing_build(w))
     act(w, "sub").deliver(c.id, tagged(0.9, " build"))
     w.ledger.transfer(purse("prime"), "compute", w.ledger.balance(purse("prime")), cycle=w.cycle, kind="test")
-    w.settle_grading()
+    w.grading.settle()
     assert c.status == "defaulted" and w.rep.score("sub", "prime", "build") < 0.5
 
 

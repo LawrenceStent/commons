@@ -198,7 +198,8 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
 ### R6. Split the world (XL) — S1, C1, C4, C8
 - [x] R6.1 `cycle.py`: the phases in order, each marked inside or outside the lock; a test holds the order to the
       module's own documentation
-- [ ] R6.2 Services: contract-net, claims, grading (with deferred settlement and audits)
+- [x] R6.2 Services: contract-net (`ContractNet`), the job board with claims (`JobBoard`), grading with deferred
+      settlement and audits (`Grading`), in `application/services/`. Moved verbatim by a tool that rewrites references
 - [ ] R6.3 Services: ventures, grants and payment, ratings, scorecard
 - [ ] R6.4 Services: population (owns its counters; no private access), knowledge and archive, web and gate
 - [ ] R6.5 Services: gossip and the recorder (history, `world.cycle` telemetry)

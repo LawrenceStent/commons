@@ -74,20 +74,20 @@ class Actions:
             return Outcome(False, f"job {job_id} is not on the board")
         # at most two open jobs (or one per awake member), counting claims waiting for allocation
         w, p = self.w, self.w.params
-        held = w.held_jobs(self.me.name) + (len(w.pending_claims(self.me.name)) if p.claim_allocation else 0)
-        limit = w.claim_limit(self.me)
+        held = w.board.held_jobs(self.me.name) + (len(w.board.pending_claims(self.me.name)) if p.claim_allocation else 0)
+        limit = w.board.claim_limit(self.me)
         if held >= limit:
             return Outcome(False, f"you already hold or have claimed {held} jobs, the most you can (two, or one per "
                                   f"awake member); finish one first")
         bond = bond_for(job.reward, p.claim_bond)
         if bond and w.ledger.balance(purse(self.me.name)) < bond:
             return Outcome(False, f"claiming {job_id} needs a {bond} bond if you win it; you can't afford it")
-        if p.claim_allocation and self.me.name in w.claims.get(job_id, {}):
+        if p.claim_allocation and self.me.name in w.board.claims.get(job_id, {}):
             return Outcome(False, f"you have already claimed {job_id}; it is allocated at the end of the cycle")
         if err := self._use_capacity():
             return err
         if p.claim_allocation:
-            w.claims.setdefault(job_id, {})[self.me.name] = w.cycle
+            w.board.claims.setdefault(job_id, {})[self.me.name] = w.cycle
             return Outcome(True, f"claim on {job_id} registered; jobs are allocated at the end of the cycle to the most "
                                  f"trusted, best-fitting claimant (bond {bond} if you win)", job_id)
         job.claim(self.me.name, deadline=w.cycle + p.job_ttl)
@@ -108,10 +108,10 @@ class Actions:
             return err
         if err := self._use_capacity():
             return err
-        for c in self.w.contracts_for(job_id, capability, (ContractStatus.OPEN,)):
+        for c in self.w.contract_net.contracts_for(job_id, capability, (ContractStatus.OPEN,)):
             c.withdraw(at=None)  # left unclosed, as before: see REFACTOR-PLAN §7
         job.fill(capability, artifact[:MAX_ARTIFACT], source="self", cites=tuple(cites))
-        self.w.maybe_submit(job)
+        self.w.grading.maybe_submit(job)
         return Outcome(True, f"{capability} part of {job_id} done")
 
     # ── contract-net ───────────────────────────────────────────
@@ -122,7 +122,7 @@ class Actions:
         part = job.parts.get(capability)
         if part is None or part.artifact is not None:
             return Outcome(False, f"job {job_id} has no open {capability} part")
-        if self.w.contracts_for(job_id, capability, LIVE_CONTRACT):
+        if self.w.contract_net.contracts_for(job_id, capability, LIVE_CONTRACT):
             return Outcome(False, "a contract for that part is already in progress")
         if max_price <= 0 or not 0 <= advance_frac <= 1:
             return Outcome(False, "max_price must be positive and advance_frac within 0..1")
@@ -131,7 +131,7 @@ class Actions:
         if not self._send(Announce(job_id=cid, capability=capability, reward=max_price,
                                    advance_frac=advance_frac, spec=part.spec)):
             return Outcome(False, "rate-limited: your standing caps how much you can post per cycle")
-        self.w.open_contract(cid, job, capability, self.me.name, max_price, advance_frac)
+        self.w.contract_net.open(cid, job, capability, self.me.name, max_price, advance_frac)
         return Outcome(True, f"announced {cid}; bids arrive from next turn", cid)
 
     def bid(self, contract_id: ContractId, price: Micros) -> Outcome:
@@ -174,7 +174,7 @@ class Actions:
         except InsufficientFunds:
             return Outcome(False, f"you can't cover the {advance} advance")
         self._send(Award(job_id=contract_id, winner=bidder, price=price, advance=advance))
-        self.w.award_contract(c, bidder, price, advance)
+        self.w.contract_net.award(c, bidder, price, advance)
         return Outcome(True, f"awarded {contract_id} to {bidder} at {price}; advance {advance} paid")
 
     def deliver(self, contract_id: ContractId, artifact: str, cites: tuple[str, ...] = ()) -> Outcome:
@@ -188,7 +188,7 @@ class Actions:
         self._send(Deliver(job_id=contract_id, artifact={"text": artifact[:MAX_ARTIFACT]}, cites=list(cites)))
         for pid in cites:
             self._send(Cite(playbook_id=pid, job_id=contract_id))
-        self.w.deliver_contract(c, artifact[:MAX_ARTIFACT], tuple(cites))
+        self.w.contract_net.deliver(c, artifact[:MAX_ARTIFACT], tuple(cites))
         return Outcome(True, f"delivered {contract_id}; {c.prime} reviews by cycle {c.deadline}")
 
     def review(self, contract_id: ContractId, accept: bool, reason: str = "") -> Outcome:
@@ -197,11 +197,11 @@ class Actions:
         c = self._contract(contract_id)
         if c is None or c.prime != self.me.name or c.status != ContractStatus.DELIVERED:
             return Outcome(False, f"you have no delivery {contract_id} to review")
-        if accept and not self.w.pay_remainder(c):
+        if accept and not self.w.contract_net.pay_remainder(c):
             return Outcome(False, f"you can't pay the {c.owed} remainder; "
                                   f"it defaults at cycle {c.deadline} if still unpaid")
         self._send(Attest(job_id=contract_id, subject=c.winner, capability=c.capability, outcome=1.0 if accept else 0.0))
-        self.w.close_review(c, accept, reason[:300])
+        self.w.contract_net.close_review(c, accept, reason[:300])
         return Outcome(True, f"{'accepted' if accept else 'rejected'} {contract_id}")
 
     def attest(self, contract_id: ContractId, outcome: float) -> Outcome:
@@ -237,7 +237,7 @@ class Actions:
         if not self._send(Dispute(job_id=contract_id, subject=c.prime, reason=reason[:300])):
             w.ledger.transfer("treasury", purse(self.me.name), p.audit_cost, cycle=w.cycle, kind="audit", memo=f"refund {contract_id}")
             return Outcome(False, "rate-limited: your standing caps how much you can post per cycle")
-        return w.audit(c, reason[:300])
+        return w.contract_net.audit(c, reason[:300])
 
     # ── population ─────────────────────────────────────────────
     def propose_spawn(self, role: str) -> Outcome:

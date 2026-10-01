@@ -141,7 +141,7 @@ def snapshot(state: dict) -> dict:
                           "score": v.score, "reward": v.reward, "reason": v.reason, "job_id": v.job_id, "cycle": v.cycle,
                           "parts": [c for c, _, _ in v.parts]} for v in list(w.ventures.values())[-30:]][::-1],
             "jobs": [{"id": j.id, "title": j.title, "prime": j.prime, "deadline": j.deadline, "reward": j.reward,
-                      "awaiting_grade": j.id in w.awaiting_grade,
+                      "awaiting_grade": j.id in w.grading.awaiting_grade,
                       "parts": [{"capability": cap, "done": part.artifact is not None,
                                  "state": "done" if part.artifact is not None else next(
                                      (c.status for c in w.contracts.values()

@@ -99,8 +99,8 @@ def test_an_approved_read_runs_next_cycle_joins_the_archive_and_can_be_cited(tmp
     assert ids == ["web-example-org-pumps#1"] and "spare parts are hard to find" in w.archive.get(ids[0]).text
     assert "track()" not in w.archive.get(ids[0]).text and "menu" not in w.archive.get(ids[0]).text
     assert any(n == "coop-a" and text.startswith("G1 ran: read https://example.org/pumps") for n, text in said)
-    assert w._try_grade("s", "r", f"<q=0.9> pumps [archive: {ids[0]}]").score == pytest.approx(0.9)
-    assert w._try_grade("s", "r", "<q=0.9> [archive: web-example-org-invented#1]").score == 0  # a page no one read
+    assert w.grading.try_grade("s", "r", f"<q=0.9> pumps [archive: {ids[0]}]").score == pytest.approx(0.9)
+    assert w.grading.try_grade("s", "r", "<q=0.9> [archive: web-example-org-invented#1]").score == 0  # a page no one read
     again = act(w).web_fetch("https://example.org/pumps")
     assert again and "already read" in again.message and len(net.calls) == 2  # read once
 
@@ -290,7 +290,7 @@ def test_a_member_looks_things_up_through_the_gate_then_writes(tmp_path):
     a.actor = "steward"
     me.capacity = 5
     a.claim(job.id)
-    w._allocate_claims()
+    w.board.allocate()
     me.strategy._commissions = 0
     out = me.strategy.commission(w.observe(me), a, "X1", "research", "go", None)
     assert out and "[archive: web-example-org-pumps#1]" in out.message
@@ -298,7 +298,7 @@ def test_a_member_looks_things_up_through_the_gate_then_writes(tmp_path):
     tool_msgs = [m for m in backend.chats[-1][1] if m["role"] == "tool"][0]["results"]
     assert tool_msgs[0].content.startswith("read https://example.org/pumps") and "members may only use" in tool_msgs[1].content
     assert any(e.actor == "member" and e.name == "web_fetch" for e in w.activity.recent(50))
-    assert w._try_grade("s", "r", "<q=0.8>" + out.message.split("\n", 1)[1]).score == pytest.approx(0.8)
+    assert w.grading.try_grade("s", "r", "<q=0.8>" + out.message.split("\n", 1)[1]).score == pytest.approx(0.8)
 
 
 def test_stewards_are_offered_the_web_only_when_there_is_some(tmp_path):

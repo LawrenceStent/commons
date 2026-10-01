@@ -163,7 +163,7 @@ def test_a_false_rejection_is_overturned_and_costs_the_prime():
     out = act(w, "beta").dispute(c.id, "it meets the rubric")
     assert out and "filed" in out.message
     assert c.status == "rejected"  # decided after the turns, outside the lock
-    w.settle_grading()
+    w.grading.settle()
     assert c.status == "accepted" and job.parts["write"].artifact
     owed = c.price - c.advance
     assert w.ledger.balance(purse("alpha")) == prime_before - owed - w.params.audit_cost
@@ -178,7 +178,7 @@ def test_a_fair_rejection_is_upheld_and_the_disputer_pays():
     _, c = rejected_contract(w, 0.2)
     before = w.ledger.balance(purse("beta"))
     assert act(w, "beta").dispute(c.id, "it's fine really")
-    w.settle_grading()
+    w.grading.settle()
     assert c.status == "rejected" and w.ledger.balance(purse("beta")) == before - w.params.audit_cost
     assert any(e.kind == "audit" and "upheld" in e.text for e in w.inbox["beta"])
 

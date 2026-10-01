@@ -29,13 +29,11 @@ from __future__ import annotations
 import random
 import threading
 from collections import Counter, defaultdict, deque
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 from commons.application.actions import Actions
 from commons.application.cycle import run_cycle
 from commons.application.gate import Gate
-from commons.application.graders import GradingError
 from commons.application.observation import (
     BidView,
     ContractView,
@@ -52,18 +50,21 @@ from commons.application.observation import (
     VentureView,
 )
 from commons.application.operator import Operator
+from commons.application.params import Params
 from commons.application.population import Proposal
 from commons.application.ports import WebError, WebPort, host_of
 from commons.application.ratings import Ratings
+from commons.application.services.board import JobBoard
+from commons.application.services.contract_net import ContractNet
+from commons.application.services.grading import Grading
 from commons.domain.archive import ArchiveIndex
-from commons.domain.archive import citations as archive_citations
 from commons.domain.community import Community
 from commons.domain.contract import Contract
 from commons.domain.economy import PaymentPolicy, policy_for
 from commons.domain.gate import Request as GateRequest
 from commons.domain.goals import Plans
-from commons.domain.grading import Grade, Grader, StubGrader
-from commons.domain.ids import ContractId, JobId
+from commons.domain.grading import Grader, StubGrader
+from commons.domain.knowledge import Playbook
 from commons.domain.market import MarketJob, Part
 from commons.domain.money import Micros
 from commons.domain.pack import Pack
@@ -80,7 +81,7 @@ from commons.domain.status import (
     RequestStatus,
     VentureStatus,
 )
-from commons.domain.treasury import bond_for, floor_top_up, members_to_wake
+from commons.domain.treasury import floor_top_up, members_to_wake
 from commons.domain.ventures import AppraisalError, Appraiser, StubAppraiser, Venture
 from commons.domain.ventures import value as venture_value
 from commons.protocol import Envelope, Message
@@ -94,108 +95,9 @@ from commons.substrate.reputation import Reputation
 from commons.substrate.telemetry import Hub
 
 
-@dataclass
-class Params:
-    seed: int = 0
-    reputation: bool = True  # False = the control run: primes can't tell bidders apart
-    treasury_seed: Micros = 2_000_000
-    treasury_reserve: Micros = 2_000_000  # the treasury stops taking its 20% at this balance
-    purse_seed: Micros = 150_000
-    basic_budget: Micros = 3_000  # per cycle, to communities whose purse is below floor_cap
-    floor_cap: Micros = 8_000  # two cycles of one member's upkeep
-    upkeep: Micros = 4_000  # per member, per cycle
-    actions_per_member: int = 2
-    jobs_per_cycle: int = 2
-    job_reward: Micros = 80_000
-    parts_per_job: int = 2
-    work_cost: Micros = 10_000  # what a scripted community spends producing one part
-    grade_cost: Micros = 2_000  # notional treasury cost per graded part (StubGrader)
-    # Reviews (your decision, 26 Sep, option B): the grader judges every delivery against the part's rubric.
-    # Pass = the prime pays the rest; fail = rejected. The grade is reused when the job is graded. The prime
-    # had a conflict of interest (rejecting saves money) and LLM primes rejected good work. False restores
-    # prime reviews and disputes.
-    grader_reviews: bool = True
-    # K2, tempo and efficiency: no rule may reward being first.
-    # Claims are registered during a cycle and allocated at its end: most trusted, then best fit, then least
-    # loaded; ties by a draw seeded from the job. The winner posts a bond (a share of the reward), returned when
-    # the job is paid and forfeited to the treasury if it fails, so claiming what you can't finish costs money.
-    claim_allocation: bool = True
-    claim_bond: float = 0.1
-    # Pay scales with quality: this share of the reward depends on the mean part score (1.0 pays in full, 0.5
-    # pays 1 - share/2). Every part must still pass. 0 = the old flat reward.
-    quality_pay: float = 0.5
-    venture_fee: Micros = 5_000  # paid to the treasury when proposing a venture (deters spam)
-    venture_budget: int = 2  # ventures the market will take on per cycle, best-scored first
-    venture_min_score: int = 5  # appraisals below this are worth nothing
-    grade_retries: int = 3  # cycles a complete job waits for an unavailable grader before it fails
-    # K4: the economy. "market" pays each passing job its reward; "grant" shares a fixed budget per cycle among
-    # passing work by value (see the module docstring). A pack sets these.
-    economy: str = "market"
-    grant_budget: Micros = 0
-    grant_cap_cycles: int = 3  # budgets the pool may bank when too little work passes
-    outputs_keep: int = 200  # paid work kept in memory for the scorecard (the full record is in the activity log)
-    # The world refuses bids (and awards) from anyone below this line, in the commons' pooled standing or in
-    # the prime's own record of them for that capability. A rule, not a judgement: in the 1.5 runs LLM primes
-    # kept hiring a known defector whose standing had fallen to 0.17.
-    bid_floor: float = 0.35
-    pass_score: float = 0.5  # every part must grade at least this for the market to pay
-    sub_share: float = 0.4  # of job reward a scripted prime offers for each part it lacks
-    advance_frac: float = 0.5
-    board_ttl: int = 3  # cycles a job stays on the board
-    job_ttl: int = 8  # cycles from claim to submission
-    bid_window: int = 3  # cycles an announcement stays open
-    deliver_ttl: int = 3
-    review_ttl: int = 2
-    publish_cost: Micros = 15_000
-    gossip_every: int = 5
-    gossip_fanout: int = 3
-    base_allowance: int = 12
-    decay: float = 0.995
-    daily_ceiling: Micros = 10**12
-    verify: bool = True
-    ledger_path: str = ":memory:"  # a file under runs/ keeps long runs out of RAM
-    journal_keep: int = 20
-    events_keep: int = 50
-    # Let communities think at the same time: model calls run in parallel, but every action takes the
-    # world's lock, so state changes one action at a time. Off by default: scripted runs stay
-    # deterministic. The catch until K2: when two communities want the same job, whoever's model
-    # answers first gets it, which is a small reward for speed.
-    parallel_turns: bool = False
-    parallel_workers: int = 4
-    # model calls for grading and appraisal at once (outside the lock). Verdicts are applied in a fixed order,
-    # so results don't depend on which call finishes first. 1 for scripted runs; `commons run` uses 4.
-    grading_workers: int = 1
-    activity_keep: int = 2000  # entries of the activity log kept in memory
-    activity_path: str | None = None  # also append every entry to this JSONL file
-    retain: int = 20  # cycles a closed job or contract stays visible before it's dropped
-    # population and capabilities (commons/application/population.py)
-    max_members: int = 7
-    max_communities: int = 12
-    spawn_fee: Micros = 300_000
-    spawn_window: int = 3
-    merge_window: int = 3
-    fork_good_keep: float = 0.5  # share of a parent's good record a fork inherits (bad is kept in full)
-    learn_cost: Micros = 500_000
-    learn_playbook_discount: float = 0.4
-    learn_royalty: float = 0.1  # of learn_cost, to the author of the playbook learned from
-    # disputes
-    audit_cost: Micros = 6_000  # paid by the disputing contractor; refunded by the prime if the audit finds for them
-    dispute_window: int = 3
-
-
 def default_population() -> list[Community]:
     """The default pack's scripted co-ops (kept for callers that predate packs)."""
     return load_pack().population()
-
-
-@dataclass
-class Playbook:
-    id: str
-    author: str
-    capability: str
-    title: str = ""
-    text: str = ""
-    uses: int = 0
 
 
 @dataclass
@@ -247,8 +149,6 @@ class World:
             self.web.set_hosts(self.gate.policy.allow_hosts)
         self.web_pages: dict[str, list[str]] = {}  # url -> archive passage ids, for pages read this run
         self.outputs: deque[dict] = deque(maxlen=p.outputs_keep)  # paid work, newest last: who did what, how it scored
-        self.citations: Counter[str] = Counter()  # archive citations checked: valid / invalid
-        self._cite_lock = threading.Lock()  # grading runs in threads
         # how passing work is paid: given, or chosen once from the settings
         self.payment = payment or policy_for(p.economy, p.grant_budget, p.grant_cap_cycles)
         self.payment_queue: list[str] = []  # passing jobs waiting to be paid at the end of the cycle
@@ -265,19 +165,17 @@ class World:
         self.royalties_paid: dict[str, int] = {}
         self.proposals: dict[str, Proposal] = {}
         # grading happens after the turns, outside the lock (see settle_grading)
-        self.awaiting_grade: dict[str, int] = {}  # submitted job id -> failed grading attempts so far
-        self.pending_audits: dict[str, dict] = {}  # contract id -> {reason, attempts}
-        self.pending_reviews: dict[str, int] = {}  # delivered contract id -> failed grading attempts
-        self.claims: dict[str, dict[str, int]] = {}  # job id -> {claimant: cycle claimed}, allocated at cycle end
         self.thinking_spend: Counter[str] = Counter()  # µcr of model calls, per co-op
-        self.deferred: set[str] = set()  # graded jobs waiting for their outcome (see Grade.settle_after)
         self.transcripts: defaultdict[str, deque] = defaultdict(lambda: deque(maxlen=2))  # LLM turns, newest last
         self.plans: defaultdict[str, Plans] = defaultdict(Plans)  # ideas and goals per community
         self._plan_seq = 0
         self.activity = activity or _default_activity(p)
         self.activity.watch(self.hub)
+        self.board = JobBoard(self)
+        self.contract_net = ContractNet(self)
+        self.grading = Grading(self)
         self.known_capabilities = set(self.pack.capabilities).union(*(c.capabilities for c in self.communities.values()))
-        self._job_seq = self._proposal_seq = 0
+        self._proposal_seq = 0
         self._stats: dict[str, Counter] = {n: Counter() for n in self.communities}
         self.turn_order: list[Community] = []  # this cycle's, shuffled (see cycle.py)
 
@@ -321,10 +219,6 @@ class World:
 
     def _stat(self, name: str, key: str, n: int = 1) -> None:
         self._stats[name][key] += n
-
-    def _stage(self, c: Contract, stage: str, **kw) -> None:
-        self.hub.emit("contract.stage", self.cycle, id=c.id, capability=c.capability, prime=c.prime,
-                      winner=c.winner, stage=stage, price=c.price, max_price=c.max_price, bids=dict(c.bids), **kw)
 
     def _send(self, c: Community, msg: Message) -> bool:
         try:
@@ -381,15 +275,6 @@ class World:
             c.active = c.thinking > 0
             c.capacity = c.thinking * p.actions_per_member
 
-    def _post_jobs(self) -> None:
-        p = self.params
-        for _ in range(p.jobs_per_cycle):
-            self._job_seq += 1
-            job = self.pack.work_source.new_job(self.rng, f"J{self._job_seq}", self.cycle, p.job_reward, p.board_ttl,
-                                                p.parts_per_job)
-            self.jobs[job.id] = job
-            self.hub.emit("market.job", self.cycle, id=job.id, stage="posted", caps=sorted(job.parts), reward=job.reward)
-
     def _turn(self, c: Community) -> None:
         with self.lock:
             obs = self.observe(c)
@@ -397,322 +282,8 @@ class World:
         c.strategy.turn(obs, Actions(self, c))
 
     # ── deadlines ──────────────────────────────────────────────
-    def _deadlines(self) -> None:
-        now = self.cycle
-        for job in self.jobs.values():
-            if job.status == JobStatus.OPEN and now > job.deadline:
-                job.expire()
-                self.jobs_expired += 1
-                self.hub.emit("market.job", now, id=job.id, stage="expired", caps=sorted(job.parts), reward=job.reward)
-            elif job.status == JobStatus.CLAIMED and now > job.deadline and job.id not in self.awaiting_grade:
-                self._fail_job(job, "missed its deadline")
-        for c in list(self.contracts.values()):
-            if c.deadline >= now:
-                continue
-            if c.status == ContractStatus.OPEN:
-                c.expire(at=now)
-                self._stage(c, c.status)
-                self._tell(c.prime, "expired", f"{c.id} closed with no award", c.id)
-            elif c.status == ContractStatus.AWARDED:
-                # non-delivery is objective: the substrate files the prime's complaint for it
-                c.fail(at=now)
-                self._stage(c, c.status)
-                self.rep.attest(c.prime, c.winner, c.capability, 0.0)
-                self._tell(c.prime, "failed", f"{c.winner} never delivered {c.id}", c.id)
-                self._tell(c.winner, "failed", f"you missed the delivery deadline on {c.id}", c.id)
-            elif c.status == ContractStatus.DELIVERED and c.id not in self.pending_reviews:
-                if self.pay_remainder(c):
-                    self.close_review(c, True, "accepted by default: the prime didn't review in time")
-                else:
-                    self._default(c)
-
-    def _prune(self) -> None:
-        """Drop closed jobs and contracts after a while, so memory stays flat on long runs."""
-        cutoff = self.cycle - self.params.retain
-        for k in [k for k, j in self.jobs.items() if j.status not in (JobStatus.OPEN, JobStatus.CLAIMED, JobStatus.GRADED) and j.deadline < cutoff]:
-            del self.jobs[k]
-        for k in [k for k, c in self.contracts.items() if c.closed is not None and c.closed < cutoff]:
-            del self.contracts[k]
 
     # ── called by the actions executor ────────────────────────
-    def contracts_for(self, job_id: JobId, capability: str, statuses: tuple[str, ...]) -> list[Contract]:
-        return [c for c in self.contracts.values()
-                if c.job_id == job_id and c.capability == capability and c.status in statuses]
-
-    def open_contract(self, cid: ContractId, job: MarketJob, capability: str, prime: str, max_price: Micros, advance_frac: float) -> None:
-        part = job.parts[capability]
-        c = Contract(cid, job.id, capability, prime, part.spec, part.rubric, max_price, advance_frac,
-                     announced=self.cycle, deadline=self.cycle + self.params.bid_window)
-        self.contracts[cid] = c
-        self._stage(c, ContractStatus.OPEN)
-
-    def award_contract(self, c: Contract, bidder: str, price: Micros, advance: Micros) -> None:
-        c.award(bidder, price, advance, deliver_by=self.cycle + self.params.deliver_ttl)
-        self._stat(bidder, "won")
-        self._stat(bidder, "earned", advance)
-        self._tell(bidder, "awarded", f"you won {c.id} at {price}; advance {advance} paid; deliver by cycle {c.deadline}", c.id)
-        for loser in c.bids:
-            if loser != bidder:
-                self._tell(loser, "bid_lost", f"{c.id} went to another bidder", c.id)
-        self._stage(c, ContractStatus.AWARDED)
-
-    def deliver_contract(self, c: Contract, artifact: str, cites: tuple[str, ...]) -> None:
-        c.deliver(artifact, cites, review_by=self.cycle + self.params.review_ttl)
-        if self.params.grader_reviews:
-            self.pending_reviews[c.id] = 0
-            self._tell(c.prime, "delivered", f"{c.winner} delivered {c.id}; the grader judges it at the end of this cycle", c.id)
-        else:
-            self._tell(c.prime, "delivered", f"{c.winner} delivered {c.id}; review by cycle {c.deadline}", c.id)
-        self._stage(c, ContractStatus.DELIVERED)
-
-    def pay_remainder(self, c: Contract) -> bool:
-        owed = c.owed
-        try:
-            self.ledger.transfer(purse(c.prime), purse(c.winner), owed, cycle=self.cycle, kind="contract", memo=f"settle {c.id}")
-        except InsufficientFunds:
-            return False
-        self._stat(c.winner, "earned", owed)
-        return True
-
-    def close_review(self, c: Contract, accept: bool, reason: str) -> None:
-        (c.accept if accept else c.reject)(reason, at=self.cycle)
-        self._stage(c, c.status)
-        self.rep.attest(c.prime, c.winner, c.capability, 1.0 if accept else 0.0)
-        if accept:
-            self._stat(c.winner, "ok")
-            track = self.communities[c.winner].deliveries
-            track[c.capability] = track.get(c.capability, 0) + 1
-            self._tell(c.winner, "accepted", f"{c.prime} accepted {c.id} and paid {c.owed}", c.id)
-            job = self.jobs.get(c.job_id)
-            if job and job.status == JobStatus.CLAIMED and job.parts[c.capability].artifact is None:
-                job.fill(c.capability, c.artifact, source=c.id, cites=c.cites)
-                self.maybe_submit(job)
-        else:
-            self._tell(c.winner, "rejected", f"{c.prime} rejected {c.id}: {reason or 'no reason given'}", c.id)
-
-    def audit(self, c: Contract, reason: str) -> Outcome:
-        """File a dispute. The grader decides at the end of this cycle, outside the world's lock, so an
-        audit never holds up other communities (in the third Qwen run one stalled a cycle for 9 minutes)."""
-        c.file_dispute()
-        self.pending_audits[c.id] = {"reason": reason, "attempts": 0}
-        self._stage(c, "audit_filed")
-        self._tell(c.prime, "audit_filed", f"{c.winner} disputed your rejection of {c.id}; the grader decides this cycle", c.id)
-        return Outcome(True, f"audit of {c.id} filed; the grader decides at the end of this cycle")
-
-    def _apply_audit(self, c: Contract, g, reason: str) -> None:
-        """The verdict, under the lock. The commons ("audit") files its own first-hand evidence, so the
-        verdict moves standing, not any one community's private view."""
-        p = self.params
-        if g.score < p.pass_score:
-            self.rep.attest("audit", c.winner, c.capability, 0.0)
-            self._stage(c, "audit_upheld", score=g.score)
-            self._tell(c.prime, "audit", f"the audit upheld your rejection of {c.id} ({g.score:.2f})", c.id)
-            self._tell(c.winner, "audit", f"the audit upheld the rejection of {c.id}: your delivery scored {g.score:.2f}; the fee is gone", c.id)
-            return
-        owed = c.owed
-        try:
-            # the treasury keeps the fee (it paid for the audit); the prime reimburses the contractor
-            self.ledger.transfer(purse(c.prime), purse(c.winner), owed + p.audit_cost,
-                                 cycle=self.cycle, kind="audit", memo=f"overturned {c.id}")
-            paid = True
-        except InsufficientFunds:
-            paid = False
-        self.rep.attest("audit", c.prime, c.capability, 0.0)
-        self.rep.attest("audit", c.winner, c.capability, 1.0)
-        if not paid:
-            c.default(at=self.cycle)
-            self._stage(c, c.status)
-            self._tell(c.winner, "audit", f"the audit found for you on {c.id}, but {c.prime} can't pay", c.id)
-            return
-        self._stat(c.winner, "earned", owed + p.audit_cost)
-        self._stat(c.winner, "ok")
-        c.overturn(f"overturned on audit ({g.score:.2f}): {reason}", at=self.cycle)
-        self._stage(c, c.status)
-        self._stage(c, "audit_overturned", score=g.score)
-        self._tell(c.prime, "audit", f"the audit overturned your rejection of {c.id}; you paid {owed} plus the {p.audit_cost} fee", c.id)
-        job = self.jobs.get(c.job_id)
-        if job and job.status == JobStatus.CLAIMED and job.parts[c.capability].artifact is None:
-            job.fill(c.capability, c.artifact, source=c.id, cites=c.cites)
-            self.maybe_submit(job)
-        self._tell(c.winner, "audit", f"the audit found for you on {c.id} ({g.score:.2f}): {c.prime} paid {owed} plus your {p.audit_cost} fee", c.id)
-
-    def maybe_submit(self, job: MarketJob) -> None:
-        """A complete job is submitted for grading at the end of this cycle. Every part must pass for the
-        market to pay."""
-        if not job.complete or job.status != JobStatus.CLAIMED or job.id in self.awaiting_grade:
-            return
-        self.awaiting_grade[job.id] = 0
-        self._tell(job.prime, "submitted", f"{job.id} is complete and goes to the grader at the end of this cycle", job.id)
-
-    def settle_grading(self) -> None:
-        """Grade every submitted job and every filed audit. Model calls run outside the world's lock;
-        verdicts and money are applied under it. An unavailable grader is retried next cycle, up to
-        `grade_retries` times."""
-        with self.lock:
-            jobs = []
-            for jid in list(self.awaiting_grade):
-                job = self.jobs.get(jid)
-                if job is None or job.status != JobStatus.CLAIMED:
-                    self.awaiting_grade.pop(jid, None)
-                    continue
-                jobs.append((jid, [(cap, p.spec, p.rubric, p.artifact) for cap, p in sorted(job.parts.items())
-                                   if cap not in job.scores]))
-            audits = [(cid, c.spec, c.rubric, c.artifact or "") for cid in list(self.pending_audits)
-                      if (c := self.contracts.get(cid)) is not None]
-            reviews = [(cid, c.spec, c.rubric, c.artifact or "") for cid in list(self.pending_reviews)
-                       if (c := self.contracts.get(cid)) is not None and c.status == ContractStatus.DELIVERED]
-        tasks = [((jid, cap), spec, rubric, artifact) for jid, parts in jobs for cap, spec, rubric, artifact in parts]
-        tasks += [(("audit", cid), spec, rubric, artifact) for cid, spec, rubric, artifact in audits]
-        tasks += [(("review", cid), spec, rubric, artifact) for cid, spec, rubric, artifact in reviews]
-        verdicts = dict(self._map_calls(lambda t: (t[0], self._try_grade(*t[1:])), tasks))
-        with self.lock:
-            for jid, parts in jobs:
-                self._apply_job_grades(jid, [(cap, verdicts[(jid, cap)]) for cap, *_ in parts])
-            for cid, *_ in audits:
-                self._settle_audit(cid, verdicts[("audit", cid)])
-            for cid, *_ in reviews:
-                self._settle_review(cid, verdicts[("review", cid)])
-            self._settle_deferred()
-
-    def _map_calls(self, fn, items: list) -> list:
-        """Run model calls (outside the lock) up to `grading_workers` at a time; results in input order."""
-        workers = self.params.grading_workers
-        if workers <= 1 or len(items) <= 1:
-            return [fn(i) for i in items]
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            return list(pool.map(fn, items))
-
-    def _try_grade(self, spec: str, rubric: str, artifact: str):
-        # a rule before any judgement: work citing archive passages that don't exist made them up
-        cited = archive_citations(artifact or "")
-        missing = [c for c in cited if self.archive.get(c) is None]
-        with self._cite_lock:
-            self.citations["valid"] += len(cited) - len(missing)
-            self.citations["invalid"] += len(missing)
-        if missing:
-            return Grade(0.0, 0, f"cites archive passages that don't exist ({', '.join(missing[:3])}); a made-up "
-                                 f"citation fails the part")
-        try:
-            return self.grader.grade(spec, rubric, artifact)
-        except GradingError as e:
-            return e
-
-    def _apply_job_grades(self, jid: JobId, graded: list) -> None:
-        job = self.jobs.get(jid)
-        if job is None or job.status != JobStatus.CLAIMED:
-            self.awaiting_grade.pop(jid, None)
-            return
-        errors, defer = [], 0
-        for cap, g in graded:
-            if isinstance(g, GradingError):
-                errors.append(str(g))
-                continue
-            try:
-                # the commons pays for grading; when it can't, the prime whose job it is does
-                self._charge_grade(g, job=jid, part=cap, payers=("treasury", purse(job.prime)))
-            except InsufficientFunds:
-                self.awaiting_grade.pop(jid, None)
-                self._fail_job(job, "no one could pay for grading")
-                return
-            job.record_score(cap, g.score)
-            defer = max(defer, g.settle_after)
-        if errors:
-            self.awaiting_grade[jid] += 1
-            if self.awaiting_grade[jid] >= self.params.grade_retries:
-                self.awaiting_grade.pop(jid)
-                self._fail_job(job, "the grader was unavailable")
-            else:
-                self._tell(job.prime, "grading_delayed", f"{jid} is waiting for the grader: {errors[0]}", jid)
-            return
-        self.awaiting_grade.pop(jid, None)
-        if defer and job.passed(self.params.pass_score):
-            job.defer(until=self.cycle + defer)
-            self.deferred.add(jid)
-            self._tell(job.prime, "job_graded", f"{jid} passed for now; its outcome settles at cycle {job.settle_at}", jid)
-            return
-        self._finish_job(job)
-
-    def _finish_job(self, job: MarketJob) -> None:
-        if not job.passed(self.params.pass_score):
-            self._fail_job(job, f"a part failed grading ({', '.join(f'{k} {v:.2f}' for k, v in job.scores.items())})")
-            return
-        if not self.payment.pays_at_once:
-            job.await_grants()
-            self.payment_queue.append(job.id)
-            self._tell(job.prime, "job_graded", f"{job.id} passed grading; {self.payment.queued}", job.id)
-            return
-        self._pay_job(job)
-
-    def _settle_deferred(self) -> None:
-        """Outcomes whose time has come: ask the grader again (if it can), then pay or fail. Under the lock."""
-        for jid in sorted(self.deferred):
-            job = self.jobs.get(jid)
-            if job is None or job.status != JobStatus.GRADED:
-                self.deferred.discard(jid)
-                continue
-            if self.cycle < job.settle_at:
-                continue
-            self.deferred.discard(jid)
-            later = self.grader.settle(job) if hasattr(self.grader, "settle") else None
-            for cap, score in (later or {}).items():
-                job.record_score(cap, score)
-            self._finish_job(job)
-
-    def _settle_review(self, cid: ContractId, g) -> None:
-        """The grader's verdict on a delivery decides the contract (option B). Under the lock."""
-        c = self.contracts.get(cid)
-        if c is None or c.status != ContractStatus.DELIVERED:
-            self.pending_reviews.pop(cid, None)
-            return
-        if isinstance(g, GradingError):
-            self.pending_reviews[cid] += 1
-            if self.pending_reviews[cid] < self.params.grade_retries:
-                return
-            self.pending_reviews.pop(cid)
-            # the grader stayed down: accept by default, so contractors aren't punished for an outage
-            if self.pay_remainder(c):
-                self.close_review(c, True, "accepted by default: the grader was unavailable")
-            else:
-                self._default(c)
-            return
-        self.pending_reviews.pop(cid)
-        self._charge_grade(g, job=c.job_id, part=c.capability, payers=("treasury", purse(c.prime)))
-        if g.score < self.params.pass_score:
-            self.close_review(c, False, f"failed grading ({g.score:.2f}): {g.reason}"[:300])
-            return
-        if not self.pay_remainder(c):
-            self._default(c)
-            return
-        job = self.jobs.get(c.job_id)
-        if job is not None:
-            job.record_score(c.capability, g.score)  # reused when the job is graded: no part is graded twice
-        self.close_review(c, True, f"passed grading ({g.score:.2f}): {g.reason}"[:300])
-
-    def _default(self, c: Contract) -> None:
-        c.default(at=self.cycle)
-        self._stage(c, c.status)
-        self.rep.attest(c.winner, c.prime, c.capability, 0.0)
-        c.rated_by_winner()
-        self._tell(c.winner, "defaulted", f"{c.prime} never paid for {c.id}", c.id)
-
-    def _settle_audit(self, cid: ContractId, g) -> None:
-        entry = self.pending_audits[cid]
-        c = self.contracts.get(cid)
-        if c is None:
-            self.pending_audits.pop(cid)
-            return
-        if isinstance(g, GradingError):
-            entry["attempts"] += 1
-            if entry["attempts"] >= self.params.grade_retries:
-                self.pending_audits.pop(cid)
-                c.drop_dispute()  # it may be filed again
-                self.ledger.transfer("treasury", purse(c.winner), self.params.audit_cost, cycle=self.cycle, kind="audit",
-                                     memo=f"refund {cid}")
-                self._tell(c.winner, "audit", f"the grader was unavailable for the audit of {cid}; your fee was refunded", cid)
-            return
-        self.pending_audits.pop(cid)
-        self._charge_grade(g, job=c.job_id, part=c.capability, payers=("treasury", purse(c.winner)), audit=cid)
-        self._apply_audit(c, g, entry["reason"])
 
     # ── the web, behind the gate ───────────────────────────────
     def _gate_cycle(self) -> None:
@@ -816,7 +387,7 @@ class World:
                 return v, e
 
         results = {}
-        for v, a in self._map_calls(appraise, todo):
+        for v, a in self.grading.map_calls(appraise, todo):
             if isinstance(a, AppraisalError):
                 with self.lock:
                     self._tell(v.proposer, "venture_delayed", f"{v.id} couldn't be appraised yet: {a}", v.id)
@@ -866,22 +437,6 @@ class World:
         self.hub.emit("venture.decided", self.cycle, id=v.id, proposer=v.proposer, title=v.title, status=VentureStatus.APPROVED,
                       score=v.score, reward=v.reward, reason=v.reason, job=job.id)
         self.hub.emit("market.job", self.cycle, id=job.id, stage="venture", prime=v.proposer, caps=sorted(job.parts), reward=v.reward)
-
-    def _charge_grade(self, g: Grade, *, job: str, part: str, payers: tuple[str, ...], audit: str | None = None) -> Grade:
-        """Pay for one grade: the notional cost from the first payer that can afford it, and, if a billed
-        model did the work, the real bill in USD as well. Under the lock."""
-        if g.cost:
-            payer = next((a for a in payers if self.ledger.balance(a) >= g.cost), payers[-1])
-            self.ledger.transfer(payer, "compute", g.cost, cycle=self.cycle, kind="grading", memo=audit or job)
-        if g.model and g.usage:
-            self.hub.emit("llm.call", self.cycle, community="grader", role="grader", model=g.model,
-                          input_tokens=g.usage.input_tokens, output_tokens=g.usage.output_tokens,
-                          cache_hit=g.cache_hit, cost=g.cost, ms=g.ms, real=g.real)
-            if g.real:
-                self.meter.record_real("grader", g.price_as or g.model, g.usage, cycle=self.cycle)
-        self.hub.emit("grader.grade", self.cycle, job=job, part=part, score=g.score, cost=g.cost, reason=g.reason,
-                      model=g.model, real=g.real, **({"audit": audit} if audit else {}))
-        return g
 
     def _pool_balance(self) -> int:
         return self.ledger.balance(self.payment.pool) if self.payment.pool else 0
@@ -935,7 +490,7 @@ class World:
         split = self.ledger.settle_revenue(prime, payout, cycle=self.cycle, royalties=dict(weights), memo=job.id, tax=tax,
                                            source=self.payment.source)
         share = split.earner
-        self._settle_bond(job, returned=True)
+        self.board.settle_bond(job, returned=True)
         job.pay()
         self.jobs_done += 1
         self._stat(prime, "earned", share)
@@ -972,69 +527,6 @@ class World:
         spent = self.meter.by_community.get(name, 0)
         return {"earned": earned, "spent": spent, "thinking": self.thinking_spend[name],
                 "ratio": round(earned / spent, 3) if spent else 0.0}
-
-    def held_jobs(self, name: str) -> int:
-        return sum(j.prime == name and j.status == JobStatus.CLAIMED for j in self.jobs.values())
-
-    def claim_limit(self, c: Community) -> int:
-        return max(2, c.thinking)
-
-    def pending_claims(self, name: str) -> list[str]:
-        return [jid for jid, who in self.claims.items() if name in who]
-
-    def _allocate_claims(self) -> None:
-        """Give each claimed job to one claimant, by rule rather than by who answered first."""
-        p = self.params
-        for jid in sorted(self.claims):
-            job, claimants = self.jobs.get(jid), self.claims.pop(jid)
-            if job is None or job.status != JobStatus.OPEN:
-                continue
-            draw = random.Random(f"{p.seed}:{self.cycle}:{jid}")  # its own seed: the world's dice stay untouched
-
-            def key(name: str) -> tuple:
-                c = self.communities[name]
-                fit = sum(cap in c.capabilities for cap in job.parts) / len(job.parts)
-                return (-round(self._standing(name), 3), -fit, self.held_jobs(name), draw.random())
-
-            bond = bond_for(job.reward, p.claim_bond)
-            for name in sorted(sorted(claimants), key=key):
-                c = self.communities[name]
-                if self.held_jobs(name) >= self.claim_limit(c):
-                    continue
-                if bond:
-                    try:
-                        self.ledger.transfer(purse(name), "escrow", bond, cycle=self.cycle, kind="bond", memo=jid)
-                    except InsufficientFunds:
-                        self._tell(name, "claim_lost", f"you couldn't post the {bond} bond for {jid}", jid)
-                        continue
-                job.claim(name, deadline=self.cycle + p.job_ttl, bond=bond)
-                self._tell(name, "claim_won", f"{jid} is yours (bond {bond}, returned when it's paid); "
-                           f"submit every part by cycle {job.deadline}", jid)
-                for other in claimants:
-                    if other != name:
-                        self._tell(other, "claim_lost", f"{jid} went to {name} (more trusted, a better fit, or less loaded)", jid)
-                self.hub.emit("market.job", self.cycle, id=jid, stage="claimed", prime=name, caps=sorted(job.parts),
-                              reward=job.reward, claimants=sorted(claimants), bond=bond)
-                break
-
-    def _settle_bond(self, job: MarketJob, returned: bool) -> None:
-        if not (bond := job.release_bond()):
-            return
-        dest = purse(job.prime) if returned else "treasury"
-        self.ledger.transfer("escrow", dest, bond, cycle=self.cycle, kind="bond",
-                             memo=f"{'return' if returned else 'forfeit'} {job.id}")
-
-    def _fail_job(self, job: MarketJob, why: str) -> None:
-        self._settle_bond(job, returned=False)
-        job.fail()
-        self.jobs_failed += 1
-        for c in self.contracts.values():
-            if c.job_id == job.id and c.status == ContractStatus.OPEN:
-                c.withdraw(at=self.cycle)
-                self._stage(c, c.status)
-        self._tell(job.prime, "job_failed", f"{job.id} failed: {why}", job.id)
-        self.hub.emit("market.job", self.cycle, id=job.id, stage="failed", prime=job.prime, caps=sorted(job.parts),
-                      reward=job.reward, why=why)
 
     def add_playbook(self, pid: str, author: str, capability: str, title: str, text: str) -> None:
         self.library[pid] = Playbook(pid, author, capability, title, text)
@@ -1110,7 +602,7 @@ class World:
             archive=(len(self.archive), tuple(sorted({p.source for p in self.archive.passages.values()}))),
             grants=self.payment.view(self._pool_balance()),
             web=self.gate.policy.describe() if self.web else "",
-            pending_claims=tuple(self.pending_claims(name)),
+            pending_claims=tuple(self.board.pending_claims(name)),
             goals=tuple(GoalView(g.id, g.title, g.status, tuple((s.text, s.done, s.note) for s in g.steps), round(g.progress, 2))
                         for g in self.plans[name].active()),
             ideas=tuple(IdeaView(i.id, i.title, i.detail, i.cycle, i.status) for i in self.plans[name].ideas[-5:]),

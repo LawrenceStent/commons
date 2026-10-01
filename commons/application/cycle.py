@@ -57,6 +57,11 @@ def _start(w: World) -> None:
     w._stats = {n: Counter() for n in w.communities}
 
 
+def _deadlines(w: World) -> None:
+    w.board.expire_overdue()
+    w.contract_net.expire_overdue()
+
+
 def _order(w: World) -> None:
     w.turn_order = w._active()
     w.rng.shuffle(w.turn_order)  # turn order must not decide who wins
@@ -83,7 +88,8 @@ def _gossip(w: World) -> None:
 def _close(w: World) -> None:
     w.rep.tick()
     w.bus.compact()
-    w._prune()
+    w.board.prune()
+    w.contract_net.prune()
     w._record()
 
 
@@ -93,15 +99,15 @@ PHASES: tuple[Phase, ...] = (
     Phase("ratings", lambda w: w._apply_ratings()),
     Phase("floor", lambda w: w._floor()),
     Phase("wake", lambda w: w._upkeep()),
-    Phase("deadlines", lambda w: w._deadlines()),
+    Phase("deadlines", _deadlines),
     Phase("proposals", expire_proposals),
-    Phase("post", lambda w: w._post_jobs()),
+    Phase("post", lambda w: w.board.post()),
     Phase("order", _order),
     Phase("appraise", lambda w: w._appraise_ventures(), locked=False),
     Phase("web", lambda w: w._run_approved_web(), locked=False),
     Phase("turns", _turns, locked=False),
-    Phase("allocate", lambda w: w._allocate_claims()),
-    Phase("grade", lambda w: w.settle_grading(), locked=False),
+    Phase("allocate", lambda w: w.board.allocate()),
+    Phase("grade", lambda w: w.grading.settle(), locked=False),
     Phase("pay", lambda w: w._settle_payment_queue()),
     Phase("gossip", _gossip),
     Phase("close", _close),

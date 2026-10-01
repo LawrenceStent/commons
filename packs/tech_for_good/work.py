@@ -6,7 +6,7 @@ write (a brief a funder or council officer could act on).
 
 Until members can search the web (K5), evidence comes from the society's archive or from the model's general
 knowledge, so every rubric asks the same thing: cite an archive passage as [archive: <id>] or mark the claim
-(unverified). A made-up citation fails the part by rule, before any grading (see World._try_grade).
+(unverified). A made-up citation fails the part by rule, before any grading (see the grading service, commons/application/services/grading.py).
 """
 
 from commons.domain.pack import TemplateWorkSource

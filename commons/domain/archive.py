@@ -2,7 +2,7 @@
 Pure: no files. The folder that feeds it is application/archive.py.
 
 Work cites a passage as `[archive: <id>]`. Citations are checked by rule before any grading: work that cites a
-passage that doesn't exist fails that part (see World._try_grade).
+passage that doesn't exist fails that part (see the grading service, commons/application/services/grading.py).
 """
 
 

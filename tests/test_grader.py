@@ -131,8 +131,8 @@ def finish_a_job(w: World):
     job.prime, job.status, job.deadline = "solo", "claimed", w.cycle + 5
     for cap in job.parts:
         job.parts[cap].artifact, job.parts[cap].source = f"real {cap} work", "self"
-    w.maybe_submit(job)
-    w.settle_grading()
+    w.grading.maybe_submit(job)
+    w.grading.settle()
     return job
 
 
@@ -165,10 +165,10 @@ def test_an_unavailable_grader_delays_the_job_instead_of_failing_it():
 
     w = world(LLMGrader(FakeBackend(flaky)))
     job = finish_a_job(w)
-    assert job.status == "claimed" and job.id in w.awaiting_grade
+    assert job.status == "claimed" and job.id in w.grading.awaiting_grade
     state["down"] = False
     w.step()
-    assert job.status == "paid" and job.id not in w.awaiting_grade
+    assert job.status == "paid" and job.id not in w.grading.awaiting_grade
 
 
 def test_a_grader_that_stays_down_fails_the_job_after_retries():
@@ -227,8 +227,8 @@ def test_grading_runs_outside_the_worlds_lock():
     w.jobs[job.id] = job
     job.prime, job.status = "solo", "claimed"
     job.parts["research"].artifact, job.parts["research"].source = "work", "self"
-    w.maybe_submit(job)
-    t = threading.Thread(target=w.settle_grading)
+    w.grading.maybe_submit(job)
+    t = threading.Thread(target=w.grading.settle)
     t.start()
     assert started.wait(5)
     assert w.lock.acquire(timeout=1), "another community must be able to act while the grader thinks"
@@ -262,10 +262,10 @@ def test_grading_runs_in_parallel_and_applies_in_a_fixed_order():
         job.prime, job.status = "solo", "claimed"
         for cap in job.parts:
             job.parts[cap].artifact, job.parts[cap].source = "work", "self"
-        w.maybe_submit(job)
+        w.grading.maybe_submit(job)
         jobs.append(job)
     t0 = time.time()
-    w.settle_grading()
+    w.grading.settle()
     assert peak[0] > 1 and time.time() - t0 < 1.0  # 6 parts × 0.2 s, four at a time
     assert all(j.status == "paid" for j in jobs)
     paid = [e.fields["id"] for e in w.hub.recent("market.job", n=50) if e.fields["stage"] == "paid"]
