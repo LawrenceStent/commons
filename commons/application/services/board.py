@@ -58,10 +58,10 @@ class JobBoard:
             return
         if not self.w.payment.pays_at_once:
             job.await_grants()
-            self.w.payment_queue.append(job.id)
+            self.w.payments.payment_queue.append(job.id)
             self.w._tell(job.prime, "job_graded", f"{job.id} passed grading; {self.w.payment.queued}", job.id)
             return
-        self.w._pay_job(job)
+        self.w.payments.pay(job)
 
     def held_jobs(self, name: str) -> int:
         return sum(j.prime == name and j.status == JobStatus.CLAIMED for j in self.w.jobs.values())

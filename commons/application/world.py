@@ -57,6 +57,9 @@ from commons.application.ratings import Ratings
 from commons.application.services.board import JobBoard
 from commons.application.services.contract_net import ContractNet
 from commons.application.services.grading import Grading
+from commons.application.services.payments import Payments
+from commons.application.services.ratings import RatingDesk
+from commons.application.services.ventures import VentureDesk
 from commons.domain.archive import ArchiveIndex
 from commons.domain.community import Community
 from commons.domain.contract import Contract
@@ -66,11 +69,9 @@ from commons.domain.goals import Plans
 from commons.domain.grading import Grader, StubGrader
 from commons.domain.ids import Sequences
 from commons.domain.knowledge import Playbook
-from commons.domain.market import MarketJob, Part
-from commons.domain.money import Micros
+from commons.domain.market import MarketJob
 from commons.domain.pack import Pack
 from commons.domain.pack import load as load_pack
-from commons.domain.ratings import EVIDENCE
 from commons.domain.scorecard import GENERAL
 from commons.domain.scorecard import evaluate as evaluate_scorecard
 from commons.domain.scorecard import report as scorecard_report
@@ -80,11 +81,9 @@ from commons.domain.status import (
     JobStatus,
     ProposalStatus,
     RequestStatus,
-    VentureStatus,
 )
 from commons.domain.treasury import floor_top_up, members_to_wake
-from commons.domain.ventures import AppraisalError, Appraiser, StubAppraiser, Venture
-from commons.domain.ventures import value as venture_value
+from commons.domain.ventures import Appraiser, StubAppraiser, Venture
 from commons.protocol import Envelope, Message
 from commons.protocol.reputation import Gossip
 from commons.substrate.activity import ActivityLog
@@ -152,7 +151,6 @@ class World:
         self.outputs: deque[dict] = deque(maxlen=p.outputs_keep)  # paid work, newest last: who did what, how it scored
         # how passing work is paid: given, or chosen once from the settings
         self.payment = payment or policy_for(p.economy, p.grant_budget, p.grant_cap_cycles)
-        self.payment_queue: list[str] = []  # passing jobs waiting to be paid at the end of the cycle
         self.scorecard: list[dict] = []  # the pack's mission metrics plus the general ones, as of the last cycle
         self.ventures: dict[str, Venture] = {}
         self.jobs: dict[str, MarketJob] = {}
@@ -170,6 +168,9 @@ class World:
         self.plans: defaultdict[str, Plans] = defaultdict(Plans)  # ideas and goals per community
         self.activity = activity or _default_activity(p)
         self.activity.watch(self.hub)
+        self.rating_desk = RatingDesk(self)
+        self.payments = Payments(self)
+        self.venture_desk = VentureDesk(self)
         self.ids = Sequences()  # numbered ids: jobs, ventures, ideas and goals, proposals
         self.board = JobBoard(self)
         self.contract_net = ContractNet(self)
@@ -374,150 +375,6 @@ class World:
             self.hub.emit("web.call", self.cycle, id=r.id, coop=r.coop, tool=r.tool, target=r.target, ok=ok)
         return Outcome(ok, msg, ref)
 
-    def _appraise_ventures(self) -> None:
-        """Appraise waiting ventures outside the lock (a model call must never stall other communities),
-        then decide under it: best score first, up to the market's budget for this cycle."""
-        with self.lock:
-            todo = [v for v in self.ventures.values() if v.status == VentureStatus.PENDING and v.score is None]
-        def appraise(v):
-            try:
-                return v, self.appraiser.appraise(v)
-            except AppraisalError as e:
-                return v, e
-
-        results = {}
-        for v, a in self.grading.map_calls(appraise, todo):
-            if isinstance(a, AppraisalError):
-                with self.lock:
-                    self._tell(v.proposer, "venture_delayed", f"{v.id} couldn't be appraised yet: {a}", v.id)
-            else:
-                results[v.id] = a
-        with self.lock:
-            p = self.params
-            for vid, a in results.items():
-                v = self.ventures[vid]
-                v.score, v.reason, v.reward = a.score, a.reason, venture_value(a.score, p.job_reward, p.venture_min_score)
-                if a.cost:
-                    payer = "treasury" if self.ledger.balance("treasury") >= a.cost else purse(v.proposer)
-                    self.ledger.transfer(payer, "compute", min(a.cost, self.ledger.balance(payer)), cycle=self.cycle,
-                                         kind="appraisal", memo=vid)
-                if a.model and a.usage:
-                    self.hub.emit("llm.call", self.cycle, community="appraiser", role="appraiser", model=a.model,
-                                  input_tokens=a.usage.input_tokens, output_tokens=a.usage.output_tokens,
-                                  cache_hit=None, cost=a.cost, ms=a.ms, real=a.real)
-                    if a.real:
-                        self.meter.record_real("appraiser", a.price_as or a.model, a.usage, cycle=self.cycle)
-                if v.reward == 0:
-                    self._decide_venture(v, approved=False)
-            waiting = sorted((v for v in self.ventures.values() if v.status == VentureStatus.PENDING and v.score is not None),
-                             key=lambda v: (-v.score, v.id))
-            for i, v in enumerate(waiting):
-                if i < p.venture_budget:
-                    self._decide_venture(v, approved=True)
-                else:
-                    self._tell(v.proposer, "venture_waiting", f"{v.id} scored {v.score} but the market's budget this "
-                               f"cycle went to better-scored ventures; it stays in line", v.id)
-
-    def _decide_venture(self, v: Venture, approved: bool) -> None:
-        if not approved:
-            v.status = VentureStatus.REJECTED
-            self._tell(v.proposer, "venture_rejected", f"{v.id} {v.title!r} rejected (score {v.score}): {v.reason}", v.id)
-            self.hub.emit("venture.decided", self.cycle, id=v.id, proposer=v.proposer, title=v.title, status=VentureStatus.REJECTED,
-                          score=v.score, reward=0, reason=v.reason)
-            return
-        job = MarketJob(f"V{self.ids.next('venture')}", v.title, v.reward,
-                        {c: Part(c, spec, rubric) for c, spec, rubric in v.parts}, posted=self.cycle, deadline=self.cycle)
-        job.claim(v.proposer, deadline=self.cycle + self.params.job_ttl)
-        self.jobs[job.id] = job
-        v.status, v.job_id = VentureStatus.APPROVED, job.id
-        self._tell(v.proposer, "venture_approved", f"{v.id} {v.title!r} approved as job {job.id}, reward {v.reward} µcr "
-                   f"(score {v.score}: {v.reason}); deliver every part by cycle {job.deadline}", job.id)
-        self.hub.emit("venture.decided", self.cycle, id=v.id, proposer=v.proposer, title=v.title, status=VentureStatus.APPROVED,
-                      score=v.score, reward=v.reward, reason=v.reason, job=job.id)
-        self.hub.emit("market.job", self.cycle, id=job.id, stage="venture", prime=v.proposer, caps=sorted(job.parts), reward=v.reward)
-
-    def _pool_balance(self) -> int:
-        return self.ledger.balance(self.payment.pool) if self.payment.pool else 0
-
-    def _fund_payment_pool(self) -> None:
-        """The economy's funder tops up its pool, if it keeps one. Under the lock."""
-        if self.payment.pool and (amount := self.payment.funding(self._pool_balance())) > 0:
-            self.ledger.transfer(self.payment.funder, self.payment.pool, amount, cycle=self.cycle, kind="grant",
-                                 memo="budget")
-
-    def _settle_payment_queue(self) -> None:
-        """Pay the work that waited for the end of the cycle, in the shares the economy gives it. Under the lock."""
-        queue = [j for jid in self.payment_queue if (j := self.jobs.get(jid)) is not None and j.status == JobStatus.GRADED]
-        self.payment_queue = []
-        if not queue:
-            return
-        values = {j.id: j.value(self.params.quality_pay) for j in queue}
-        pool, total = self._pool_balance(), sum(values.values())
-        shares = self.payment.shares(values, pool)
-        for j in sorted(queue, key=lambda j: j.id):
-            self._pay_job(j, payout=shares[j.id])
-        self.hub.emit("grants.award", self.cycle, pool=pool, asked=total, paid=min(pool, total), jobs=len(queue))
-
-    def _apply_ratings(self) -> None:
-        """Your new ratings (commons/application/ratings.py): first-hand evidence about whoever did each part. Under the lock."""
-        if not self.ratings:
-            return
-        for r in self.ratings.reload():
-            sample = self.ratings.samples[r.id]
-            for cap, part in sample["parts"].items():
-                if part["by"] in self.communities:
-                    self.rep.attest("operator", part["by"], cap, EVIDENCE[r.rating])
-                    self._tell(part["by"], "rated", f"the operator rated your {cap} for {sample['job']} {r.rating}/3"
-                               + (f": {r.note}" if r.note else ""), sample["job"])
-            self.hub.emit("operator.rating", self.cycle, id=r.id, job=sample["job"], rating=r.rating, note=r.note)
-
-    def _pay_job(self, job: MarketJob, payout: Micros | None = None) -> None:
-        prime = job.prime
-        weights: Counter[str] = Counter()
-        for part in job.parts.values():
-            for pid in part.cites:
-                pb = self.library.get(pid)
-                if pb and pb.author != prime and pb.author in self.communities:  # seeded playbooks earn no one royalties
-                    weights[pb.author] += 1
-                    pb.uses += 1
-        # the commons takes only what it needs: no treasury share while the treasury is at its reserve
-        tax = self.ledger.balance("treasury") < self.params.treasury_reserve
-        mean = job.mean_score
-        if payout is None:
-            payout = job.value(self.params.quality_pay)  # pay scales with quality
-        split = self.ledger.settle_revenue(prime, payout, cycle=self.cycle, royalties=dict(weights), memo=job.id, tax=tax,
-                                           source=self.payment.source)
-        share = split.earner
-        self.board.settle_bond(job, returned=True)
-        job.pay()
-        self.jobs_done += 1
-        self._stat(prime, "earned", share)
-        track = self.communities[prime].deliveries
-        for cap, part in job.parts.items():
-            if part.source == "self":
-                track[cap] = track.get(cap, 0) + 1
-        self._tell(prime, "job_paid", f"{job.id} passed grading (mean score {mean:.2f}); {self.payment.payer} paid {payout} "
-                   f"of {job.reward}, you received {share}", job.id)
-        record = {"job": job.id, "title": job.title, "prime": prime, "cycle": self.cycle, "scores": dict(job.scores),
-                  "payout": payout, "parts": {cap: {"by": self._done_by(job, part), "spec": part.spec,
-                                                    "text": (part.artifact or "")[:4000]}
-                                              for cap, part in sorted(job.parts.items())}}
-        self.outputs.append(record)
-        if self.ratings:
-            self.ratings.sample(record)
-        for author, amount in split.royalties.items():
-            self._stat(author, "earned", amount)
-            self.royalties_paid[author] = self.royalties_paid.get(author, 0) + amount
-            self._tell(author, "royalty", f"your playbook was used in {job.id}: {amount}", job.id)
-        self.hub.emit("market.job", self.cycle, id=job.id, stage="paid", prime=prime, caps=sorted(job.parts),
-                      reward=job.reward, payout=payout, scores=job.scores, royalties=split.royalties, taxed=tax)
-
-    def _done_by(self, job: MarketJob, part) -> str:
-        if part.source in (None, "self"):
-            return job.prime
-        c = self.contracts.get(part.source)
-        return c.winner if c and c.winner else job.prime
-
     def efficiency(self, name: str) -> dict[str, float]:
         """Value per unit of thought: what a co-op has earned against what it has spent to think (upkeep, work
         and model calls). Above 1.0 it earns more than its thinking costs."""
@@ -598,7 +455,7 @@ class World:
             efficiency=self.efficiency(name),
             doctrine=me.doctrine,
             archive=(len(self.archive), tuple(sorted({p.source for p in self.archive.passages.values()}))),
-            grants=self.payment.view(self._pool_balance()),
+            grants=self.payment.view(self.payments.pool_balance()),
             web=self.gate.policy.describe() if self.web else "",
             pending_claims=tuple(self.board.pending_claims(name)),
             goals=tuple(GoalView(g.id, g.title, g.status, tuple((s.text, s.done, s.note) for s in g.steps), round(g.progress, 2))
@@ -644,7 +501,7 @@ class World:
             board=sum(j.status == JobStatus.OPEN for j in self.jobs.values()),
             in_progress=sum(j.status == JobStatus.CLAIMED for j in self.jobs.values()),
             pipeline=dict(pipeline),
-            grants=self._pool_balance() if self.payment.pool else None,
+            grants=self.payments.pool_balance() if self.payment.pool else None,
             scorecard={r["key"]: r["value"] for r in self.scorecard},
             bus_sent=dict(self.bus.sent),
             communities={
@@ -681,7 +538,7 @@ def summary(world: World, window: int = 50) -> str:
     rows.append(f"jobs paid {world.jobs_done}, failed {world.jobs_failed}, expired on board {world.jobs_expired}, "
                 f"treasury {world.ledger.balance('treasury') / 1e6:.3f} cr, playbooks {len(world.library)}, "
                 f"royalties {sum(world.royalties_paid.values()) / 1e6:.3f} cr"
-                + (f", grants left {world._pool_balance() / 1e6:.3f} cr" if world.payment.pool else ""))
+                + (f", grants left {world.payments.pool_balance() / 1e6:.3f} cr" if world.payment.pool else ""))
     if world.scorecard:
         rows += ["", "scorecard", scorecard_report(world.scorecard)]
     return "\n".join(rows)

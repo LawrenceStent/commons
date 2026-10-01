@@ -71,16 +71,16 @@ def _graded(w, jid, prime, scores, reward=80_000):
     job = MarketJob(jid, "subject", reward, {c: Part(c, "s", "r", artifact="x", source="self") for c in scores},
                     posted=w.cycle, deadline=w.cycle + 5, prime=prime, status="graded", scores=dict(scores))
     w.jobs[jid] = job
-    w.payment_queue.append(jid)
+    w.payments.payment_queue.append(jid)
     return job
 
 
 def test_scarce_grants_are_shared_by_value():
     w = grant_world(grant_budget=100_000)
-    w._fund_payment_pool()
+    w.payments.fund()
     _graded(w, "A", "scouts", {"scout": 1.0})  # worth 80k
     _graded(w, "B", "pilots", {"design": 0.5})  # worth 80k x 0.75 = 60k
-    w._settle_payment_queue()
+    w.payments.settle_queue()
     paid = {e.fields["id"]: e.fields["payout"] for e in w.hub.recent("market.job", n=10) if e.fields["stage"] == "paid"}
     assert paid == {"A": 80_000 * 100_000 // 140_000, "B": 60_000 * 100_000 // 140_000}
     assert w.ledger.balance("grants") == 100_000 - sum(paid.values())
@@ -90,10 +90,10 @@ def test_scarce_grants_are_shared_by_value():
 def test_plentiful_grants_pay_full_value_and_the_pool_banks_only_so_much():
     w = grant_world(grant_budget=100_000)
     for _ in range(6):
-        w._fund_payment_pool()
+        w.payments.fund()
     assert w.ledger.balance("grants") == 300_000  # three budgets, no more
     _graded(w, "A", "scouts", {"scout": 1.0})
-    w._settle_payment_queue()
+    w.payments.settle_queue()
     assert w.ledger.balance("grants") == 220_000 and w.jobs["A"].status == "paid"
 
 

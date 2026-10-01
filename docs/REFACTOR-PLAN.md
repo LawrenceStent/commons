@@ -200,7 +200,8 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
       module's own documentation
 - [x] R6.2 Services: contract-net (`ContractNet`), the job board with claims (`JobBoard`), grading with deferred
       settlement and audits (`Grading`), in `application/services/`. Moved verbatim by a tool that rewrites references
-- [ ] R6.3 Services: ventures, grants and payment, ratings, scorecard
+- [x] R6.3 Services: ventures (`VentureDesk`), payments with the economy's pool and queue (`Payments`), ratings
+      (`RatingDesk`). The scorecard is evaluated by the recorder, so it moves with it in R6.5
 - [ ] R6.4 Services: population (owns its counters; no private access), knowledge and archive, web and gate
 - [ ] R6.5 Services: gossip and the recorder (history, `world.cycle` telemetry)
 - [ ] R6.6 `ObservationBuilder` replaces `World.observe`
