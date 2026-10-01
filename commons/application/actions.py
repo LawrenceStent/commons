@@ -87,8 +87,7 @@ class Actions:
             w.claims.setdefault(job_id, {})[self.me.name] = w.cycle
             return Outcome(True, f"claim on {job_id} registered; jobs are allocated at the end of the cycle to the most "
                                  f"trusted, best-fitting claimant (bond {bond} if you win)", job_id)
-        job.prime, job.status = self.me.name, JobStatus.CLAIMED
-        job.deadline = w.cycle + p.job_ttl
+        job.claim(self.me.name, deadline=w.cycle + p.job_ttl)
         return Outcome(True, f"claimed {job_id}; submit all parts by cycle {job.deadline}", job_id)
 
     def do_part(self, job_id: str, capability: str, artifact: str, cites: tuple[str, ...] = ()) -> Outcome:
@@ -108,7 +107,7 @@ class Actions:
             return err
         for c in self.w.contracts_for(job_id, capability, (ContractStatus.OPEN,)):
             c.withdraw(at=None)  # left unclosed, as before: see REFACTOR-PLAN §7
-        part.artifact, part.source, part.cites = artifact[:MAX_ARTIFACT], "self", tuple(cites)
+        job.fill(capability, artifact[:MAX_ARTIFACT], source="self", cites=tuple(cites))
         self.w.maybe_submit(job)
         return Outcome(True, f"{capability} part of {job_id} done")
 

@@ -175,7 +175,9 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
       `Contract` (no assignments to its status, winner, price, deadline or flags outside it)
 - [x] R4.3 `Job` aggregate: lifecycle, value with quality pay, bond, completeness, deferral (tests first:
       `tests/domain/test_job.py`, 9 tests). The class keeps the name `MarketJob`
-- [ ] R4.4 Job code in the world and executor uses the aggregate
+- [x] R4.4 Job code in the world and executor uses the aggregate. Two detours went with it: passed jobs used to be set
+      back to `claimed` before paying (after a deferred outcome, and when grants were shared) only so the old code path
+      would accept them; the aggregate pays from `graded` directly. Golden identical
 - [ ] R4.5 `Micros` and id NewTypes on every public signature
 - [ ] **Done when:** no status comparisons outside the aggregates; golden identical
 
