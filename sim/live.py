@@ -20,7 +20,7 @@ import time
 from collections import Counter
 from pathlib import Path
 
-from runtime.backends import AnthropicBackend, FakeBackend, LMStudioBackend
+from runtime.backends import BackendChoiceError, FakeBackend, add_backend_args, choose_backend
 from runtime.fakes import GOOD_GRADE, competent
 from runtime.steward import LLMStrategy
 from sim.engine import Params, World, summary
@@ -36,17 +36,15 @@ from society.community import Community
 from substrate.meter import KillSwitch
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--backend", choices=("fake", "lmstudio", "anthropic"), default="fake")
+add_backend_args(ap, "steward model (LM Studio: the loaded model's id)")
 ap.add_argument("--pack", default=None, help="which society to run (a folder under packs/; default earn_online)")
 ap.add_argument("--society", help="run a founded society from societies/NAME (its pack, brief, co-ops, archive, operator)")
-ap.add_argument("--model", help="steward model (LM Studio: the loaded model's id)")
 ap.add_argument("--member-model")
 ap.add_argument("--grader-model")
 ap.add_argument("--cycles", type=int, default=10)
 ap.add_argument("--max-minutes", type=float, default=30)
 ap.add_argument("--seed", type=int, default=0)
 ap.add_argument("--real-ceiling", type=float, default=1.00, help="real dollars per day before the kill-switch trips")
-ap.add_argument("--yes-spend", action="store_true", help="required for the anthropic backend")
 ap.add_argument("--serve", action="store_true", help="watch it on the dashboard")
 ap.add_argument("--operator", help="folder of directives, context and limits for the co-ops (see operator.example/)")
 ap.add_argument("--panel", action="store_true",
@@ -73,19 +71,15 @@ if a.society:
 else:
     pack = load_pack(a.pack)
 
-if a.backend == "anthropic":
-    if not a.yes_spend:
-        sys.exit("The anthropic backend spends real money. Re-run with --yes-spend (and consider --real-ceiling).")
-    backend = AnthropicBackend()
-    steward, member, grader = a.model or "claude-sonnet-5", a.member_model or "claude-haiku-4-5", a.grader_model or "claude-haiku-4-5"
-elif a.backend == "lmstudio":
-    if not a.model:
-        sys.exit("Pass --model with the id of the model loaded in LM Studio (see `lms ps`).")
-    backend = LMStudioBackend()
-    steward, member, grader = a.model, a.member_model or a.model, a.grader_model or a.model
-else:
-    backend = FakeBackend(respond=lambda *x: GOOD_GRADE, converse=competent)
-    steward = member = grader = "fake"
+try:
+    backend, steward = choose_backend(a.backend, a.model, a.yes_spend, default_model="claude-sonnet-5",
+                                      fake=lambda: FakeBackend(respond=lambda *x: GOOD_GRADE, converse=competent),
+                                      cost="set a daily limit with --real-ceiling")
+except BackendChoiceError as e:
+    sys.exit(str(e))
+# members and the grader default to the steward's model locally, and to a cheaper one on Anthropic
+cheaper = "claude-haiku-4-5" if a.backend == "anthropic" else steward
+member, grader = a.member_model or cheaper, a.grader_model or cheaper
 
 
 # Local models cost nothing real, so they get as many tokens as they need (26 Sep): no per-turn budget,

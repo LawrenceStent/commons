@@ -12,7 +12,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from runtime.backends import AnthropicBackend, FakeBackend, LMStudioBackend
+from runtime.backends import BackendChoiceError, FakeBackend, add_backend_args, choose_backend
 from sim import founding
 from sim.pack import load as load_pack
 
@@ -25,10 +25,8 @@ ap.add_argument("--questions", help="a file of subjects the society will work on
 ap.add_argument("--context", help="a folder of reference files: summarised for drafting, then kept as the archive")
 ap.add_argument("--coops", type=int, default=4)
 ap.add_argument("--seed", type=int, default=0)
-ap.add_argument("--backend", choices=("fake", "lmstudio", "anthropic"), default="fake")
-ap.add_argument("--model")
+add_backend_args(ap, "drafting model (LM Studio: the loaded model's id; default claude-sonnet-5 on anthropic)")
 ap.add_argument("--max-tokens", type=int, default=4000, help="raise for models that reason first (e.g. 12000)")
-ap.add_argument("--yes-spend", action="store_true", help="required for the anthropic backend")
 a = ap.parse_args()
 
 
@@ -51,24 +49,22 @@ if a.approve:
 if not a.brief:
     sys.exit("--brief FILE is required to found a society")
 pack = load_pack(a.pack)
-if a.backend == "anthropic":
-    if not a.yes_spend:
-        sys.exit("The anthropic backend spends real money (one call). Re-run with --yes-spend.")
-    backend, model = AnthropicBackend(), a.model or "claude-sonnet-5"
-elif a.backend == "lmstudio":
-    if not a.model:
-        sys.exit("Pass --model with the id of the model loaded in LM Studio")
-    backend, model = LMStudioBackend(), a.model
-else:
-    caps = list(pack.capabilities)
+caps = list(pack.capabilities)
 
-    def placeholder(system, prompt, schema):
-        pairs = [caps[i:i + 2] for i in range(0, len(caps), 2)] or [caps]
-        return {"coops": [{"name": f"coop-{i + 1}", "members": 3, "capabilities": pairs[i % len(pairs)],
-                           "charter": f"placeholder co-op {i + 1} (drafted without a model)",
-                           "doctrine": "placeholder: edit before approving"} for i in range(a.coops)]}
 
-    backend, model = FakeBackend(respond=placeholder), "fake"
+def placeholder(system, prompt, schema):
+    """--backend fake: deterministic placeholder co-ops, two skills each, for trying the flow without a model."""
+    pairs = [caps[i:i + 2] for i in range(0, len(caps), 2)] or [caps]
+    return {"coops": [{"name": f"coop-{i + 1}", "members": 3, "capabilities": pairs[i % len(pairs)],
+                       "charter": f"placeholder co-op {i + 1} (drafted without a model)",
+                       "doctrine": "placeholder: edit before approving"} for i in range(a.coops)]}
+
+
+try:
+    backend, model = choose_backend(a.backend, a.model, a.yes_spend, default_model="claude-sonnet-5",
+                                    fake=lambda: FakeBackend(respond=placeholder), cost="one call")
+except BackendChoiceError as e:
+    sys.exit(str(e))
 
 try:
     folder, errors, warnings = founding.found(a.name, a.pack, Path(a.brief).read_text(), Path(a.context) if a.context else None,

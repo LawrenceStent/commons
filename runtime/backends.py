@@ -357,3 +357,32 @@ class FakeBackend:
         usage = Usage(input_tokens=prompt // 4, output_tokens=max(1, len(out.get("text", "")) // 4 + 20 * len(calls)))
         return Turn(out.get("text", ""), calls, "tool_use" if calls else "end_turn", usage, model, self.price_as,
                     self.real, 1)
+
+
+# ── choosing a backend (every command does it the same way) ────
+BACKENDS = ("fake", "lmstudio", "anthropic")
+
+
+class BackendChoiceError(ValueError):
+    """The command line asked for a backend it can't have: real spend not confirmed, or no local model named."""
+
+
+def add_backend_args(ap, model_help: str = "model id (LM Studio: the loaded model's id)") -> None:
+    ap.add_argument("--backend", choices=BACKENDS, default="fake")
+    ap.add_argument("--model", help=model_help)
+    ap.add_argument("--yes-spend", action="store_true", help="required for the anthropic backend: it costs real money")
+
+
+def choose_backend(kind: str, model: str | None, yes_spend: bool, *, default_model: str,
+                   fake: Callable[[], ModelBackend], cost: str = "") -> tuple[ModelBackend, str]:
+    """(backend, model). Real money needs `yes_spend`; LM Studio needs the loaded model's id; fake needs nothing."""
+    if kind == "anthropic":
+        if not yes_spend:
+            raise BackendChoiceError(f"The anthropic backend spends real money{f' ({cost})' if cost else ''}. "
+                                     "Re-run with --yes-spend.")
+        return AnthropicBackend(), model or default_model
+    if kind == "lmstudio":
+        if not model:
+            raise BackendChoiceError("Pass --model with the id of the model loaded in LM Studio (see `lms ps`).")
+        return LMStudioBackend(), model
+    return fake(), "fake"
