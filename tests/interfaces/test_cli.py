@@ -106,3 +106,18 @@ def test_two_runs_in_the_same_second_get_their_own_ledgers(tmp_path, monkeypatch
     first.touch()
     second = live._ledger_path(tmp_path, "fake")
     assert second != first and not second.exists()
+
+
+def test_a_run_stops_when_every_model_call_in_a_cycle_failed():
+    from commons.interfaces.cli import live
+    from commons.substrate.telemetry import Hub
+
+    hub = Hub()
+    hub.emit("llm.turn", 1, ok=3, errors=[])
+    hub.emit("llm.turn", 2, ok=0, errors=["steward call failed: LM Studio returned 400: stuck"])
+    hub.emit("llm.turn", 2, ok=1, errors=["steward call failed: once"])
+    assert live._model_down(hub, 1) is None and live._model_down(hub, 2) is None
+    hub.emit("llm.turn", 3, ok=0, errors=["steward call failed: LM Studio returned 400: stuck"])
+    hub.emit("llm.turn", 3, ok=0, errors=["steward call failed: LM Studio returned 400: stuck"])
+    assert "LM Studio returned 400: stuck" in live._model_down(hub, 3)
+    assert live._model_down(hub, 4) is None  # no LLM turns at all is not a failure

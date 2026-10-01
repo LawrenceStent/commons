@@ -428,3 +428,17 @@ def test_the_world_lists_what_can_be_commissioned_and_refuses_the_rest():
     assert not again and "already have draft D1" in again.message and "do_part" in again.message
     nope = s.commission(obs, act, "J999.write.1", "research", "go", None)
     assert not nope and f"you can commission for: {job.id} research" in nope.message
+
+
+def test_a_stuck_engine_fails_the_call_at_the_deadline():
+    import time
+
+    import pytest
+
+    from commons.application.ports import ModelError
+
+    b = LMStudioBackend(timeout=0.2, post=lambda body: time.sleep(5))
+    t = time.perf_counter()
+    with pytest.raises(ModelError, match="no answer"):
+        b.chat(model="m", system=["s"], messages=[{"role": "user", "text": "x"}])
+    assert time.perf_counter() - t < 1

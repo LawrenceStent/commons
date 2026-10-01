@@ -11,6 +11,7 @@ They implement the model port (commons/application/ports.py), which describes th
 from __future__ import annotations
 
 import json
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -172,7 +173,7 @@ class LMStudioBackend:
                  tool_capable: dict[str, bool] | None = None):
         """`post` replaces the HTTP call and `tool_capable` answers `supports_tools` without asking (both for tests)."""
         self.base_url, self.price_as, self.timeout = base_url.rstrip("/"), price_as, timeout
-        self._post = post or self._http_post
+        self._post = self._within_deadline(post or self._http_post)
         self._tool_capable: dict[str, bool] = dict(tool_capable or {})
 
     def supports_tools(self, model: str) -> bool:
@@ -246,6 +247,31 @@ class LMStudioBackend:
         u = r.get("usage") or {}
         usage = Usage(input_tokens=u.get("prompt_tokens", 0), output_tokens=u.get("completion_tokens", 0))
         return Turn(msg.get("content") or "", tuple(calls), stop, usage, r.get("model", model), self.price_as, False, ms)
+
+    def _within_deadline(self, post: Callable[[dict[str, Any]], tuple[dict[str, Any], int]]):
+        """A hard limit on each call, whatever the socket does. On 1 Oct the engine stalled mid-prompt and every call
+        waited about 1,000s for LM Studio's own 600s timeout, though the socket's was 180s. The abandoned call
+        finishes or fails on its own thread."""
+        def call(body):
+            box: dict[str, Any] = {}
+
+            def run():
+                try:
+                    box["result"] = post(body)
+                except Exception as e:  # handed back to the caller below
+                    box["error"] = e
+
+            worker = threading.Thread(target=run, daemon=True)
+            worker.start()
+            worker.join(self.timeout)
+            if worker.is_alive():
+                raise ModelError(f"no answer from LM Studio in {self.timeout:.0f}s; the engine may be stuck "
+                                 "(reload the model: lms unload --all, then lms load)")
+            if "error" in box:
+                raise box["error"]
+            return box["result"]
+
+        return call
 
     def _http_post(self, body: dict[str, Any]) -> tuple[dict[str, Any], int]:
         req = urllib.request.Request(f"{self.base_url}/chat/completions", data=json.dumps(body).encode(),

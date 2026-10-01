@@ -183,6 +183,17 @@ def _log_turns(world: World, path: str) -> None:
     world.hub.subscribe(log_turn)
 
 
+def _model_down(hub, cycle: int) -> str | None:
+    """Why the run should stop, if every LLM turn this cycle failed on a model error before doing anything: the
+    model backend is down or stuck, and more cycles would only wait on it."""
+    turns = [e.fields for e in hub.recent("llm.turn", n=hub.ring) if e.cycle == cycle]
+    failed = [t["errors"][0] for t in turns if not t["ok"] and t["errors"] and
+              t["errors"][0].startswith("steward call failed")]
+    if turns and len(failed) == len(turns):
+        return f"every model call failed in cycle {cycle} ({failed[0]})"
+    return None
+
+
 def _run(world: World, a, ledger: str) -> None:
     if a.serve:
         print(f"dashboard: http://localhost:8000 · stops at cycle {a.cycles} · ledger {ledger}")
@@ -195,6 +206,10 @@ def _run(world: World, a, ledger: str) -> None:
             world.step()
             calls = [e for e in world.hub.recent("llm.call", n=world.hub.ring) if e.cycle == world.cycle]
             print(f"cycle {world.cycle}: {len(calls)} model calls, {time.time() - t0:.0f}s elapsed", flush=True)
+            if why := _model_down(world.hub, world.cycle):
+                world.meter.halt(why, cycle=world.cycle)
+                print(f"STOPPED: {why}")
+                break
     except KillSwitch as e:
         print(f"KILL-SWITCH: {e}")
 
