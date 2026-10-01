@@ -232,8 +232,10 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
       a test holds both: every event defines its notices and telemetry, and no service reports directly
 
 ### R8. Commands (M) — C6, S2, S7 (part)
-- [ ] R8.1 Middleware chain (operator limits, lock, activity log) declared per command; no `setattr` at import
-- [ ] R8.2 The executor split by area behind one facade with today's method names
+- [x] R8.1 Middleware chain (operator limits, lock, activity log) declared per command (`@command`, `@command(log=False)`,
+      `@command(lock=False)`; `commands/pipeline.py`); no `setattr` at import
+- [x] R8.2 The executor split by area behind one facade with today's method names: `commands/` market (202 lines),
+      population, knowledge, planning, runtime hooks, and their shared base; `Actions` is their composition
 - [ ] R8.3 Role interfaces for agents; `ActionsAPI` is their union
 - [ ] **Done when:** any command's call path is readable from its definition; golden identical
 
