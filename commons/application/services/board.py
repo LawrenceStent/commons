@@ -30,9 +30,9 @@ class JobBoard:
 
     def post(self) -> None:
         p = self.w.params
-        for _ in range(p.jobs_per_cycle):
-            job = self.w.pack.work_source.new_job(self.w.rng, f"J{self.w.ids.next('job')}", self.w.cycle, p.job_reward, p.board_ttl,
-                                                p.parts_per_job)
+        for _ in range(p.market.jobs_per_cycle):
+            job = self.w.pack.work_source.new_job(self.w.rng, f"J{self.w.ids.next('job')}", self.w.cycle, p.market.job_reward, p.market.board_ttl,
+                                                p.market.parts_per_job)
             self.w.jobs[job.id] = job
             self.w.events.publish(ev.JobPosted(job))
 
@@ -49,12 +49,12 @@ class JobBoard:
 
     def prune(self) -> None:
         """Drop closed jobs after a while, so memory stays flat on long runs."""
-        cutoff = self.w.cycle - self.w.params.retain
+        cutoff = self.w.cycle - self.w.params.storage.retain
         for k in [k for k, j in self.w.jobs.items() if j.status not in (JobStatus.OPEN, JobStatus.CLAIMED, JobStatus.GRADED) and j.deadline < cutoff]:
             del self.w.jobs[k]
 
     def finish(self, job: MarketJob) -> None:
-        if not job.passed(self.w.params.pass_score):
+        if not job.passed(self.w.params.market.pass_score):
             self.fail(job, f"a part failed grading ({', '.join(f'{k} {v:.2f}' for k, v in job.scores.items())})")
             return
         if not self.w.payment.pays_at_once:
@@ -80,14 +80,14 @@ class JobBoard:
             job, claimants = self.w.jobs.get(jid), self.claims.pop(jid)
             if job is None or job.status != JobStatus.OPEN:
                 continue
-            draw = random.Random(f"{p.seed}:{self.w.cycle}:{jid}")  # its own seed: the world's dice stay untouched
+            draw = random.Random(f"{p.run.seed}:{self.w.cycle}:{jid}")  # its own seed: the world's dice stay untouched
 
             def key(name: str) -> tuple:
                 c = self.w.communities[name]
                 fit = sum(cap in c.capabilities for cap in job.parts) / len(job.parts)
                 return (-round(self.w.standing(name), 3), -fit, self.held_jobs(name), draw.random())
 
-            bond = bond_for(job.reward, p.claim_bond)
+            bond = bond_for(job.reward, p.market.claim_bond)
             for name in sorted(sorted(claimants), key=key):
                 c = self.w.communities[name]
                 if self.held_jobs(name) >= self.claim_limit(c):
@@ -98,7 +98,7 @@ class JobBoard:
                     except InsufficientFunds:
                         self.w.events.publish(ev.BondUnaffordable(name, job, bond))
                         continue
-                job.claim(name, deadline=self.w.cycle + p.job_ttl, bond=bond)
+                job.claim(name, deadline=self.w.cycle + p.market.job_ttl, bond=bond)
                 self.w.events.publish(ev.JobClaimed(job, tuple(claimants), bond))
                 break
 

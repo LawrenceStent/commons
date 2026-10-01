@@ -53,7 +53,7 @@ class VentureDesk:
     def _price(self, v: Venture, a) -> None:
         """Score and price a venture, pay for its appraisal, and refuse it at once if it's worth nothing."""
         p = self.w.params
-        v.score, v.reason, v.reward = a.score, a.reason, venture_value(a.score, p.job_reward, p.venture_min_score)
+        v.score, v.reason, v.reward = a.score, a.reason, venture_value(a.score, p.market.job_reward, p.ventures.venture_min_score)
         if a.cost:
             payer = "treasury" if self.w.ledger.balance("treasury") >= a.cost else purse(v.proposer)
             self.w.ledger.transfer(payer, "compute", min(a.cost, self.w.ledger.balance(payer)), cycle=self.w.cycle,
@@ -70,7 +70,7 @@ class VentureDesk:
         waiting = sorted((v for v in self.w.ventures.values() if v.status == VentureStatus.PENDING and v.score is not None),
                          key=lambda v: (-v.score, v.id))
         for i, v in enumerate(waiting):
-            if i < self.w.params.venture_budget:
+            if i < self.w.params.ventures.venture_budget:
                 self.decide(v, approved=True)
             else:
                 self.w.events.publish(ev.VentureWaiting(v))
@@ -82,7 +82,7 @@ class VentureDesk:
             return
         job = MarketJob(f"V{self.w.ids.next('venture')}", v.title, v.reward,
                         {c: Part(c, spec, rubric) for c, spec, rubric in v.parts}, posted=self.w.cycle, deadline=self.w.cycle)
-        job.claim(v.proposer, deadline=self.w.cycle + self.w.params.job_ttl)
+        job.claim(v.proposer, deadline=self.w.cycle + self.w.params.market.job_ttl)
         self.w.jobs[job.id] = job
         v.status, v.job_id = VentureStatus.APPROVED, job.id
         self.w.events.publish(ev.VentureApproved(v, job))

@@ -23,7 +23,7 @@ class KnowledgeCommands(CommandBase):
             return Outcome(False, "you can only publish methods for capabilities you have")
         if any(p.author == self.me.name and p.capability == capability for p in self.w.library.values()):
             return Outcome(False, f"you already have a {capability} playbook in the library")
-        cost = self.w.params.publish_cost
+        cost = self.w.params.knowledge.publish_cost
         pid = hashlib.sha256(f"{self.me.name}:{capability}:{text}".encode()).hexdigest()[:10]
         if not self._send(Publish(playbook_id=pid, capability=capability, title=title[:120], content_hash=pid)):
             return Outcome(False, "rate-limited: your standing caps how much you can post per cycle")

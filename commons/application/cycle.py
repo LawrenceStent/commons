@@ -69,9 +69,9 @@ def _order(w: World) -> None:
 
 def _turns(w: World) -> None:
     order = w.turn_order
-    if w.params.parallel_turns and len(order) > 1:
+    if w.params.runtime.parallel_turns and len(order) > 1:
         # the lock is released here: each action takes it, model calls don't
-        with ThreadPoolExecutor(max_workers=w.params.parallel_workers) as pool:
+        with ThreadPoolExecutor(max_workers=w.params.runtime.parallel_workers) as pool:
             for f in [pool.submit(w.turn, c) for c in order]:
                 f.result()  # re-raise anything a turn raised (a kill-switch, say)
     else:
@@ -81,7 +81,7 @@ def _turns(w: World) -> None:
 
 
 def _gossip(w: World) -> None:
-    if w.cycle % w.params.gossip_every == 0:
+    if w.cycle % w.params.trust.gossip_every == 0:
         w.gossip.run()
 
 

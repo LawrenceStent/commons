@@ -22,8 +22,8 @@ class Upkeep:
         A community that never wakes can't bank handouts, and a rich one doesn't need them."""
         p = self.w.params
         for c in self.w.living():
-            top_up = floor_top_up(purse=self.w.ledger.balance(purse(c.name)), cap=p.floor_cap,
-                                  treasury=self.w.ledger.balance("treasury"), budget=p.basic_budget)
+            top_up = floor_top_up(purse=self.w.ledger.balance(purse(c.name)), cap=p.money.floor_cap,
+                                  treasury=self.w.ledger.balance("treasury"), budget=p.money.basic_budget)
             if top_up is None:
                 return
             if top_up:
@@ -40,11 +40,11 @@ class Upkeep:
                 continue
             want = c.strategy.wake(self.w.observe(c))
             c.thinking = members_to_wake(wanted=want, members=c.members, purse=self.w.ledger.balance(purse(c.name)),
-                                         upkeep=p.upkeep)
+                                         upkeep=p.money.upkeep)
             if c.thinking:
                 try:
-                    self.w.meter.charge(c.name, c.thinking * p.upkeep, cycle=self.w.cycle, memo="upkeep")
+                    self.w.meter.charge(c.name, c.thinking * p.money.upkeep, cycle=self.w.cycle, memo="upkeep")
                 except InsufficientFunds:
                     c.thinking = 0
             c.active = c.thinking > 0
-            c.capacity = c.thinking * p.actions_per_member
+            c.capacity = c.thinking * p.money.actions_per_member

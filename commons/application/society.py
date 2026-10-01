@@ -86,12 +86,12 @@ class Society:
         self.pack = pack or load_pack()  # what this society is for: its work, vocabulary and seed co-ops
         self.hub = hub or Hub()
         self.lock = threading.RLock()  # held for every state change; see cycle.py
-        self.rng = random.Random(p.seed)
+        self.rng = random.Random(p.run.seed)
         self.cycle = 0
         self.communities = {c.name: c for c in (population or self.pack.population())}
         self._connect(ledger, bus, grader, appraiser, operator, archive, ratings, web, gate, payment)
         self._open_records()
-        self.activity = activity or ActivityLog(p.activity_keep, p.activity_path)
+        self.activity = activity or ActivityLog(p.storage.activity_keep, p.storage.activity_path)
         self.activity.watch(self.hub)
         self._start_services()
         self._genesis()
@@ -99,13 +99,13 @@ class Society:
     def _connect(self, ledger, bus, grader, appraiser, operator, archive, ratings, web, gate, payment) -> None:
         """The infrastructure and collaborators: given, or the defaults."""
         p = self.params
-        self.ledger = ledger or Ledger(p.ledger_path, hub=self.hub)
-        self.meter = Meter(self.ledger, daily_ceiling=p.daily_ceiling, hub=self.hub)
-        self.rep = Reputation(decay=p.decay, hub=self.hub)
-        self.bus = bus or MemoryBus(Registry(), base_allowance=p.base_allowance, verify=p.verify, hub=self.hub)
+        self.ledger = ledger or Ledger(p.storage.ledger_path, hub=self.hub)
+        self.meter = Meter(self.ledger, daily_ceiling=p.money.daily_ceiling, hub=self.hub)
+        self.rep = Reputation(decay=p.trust.decay, hub=self.hub)
+        self.bus = bus or MemoryBus(Registry(), base_allowance=p.trust.base_allowance, verify=p.run.verify, hub=self.hub)
         self.bus.standing = self.standing  # the bus rations messages by this society's trust
         self.registry = self.bus.registry
-        self.grader = grader or StubGrader(cost=p.grade_cost)
+        self.grader = grader or StubGrader(cost=p.market.grade_cost)
         self.appraiser = appraiser or StubAppraiser()
         self.operator = operator or Operator(None)
         self.archive = archive or ArchiveIndex()  # the society's reference material, searched on demand
@@ -117,19 +117,19 @@ class Society:
         if self.web:
             self.web.set_hosts(self.gate.policy.allow_hosts)
         # how passing work is paid: given, or chosen once from the settings
-        self.payment = payment or policy_for(p.economy, p.grant_budget, p.grant_cap_cycles)
+        self.payment = payment or policy_for(p.money.economy, p.money.grant_budget, p.money.grant_cap_cycles)
 
     def _open_records(self) -> None:
         """The society's state: work, knowledge, plans, and what happened."""
         p = self.params
-        self.outputs: deque[dict] = deque(maxlen=p.outputs_keep)  # paid work, newest last: who did what, how it scored
+        self.outputs: deque[dict] = deque(maxlen=p.storage.outputs_keep)  # paid work, newest last: who did what, how it scored
         self.scorecard: list[dict] = []  # the pack's mission metrics plus the general ones, as of the last cycle
         self.ventures: dict[str, Venture] = {}
         self.jobs: dict[str, MarketJob] = {}
         self.contracts: dict[str, Contract] = {}
         self.library: dict[str, Playbook] = {}
-        self.journal: dict[str, deque[str]] = {n: deque(maxlen=p.journal_keep) for n in self.communities}
-        self.inbox: dict[str, deque[Event]] = {n: deque(maxlen=p.events_keep) for n in self.communities}
+        self.journal: dict[str, deque[str]] = {n: deque(maxlen=p.storage.journal_keep) for n in self.communities}
+        self.inbox: dict[str, deque[Event]] = {n: deque(maxlen=p.storage.events_keep) for n in self.communities}
         self.history: dict[str, list[Snapshot]] = {n: [] for n in self.communities}
         self.jobs_done = self.jobs_failed = self.jobs_expired = 0
         self.royalties_paid: dict[str, int] = {}
@@ -159,30 +159,30 @@ class Society:
     def _genesis(self) -> None:
         """Money in at the start: the treasury's seed and every co-op's purse; each co-op registers its key."""
         p = self.params
-        self.ledger.transfer("genesis", "treasury", p.treasury_seed, cycle=0, kind="genesis")
+        self.ledger.transfer("genesis", "treasury", p.money.treasury_seed, cycle=0, kind="genesis")
         for c in self.communities.values():
-            c.strategy.rng = random.Random(f"{p.seed}:{c.name}")
+            c.strategy.rng = random.Random(f"{p.run.seed}:{c.name}")
             self.registry.register(c.name, c.identity.public, sorted(c.capabilities), c.charter)
-            self.ledger.transfer("genesis", purse(c.name), p.purse_seed, cycle=0, kind="genesis")
+            self.ledger.transfer("genesis", purse(c.name), p.money.purse_seed, cycle=0, kind="genesis")
 
     def add_community(self, c: Community) -> None:
         """A community born mid-run (a fork). Its history starts empty, not back-filled."""
         p = self.params
         self.communities[c.name] = c
         self.registry.register(c.name, c.identity.public, sorted(c.capabilities), c.charter)
-        self.journal[c.name] = deque(maxlen=p.journal_keep)
-        self.inbox[c.name] = deque(maxlen=p.events_keep)
+        self.journal[c.name] = deque(maxlen=p.storage.journal_keep)
+        self.inbox[c.name] = deque(maxlen=p.storage.events_keep)
         self.history[c.name] = []
         self.recorder.track(c.name)
 
     # ── helpers ────────────────────────────────────────────────
     def standing(self, name: str) -> float:
-        return self.rep.standing(name) if self.params.reputation else 0.5
+        return self.rep.standing(name) if self.params.run.reputation else 0.5
 
     def eligible(self, prime: str, bidder: str, capability: str) -> tuple[bool, str]:
         """Whether the commons lets `bidder` work for `prime` in `capability`. Deterministic; with
         reputation switched off (the control run) everyone is neutral and eligible."""
-        floor = self.params.bid_floor
+        floor = self.params.contracts.bid_floor
         standing = self.standing(bidder)
         if standing < floor:
             return False, f"{bidder}'s standing in the commons is {standing:.2f}, below the {floor:.2f} line"
@@ -192,7 +192,7 @@ class Society:
         return True, ""
 
     def trust(self, observer: str, subject: str, capability: str) -> float:
-        return self.rep.score(observer, subject, capability) if self.params.reputation else 0.5
+        return self.rep.score(observer, subject, capability) if self.params.run.reputation else 0.5
 
     def tell(self, name: str, kind: str, text: str, ref: str | None = None) -> None:
         self.inbox[name].append(Event(self.cycle, kind, text, ref))

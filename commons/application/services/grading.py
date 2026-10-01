@@ -77,7 +77,7 @@ class Grading:
 
     def map_calls(self, fn, items: list) -> list:
         """Run model calls (outside the lock) up to `grading_workers` at a time; results in input order."""
-        workers = self.w.params.grading_workers
+        workers = self.w.params.runtime.grading_workers
         if workers <= 1 or len(items) <= 1:
             return [fn(i) for i in items]
         with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -119,14 +119,14 @@ class Grading:
             defer = max(defer, g.settle_after)
         if errors:
             self.awaiting_grade[jid] += 1
-            if self.awaiting_grade[jid] >= self.w.params.grade_retries:
+            if self.awaiting_grade[jid] >= self.w.params.market.grade_retries:
                 self.awaiting_grade.pop(jid)
                 self.w.board.fail(job, "the grader was unavailable")
             else:
                 self.w.events.publish(ev.GradingDelayed(job, errors[0]))
             return
         self.awaiting_grade.pop(jid, None)
-        if defer and job.passed(self.w.params.pass_score):
+        if defer and job.passed(self.w.params.market.pass_score):
             job.defer(until=self.w.cycle + defer)
             self.deferred.add(jid)
             self.w.events.publish(ev.JobDeferred(job))

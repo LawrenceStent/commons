@@ -57,7 +57,7 @@ class ContractNet:
 
     def prune(self) -> None:
         """Drop closed contracts after a while."""
-        cutoff = self.w.cycle - self.w.params.retain
+        cutoff = self.w.cycle - self.w.params.storage.retain
         for k in [k for k, c in self.w.contracts.items() if c.closed is not None and c.closed < cutoff]:
             del self.w.contracts[k]
 
@@ -68,21 +68,21 @@ class ContractNet:
     def open(self, cid: ContractId, job: MarketJob, capability: str, prime: str, max_price: Micros, advance_frac: float) -> None:
         part = job.parts[capability]
         c = Contract(cid, job.id, capability, prime, part.spec, part.rubric, max_price, advance_frac,
-                     announced=self.w.cycle, deadline=self.w.cycle + self.w.params.bid_window)
+                     announced=self.w.cycle, deadline=self.w.cycle + self.w.params.contracts.bid_window)
         self.w.contracts[cid] = c
         self.w.events.publish(ev.ContractOpened(c))
 
     def award(self, c: Contract, bidder: str, price: Micros, advance: Micros) -> None:
-        c.award(bidder, price, advance, deliver_by=self.w.cycle + self.w.params.deliver_ttl)
+        c.award(bidder, price, advance, deliver_by=self.w.cycle + self.w.params.contracts.deliver_ttl)
         self.w.recorder.stat(bidder, "won")
         self.w.recorder.stat(bidder, "earned", advance)
         self.w.events.publish(ev.ContractAwarded(c, tuple(b for b in c.bids if b != bidder)))
 
     def deliver(self, c: Contract, artifact: str, cites: tuple[str, ...]) -> None:
-        c.deliver(artifact, cites, review_by=self.w.cycle + self.w.params.review_ttl)
-        if self.w.params.grader_reviews:
+        c.deliver(artifact, cites, review_by=self.w.cycle + self.w.params.contracts.review_ttl)
+        if self.w.params.market.grader_reviews:
             self.w.grading.pending_reviews[c.id] = 0
-        self.w.events.publish(ev.ContractDelivered(c, self.w.params.grader_reviews))
+        self.w.events.publish(ev.ContractDelivered(c, self.w.params.market.grader_reviews))
 
     def pay_remainder(self, c: Contract) -> bool:
         owed = c.owed
@@ -118,14 +118,14 @@ class ContractNet:
         """The verdict, under the lock. The commons ("audit") files its own first-hand evidence, so the
         verdict moves standing, not any one community's private view."""
         p = self.w.params
-        if g.score < p.pass_score:
+        if g.score < p.market.pass_score:
             self.w.rep.attest("audit", c.winner, c.capability, 0.0)
             self.w.events.publish(ev.AuditUpheld(c, g.score))
             return
         owed = c.owed
         try:
             # the treasury keeps the fee (it paid for the audit); the prime reimburses the contractor
-            self.w.ledger.transfer(purse(c.prime), purse(c.winner), owed + p.audit_cost,
+            self.w.ledger.transfer(purse(c.prime), purse(c.winner), owed + p.contracts.audit_cost,
                                  cycle=self.w.cycle, kind="audit", memo=f"overturned {c.id}")
             paid = True
         except InsufficientFunds:
@@ -136,10 +136,10 @@ class ContractNet:
             c.default(at=self.w.cycle)
             self.w.events.publish(ev.AuditUnpaid(c))
             return
-        self.w.recorder.stat(c.winner, "earned", owed + p.audit_cost)
+        self.w.recorder.stat(c.winner, "earned", owed + p.contracts.audit_cost)
         self.w.recorder.stat(c.winner, "ok")
         c.overturn(f"overturned on audit ({g.score:.2f}): {reason}", at=self.w.cycle)
-        self.w.events.publish(ev.AuditOverturned(c, g.score, owed, p.audit_cost))
+        self.w.events.publish(ev.AuditOverturned(c, g.score, owed, p.contracts.audit_cost))
         job = self.w.jobs.get(c.job_id)
         if job and job.status == JobStatus.CLAIMED and job.parts[c.capability].artifact is None:
             job.fill(c.capability, c.artifact, source=c.id, cites=c.cites)
@@ -153,7 +153,7 @@ class ContractNet:
             return
         if isinstance(g, GradingError):
             self.w.grading.pending_reviews[cid] += 1
-            if self.w.grading.pending_reviews[cid] < self.w.params.grade_retries:
+            if self.w.grading.pending_reviews[cid] < self.w.params.market.grade_retries:
                 return
             self.w.grading.pending_reviews.pop(cid)
             # the grader stayed down: accept by default, so contractors aren't punished for an outage
@@ -164,7 +164,7 @@ class ContractNet:
             return
         self.w.grading.pending_reviews.pop(cid)
         self.w.grading.charge(g, job=c.job_id, part=c.capability, payers=("treasury", purse(c.prime)))
-        if g.score < self.w.params.pass_score:
+        if g.score < self.w.params.market.pass_score:
             self.close_review(c, False, f"failed grading ({g.score:.2f}): {g.reason}"[:300])
             return
         if not self.pay_remainder(c):
@@ -189,10 +189,10 @@ class ContractNet:
             return
         if isinstance(g, GradingError):
             entry["attempts"] += 1
-            if entry["attempts"] >= self.w.params.grade_retries:
+            if entry["attempts"] >= self.w.params.market.grade_retries:
                 self.w.grading.pending_audits.pop(cid)
                 c.drop_dispute()  # it may be filed again
-                self.w.ledger.transfer("treasury", purse(c.winner), self.w.params.audit_cost, cycle=self.w.cycle, kind="audit",
+                self.w.ledger.transfer("treasury", purse(c.winner), self.w.params.contracts.audit_cost, cycle=self.w.cycle, kind="audit",
                                      memo=f"refund {cid}")
                 self.w.events.publish(ev.AuditCancelled(c))
             return

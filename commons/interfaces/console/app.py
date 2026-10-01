@@ -86,7 +86,7 @@ def snapshot(state: dict) -> dict:
     return {
         "run": {
             "cycle": w.cycle, "running": state["running"], "speed": state["speed"], "pause_reason": state["reason"],
-            "seed": w.params.seed, "reputation": w.params.reputation,
+            "seed": w.params.run.seed, "reputation": w.params.run.reputation,
             "jobs_done": w.jobs_done, "jobs_failed": w.jobs_failed,
             "treasury": w.ledger.balance("treasury"), "halted": w.meter.halted,
             "spent_today": w.meter.spent_today, "ceiling": w.meter.daily_ceiling,
@@ -101,7 +101,7 @@ def snapshot(state: dict) -> dict:
                             if r.status != RequestStatus.PENDING][::-1]},
         "society": {"pack": w.pack.title, "economy": w.payment.name, "scorecard": w.scorecard,
                     "grants": w.ledger.balance(w.payment.pool) if w.payment.pool else None,
-                    "grant_budget": w.params.grant_budget},
+                    "grant_budget": w.params.money.grant_budget},
         "treasury_series": _downsample([[e.cycle, e.fields["treasury"]] for e in cycles]),
         "communities": communities,
         "reputation": {"names": names, "trust": trust,
@@ -110,7 +110,7 @@ def snapshot(state: dict) -> dict:
                    "done": w.jobs_done, "failed": w.jobs_failed, "expired": w.jobs_expired,
                    "board": sum(j.status == JobStatus.OPEN for j in w.jobs.values()),
                    "in_progress": sum(j.status == JobStatus.CLAIMED for j in w.jobs.values()),
-                   "reward": w.params.job_reward},
+                   "reward": w.params.market.job_reward},
         "contracts": {"recent": contracts[-15:][::-1], "stages": Counter(c["stage"] for c in contracts),
                       "window": len(contracts),
                       "live": Counter(c.status for c in w.contracts.values() if c.status in (ContractStatus.OPEN, ContractStatus.AWARDED, ContractStatus.DELIVERED))},
@@ -128,7 +128,7 @@ def snapshot(state: dict) -> dict:
                      for x in w.proposals.values() if x.status == ProposalStatus.OPEN],
             "living": sum(not c.dissolved for c in w.communities.values()),
             "members": sum(c.members for c in w.communities.values()),
-            "limits": {"members": w.params.max_members, "communities": w.params.max_communities},
+            "limits": {"members": w.params.population.max_members, "communities": w.params.population.max_communities},
         },
         "activity": [asdict(e) for e in w.activity.recent(150)][::-1],
         "plans": {

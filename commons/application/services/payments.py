@@ -38,7 +38,7 @@ class Payments:
         self.payment_queue = []
         if not queue:
             return
-        values = {j.id: j.value(self.w.params.quality_pay) for j in queue}
+        values = {j.id: j.value(self.w.params.money.quality_pay) for j in queue}
         pool, total = self.pool_balance(), sum(values.values())
         shares = self.w.payment.shares(values, pool)
         for j in sorted(queue, key=lambda j: j.id):
@@ -55,10 +55,10 @@ class Payments:
                     weights[pb.author] += 1
                     pb.uses += 1
         # the commons takes only what it needs: no treasury share while the treasury is at its reserve
-        tax = self.w.ledger.balance("treasury") < self.w.params.treasury_reserve
+        tax = self.w.ledger.balance("treasury") < self.w.params.money.treasury_reserve
         mean = job.mean_score
         if payout is None:
-            payout = job.value(self.w.params.quality_pay)  # pay scales with quality
+            payout = job.value(self.w.params.money.quality_pay)  # pay scales with quality
         split = self.w.ledger.settle_revenue(prime, payout, cycle=self.w.cycle, royalties=dict(weights), memo=job.id, tax=tax,
                                            source=self.w.payment.source)
         share = split.earner

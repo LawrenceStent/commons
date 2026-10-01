@@ -29,23 +29,23 @@ class MarketCommands(CommandBase):
             return Outcome(False, f"job {job_id} is not on the board")
         # at most two open jobs (or one per awake member), counting claims waiting for allocation
         w, p = self.w, self.w.params
-        held = w.board.held_jobs(self.me.name) + (len(w.board.pending_claims(self.me.name)) if p.claim_allocation else 0)
+        held = w.board.held_jobs(self.me.name) + (len(w.board.pending_claims(self.me.name)) if p.market.claim_allocation else 0)
         limit = w.board.claim_limit(self.me)
         if held >= limit:
             return Outcome(False, f"you already hold or have claimed {held} jobs, the most you can (two, or one per "
                                   f"awake member); finish one first")
-        bond = bond_for(job.reward, p.claim_bond)
+        bond = bond_for(job.reward, p.market.claim_bond)
         if bond and w.ledger.balance(purse(self.me.name)) < bond:
             return Outcome(False, f"claiming {job_id} needs a {bond} bond if you win it; you can't afford it")
-        if p.claim_allocation and self.me.name in w.board.claims.get(job_id, {}):
+        if p.market.claim_allocation and self.me.name in w.board.claims.get(job_id, {}):
             return Outcome(False, f"you have already claimed {job_id}; it is allocated at the end of the cycle")
         if err := self._use_capacity():
             return err
-        if p.claim_allocation:
+        if p.market.claim_allocation:
             w.board.claims.setdefault(job_id, {})[self.me.name] = w.cycle
             return Outcome(True, f"claim on {job_id} registered; jobs are allocated at the end of the cycle to the most "
                                  f"trusted, best-fitting claimant (bond {bond} if you win)", job_id)
-        job.claim(self.me.name, deadline=w.cycle + p.job_ttl)
+        job.claim(self.me.name, deadline=w.cycle + p.market.job_ttl)
         return Outcome(True, f"claimed {job_id}; submit all parts by cycle {job.deadline}", job_id)
 
     @command()
@@ -152,7 +152,7 @@ class MarketCommands(CommandBase):
 
     @command()
     def review(self, contract_id: ContractId, accept: bool, reason: str = "") -> Outcome:
-        if self.w.params.grader_reviews:
+        if self.w.params.market.grader_reviews:
             return Outcome(False, "the grader judges deliveries; there is nothing for you to review")
         c = self._contract(contract_id)
         if c is None or c.prime != self.me.name or c.status != ContractStatus.DELIVERED:
@@ -183,20 +183,20 @@ class MarketCommands(CommandBase):
         Found for you: the prime pays what it owed plus your audit fee, and the audit counts
         against it. Found against you: you lose the fee, and the audit counts against you."""
         w, p = self.w, self.w.params
-        if p.grader_reviews:
+        if p.market.grader_reviews:
             return Outcome(False, "deliveries are judged by the grader, so there is no prime's rejection to dispute")
         c = self._contract(contract_id)
         if c is not None and c.winner == self.me.name and c.disputed:
             return Outcome(False, f"{contract_id} has already been audited")
         if c is None or c.winner != self.me.name or c.status != ContractStatus.REJECTED:
             return Outcome(False, f"you have no rejected delivery {contract_id} to dispute")
-        if w.cycle > c.closed + p.dispute_window:
-            return Outcome(False, f"too late: disputes must be filed within {p.dispute_window} cycles of the rejection")
+        if w.cycle > c.closed + p.contracts.dispute_window:
+            return Outcome(False, f"too late: disputes must be filed within {p.contracts.dispute_window} cycles of the rejection")
         try:
-            w.ledger.transfer(purse(self.me.name), "treasury", p.audit_cost, cycle=w.cycle, kind="audit", memo=f"dispute {contract_id}")
+            w.ledger.transfer(purse(self.me.name), "treasury", p.contracts.audit_cost, cycle=w.cycle, kind="audit", memo=f"dispute {contract_id}")
         except InsufficientFunds:
-            return Outcome(False, f"an audit costs {p.audit_cost}; you can't afford it")
+            return Outcome(False, f"an audit costs {p.contracts.audit_cost}; you can't afford it")
         if not self._send(Dispute(job_id=contract_id, subject=c.prime, reason=reason[:300])):
-            w.ledger.transfer("treasury", purse(self.me.name), p.audit_cost, cycle=w.cycle, kind="audit", memo=f"refund {contract_id}")
+            w.ledger.transfer("treasury", purse(self.me.name), p.contracts.audit_cost, cycle=w.cycle, kind="audit", memo=f"refund {contract_id}")
             return Outcome(False, "rate-limited: your standing caps how much you can post per cycle")
         return w.contract_net.audit(c, reason[:300])

@@ -32,7 +32,7 @@ class PlanningCommands(CommandBase):
             return Outcome(False, f"the market won't consider it: {why}")
         if err := self._use_capacity():
             return err
-        fee = self.w.params.venture_fee
+        fee = self.w.params.ventures.venture_fee
         try:
             self.w.ledger.transfer(purse(self.me.name), "treasury", fee, cycle=self.w.cycle, kind="venture", memo=title[:40])
         except InsufficientFunds:

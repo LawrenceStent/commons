@@ -241,9 +241,12 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
 - [x] **Done when:** any command's call path is readable from its definition; golden identical
 
 ### R9. Configuration (S) — S7, D3
-- [ ] R9.1 Grouped, typed configs (economy, contracts, population, knowledge, runtime, storage)
-- [ ] R9.2 Compatibility constructor for today's flat names; packs override by group
-- [ ] **Done when:** no service reads a group it doesn't own; golden identical
+- [x] R9.1 Grouped, typed configs: run, money, market, contracts, ventures, population, knowledge, trust, runtime,
+      storage (frozen dataclasses generated from the flat fields, so nothing is declared twice)
+- [x] R9.2 Compatibility constructor for today's flat names (`Params` itself, now frozen). Packs keep flat names: each
+      belongs to exactly one group, so nesting their overrides would add structure without information
+- [x] **Done when:** no service reads a group it doesn't own; golden identical. `tests/application/test_params.py`
+      declares the groups each module reads and fails on any other, or on a flat read
 
 ### R10. Agents (M) — S3, S6
 - [ ] R10.1 `Agent` protocol; the LLM agent no longer inherits the scripted strategy

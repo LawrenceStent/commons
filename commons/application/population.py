@@ -54,14 +54,14 @@ def _new_id(w: World, kind: str) -> str:
 # ── spawn / retire ─────────────────────────────────────────────
 def propose_spawn(w: World, me: Community, role: str) -> Outcome:
     p = w.params
-    if me.members >= p.max_members:
+    if me.members >= p.population.max_members:
         return Outcome(False, f"you already have {me.members} members, the most a community can have; fork instead")
     if any(x.proposer == me.name and x.kind == "spawn" and x.status == ProposalStatus.OPEN for x in w.proposals.values()):
         return Outcome(False, "you already have a spawn waiting for a second")
-    if w.ledger.balance(purse(me.name)) < p.spawn_fee:
-        return Outcome(False, f"a spawn costs {p.spawn_fee}; you can't afford it")
+    if w.ledger.balance(purse(me.name)) < p.population.spawn_fee:
+        return Outcome(False, f"a spawn costs {p.population.spawn_fee}; you can't afford it")
     pid = _new_id(w, "spawn")
-    w.proposals[pid] = Proposal(pid, "spawn", me.name, w.cycle, w.cycle + p.spawn_window, role=role[:60])
+    w.proposals[pid] = Proposal(pid, "spawn", me.name, w.cycle, w.cycle + p.population.spawn_window, role=role[:60])
     asked = tuple(o.name for o in w.communities.values() if o.name != me.name and not o.dissolved)
     w.events.publish(ev.SpawnProposed(w.proposals[pid], asked))
     return Outcome(True, f"proposed {pid}; it needs a second from another community by cycle {w.proposals[pid].deadline}", pid)
@@ -74,11 +74,11 @@ def second_spawn(w: World, me: Community, pid: str) -> Outcome:
     if x.proposer == me.name:
         return Outcome(False, "a spawn needs a second from a different community")
     prop = w.communities[x.proposer]
-    if prop.members >= w.params.max_members:
+    if prop.members >= w.params.population.max_members:
         x.status = ProposalStatus.FAILED
         return Outcome(False, f"{prop.name} is already at the member limit")
     try:
-        w.ledger.transfer(purse(prop.name), "treasury", w.params.spawn_fee, cycle=w.cycle, kind="spawn", memo=pid)
+        w.ledger.transfer(purse(prop.name), "treasury", w.params.population.spawn_fee, cycle=w.cycle, kind="spawn", memo=pid)
     except InsufficientFunds:
         x.status = ProposalStatus.FAILED
         w.events.publish(ev.SpawnFailed(x))
@@ -87,7 +87,7 @@ def second_spawn(w: World, me: Community, pid: str) -> Outcome:
     x.status = ProposalStatus.DONE
     agent = f"{prop.name}#{prop.members}"
     w.send(prop, Spawn(agent=agent, role=x.role, seconded_by=me.name))
-    w.events.publish(ev.Spawned(x, agent, me.name, prop.members, w.params.spawn_fee))
+    w.events.publish(ev.Spawned(x, agent, me.name, prop.members, w.params.population.spawn_fee))
     return Outcome(True, f"seconded {pid}; {prop.name} now has {prop.members} members")
 
 
@@ -108,8 +108,8 @@ def fork(w: World, me: Community, name: str, members: int, capabilities: tuple[s
         return Outcome(False, "a community name is 2-24 characters: lowercase letters, digits and hyphens, starting with a letter")
     if name in w.communities:
         return Outcome(False, f"{name} already exists")
-    if sum(not c.dissolved for c in w.communities.values()) >= p.max_communities:
-        return Outcome(False, f"the commons is at its limit of {p.max_communities} communities")
+    if sum(not c.dissolved for c in w.communities.values()) >= p.population.max_communities:
+        return Outcome(False, f"the commons is at its limit of {p.population.max_communities} communities")
     if not 1 <= members < me.members:
         return Outcome(False, f"a fork takes between 1 and {me.members - 1} members; someone has to stay")
     caps = tuple(sorted(set(capabilities)))
@@ -120,12 +120,12 @@ def fork(w: World, me: Community, name: str, members: int, capabilities: tuple[s
 
     child = Community(name, members, set(caps), copy.deepcopy(me.strategy), charter=charter[:200] or me.charter,
                       parent=me.name)
-    child.strategy.rng = random.Random(f"{p.seed}:{name}")
+    child.strategy.rng = random.Random(f"{p.run.seed}:{name}")
     w.add_community(child)
     if share:
         w.ledger.transfer(purse(me.name), purse(name), share, cycle=w.cycle, kind="fork", memo=f"{me.name} -> {name}")
     me.members -= members
-    w.rep.inherit(me.name, name, caps, good=p.fork_good_keep, bad=1.0)
+    w.rep.inherit(me.name, name, caps, good=p.population.fork_good_keep, bad=1.0)
     w.send(me, Fork(new_community=name, members=[f"{name}#{i + 1}" for i in range(members)]))
     w.events.publish(ev.Forked(me.name, name, members, caps, share))
     return Outcome(True, f"{name} forked with {members} members, {', '.join(caps)}, and {share}; {me.members} members stay", name)
@@ -137,7 +137,7 @@ def propose_merge(w: World, me: Community, target: str) -> Outcome:
     if t is None or t.dissolved or t.name == me.name:
         return Outcome(False, f"no community {target} to merge into")
     pid = _new_id(w, "merge")
-    w.proposals[pid] = Proposal(pid, "merge", me.name, w.cycle, w.cycle + w.params.merge_window, target=target)
+    w.proposals[pid] = Proposal(pid, "merge", me.name, w.cycle, w.cycle + w.params.population.merge_window, target=target)
     w.events.publish(ev.MergeOffered(w.proposals[pid]))
     return Outcome(True, f"offered to merge into {target}; they have until cycle {w.proposals[pid].deadline}", pid)
 
@@ -152,8 +152,8 @@ def accept_merge(w: World, me: Community, pid: str) -> Outcome:
         return Outcome(False, f"{joiner.name} no longer exists")
     if _live(w, joiner.name):
         return Outcome(False, f"{joiner.name} still has jobs or contracts in flight; it can join once they close")
-    if me.members + joiner.members > w.params.max_members:
-        return Outcome(False, f"together you'd have {me.members + joiner.members} members, over the limit of {w.params.max_members}")
+    if me.members + joiner.members > w.params.population.max_members:
+        return Outcome(False, f"together you'd have {me.members + joiner.members} members, over the limit of {w.params.population.max_members}")
     moved = w.ledger.balance(purse(joiner.name))
     if moved:
         w.ledger.transfer(purse(joiner.name), purse(me.name), moved, cycle=w.cycle, kind="merge", memo=pid)
@@ -181,9 +181,9 @@ def learn(w: World, me: Community, capability: str, playbook_id: PlaybookId | No
     if playbook_id and (pb is None or pb.capability != capability):
         return Outcome(False, f"{playbook_id} isn't a {capability} playbook")
     # each capability beyond the second costs twice the last: specialists are cheap, generalists aren't
-    base = p.learn_cost * 2 ** max(0, len(me.capabilities) - 2)
-    cost = round(base * (1 - p.learn_playbook_discount)) if pb else base
-    royalty = round(p.learn_cost * p.learn_royalty) if pb and pb.author != me.name else 0
+    base = p.population.learn_cost * 2 ** max(0, len(me.capabilities) - 2)
+    cost = round(base * (1 - p.population.learn_playbook_discount)) if pb else base
+    royalty = round(p.population.learn_cost * p.population.learn_royalty) if pb and pb.author != me.name else 0
     if w.ledger.balance(purse(me.name)) < cost + royalty:
         return Outcome(False, f"learning {capability} costs {cost + royalty}; you can't afford it")
     w.meter.charge(me.name, cost, cycle=w.cycle, memo=f"learn {capability}")
@@ -203,7 +203,7 @@ def expire_proposals(w: World) -> None:
         if x.status == ProposalStatus.OPEN and w.cycle > x.deadline:
             x.status = ProposalStatus.EXPIRED
             w.events.publish(ev.ProposalExpired(x))
-    for k in [k for k, x in w.proposals.items() if x.status != ProposalStatus.OPEN and x.deadline < w.cycle - w.params.retain]:
+    for k in [k for k, x in w.proposals.items() if x.status != ProposalStatus.OPEN and x.deadline < w.cycle - w.params.storage.retain]:
         del w.proposals[k]
 
 

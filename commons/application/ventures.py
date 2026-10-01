@@ -35,8 +35,8 @@ def check(w: World, me: Community, title: str, pitch: str, parts: list[tuple[str
     """A reason to refuse, or None. Deterministic: the same proposal in the same world gets the same answer."""
     p = w.params
     standing = w.standing(me.name)
-    if standing < p.bid_floor:
-        return f"your standing is {standing:.2f}, below the {p.bid_floor:.2f} line"
+    if standing < p.contracts.bid_floor:
+        return f"your standing is {standing:.2f}, below the {p.contracts.bid_floor:.2f} line"
     if any(v.proposer == me.name and v.status == VentureStatus.PENDING for v in w.ventures.values()):
         return "you already have a venture waiting for appraisal"
     held = sum(j.prime == me.name and j.status == JobStatus.CLAIMED for j in w.jobs.values())

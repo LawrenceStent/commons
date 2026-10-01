@@ -20,7 +20,7 @@ class GossipService:
         for c in self.w.active():
             if not c.strategy.gossips:
                 continue
-            beliefs = sorted(self.w.rep.beliefs(c.name), key=lambda b: -b[3])[: self.w.params.gossip_fanout]
+            beliefs = sorted(self.w.rep.beliefs(c.name), key=lambda b: -b[3])[: self.w.params.trust.gossip_fanout]
             for subject, cap, score, n in beliefs:
                 self.w.send(c, Gossip(subject=subject, capability=cap, score=round(score, 4), evidence=round(n, 3)))
         # every community consumes the reputation stream through its own consumer group

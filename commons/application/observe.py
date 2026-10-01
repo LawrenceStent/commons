@@ -87,12 +87,12 @@ class ObservationBuilder:
             my_announcements=tuple(view(c, True) for c in cs if c.status == ContractStatus.OPEN and c.prime == name),
             to_deliver=tuple(view(c, False) for c in cs if c.status == ContractStatus.AWARDED and c.winner == name),
             to_review=tuple(view(c, True) for c in cs if c.status == ContractStatus.DELIVERED and c.prime == name
-                            and not p.grader_reviews),
+                            and not p.market.grader_reviews),
             to_attest=tuple(view(c, False) for c in cs if c.winner == name and c.closed is not None
                             and c.status in closed and not c.winner_attested),
-            to_dispute=tuple(view(c, False) for c in cs if not p.grader_reviews and c.winner == name
+            to_dispute=tuple(view(c, False) for c in cs if not p.market.grader_reviews and c.winner == name
                              and c.status == ContractStatus.REJECTED and not c.disputed
-                             and self.w.cycle <= c.closed + p.dispute_window),
+                             and self.w.cycle <= c.closed + p.contracts.dispute_window),
             owed=sum(c.owed for c in cs if c.prime == name and c.status in (ContractStatus.AWARDED, ContractStatus.DELIVERED)),
             pending_claims=tuple(self.w.board.pending_claims(name)),
         )
@@ -129,12 +129,12 @@ class ObservationBuilder:
         """What the world offers: its rules' numbers, the archive, the economy's pool, the web."""
         p = self.w.params
         return dict(
-            params={"sub_share": p.sub_share, "work_cost": p.work_cost, "advance_frac": p.advance_frac,
-                    "publish_cost": p.publish_cost, "spawn_fee": p.spawn_fee, "venture_fee": p.venture_fee,
-                    "learn_cost": p.learn_cost, "audit_cost": p.audit_cost, "max_members": p.max_members,
-                    "pass_score": p.pass_score, "max_communities": p.max_communities,
-                    "communities": len(self.w.living()), "upkeep": p.upkeep,
-                    "actions_per_member": p.actions_per_member, "job_ttl": p.job_ttl},
+            params={"sub_share": p.contracts.sub_share, "work_cost": p.money.work_cost, "advance_frac": p.contracts.advance_frac,
+                    "publish_cost": p.knowledge.publish_cost, "spawn_fee": p.population.spawn_fee, "venture_fee": p.ventures.venture_fee,
+                    "learn_cost": p.population.learn_cost, "audit_cost": p.contracts.audit_cost, "max_members": p.population.max_members,
+                    "pass_score": p.market.pass_score, "max_communities": p.population.max_communities,
+                    "communities": len(self.w.living()), "upkeep": p.money.upkeep,
+                    "actions_per_member": p.money.actions_per_member, "job_ttl": p.market.job_ttl},
             archive=(len(self.w.archive), tuple(sorted({x.source for x in self.w.archive.passages.values()}))),
             grants=self.w.payment.view(self.w.payments.pool_balance()),
             web=self.w.gate.policy.describe() if self.w.web else "",
