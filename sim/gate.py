@@ -32,8 +32,10 @@ from __future__ import annotations
 
 import json
 from collections import Counter
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from pathlib import Path
+
+from substrate.jsonl import JsonlLog
 
 RISKS = ("read", "contact", "publish", "spend")
 TOOLS = {"web_search": "read", "web_fetch": "read"}  # tool -> risk class
@@ -119,7 +121,8 @@ class Gate:
         self.used: Counter[str] = Counter()  # web calls this cycle, per co-op
         self.errors: list[str] = []
         self._seq = 0
-        self._offset = 0
+        self._requests = JsonlLog(self.folder / "gate-requests.jsonl" if self.folder else None)
+        self._decisions = JsonlLog(self.folder / "gate.jsonl" if self.folder else None)
 
     def begin_cycle(self) -> None:
         self.used = Counter()
@@ -196,24 +199,12 @@ class Gate:
 
     # ── files, for headless runs ───────────────────────────────
     def _write(self, r: Request) -> None:
-        if self.folder:
-            with open(self.folder / "gate-requests.jsonl", "a") as f:
-                f.write(json.dumps({**asdict(r), "id": f"{self.run}/{r.id}"}) + "\n")
+        self._requests.append({**asdict(r), "id": f"{self.run}/{r.id}"})
 
     def reload(self) -> list[Request]:
         """Your decisions from gate.jsonl since the last read (this run's requests only)."""
-        path = self.folder / "gate.jsonl" if self.folder else None
-        if not path or not path.exists():
-            return []
-        with open(path) as f:
-            f.seek(self._offset)
-            text = f.read()
-        complete = text[: text.rfind("\n") + 1]
-        self._offset += len(complete.encode())
         out = []
-        for line in complete.splitlines():
-            if not line.strip():
-                continue
+        for line in self._decisions.read_new():
             try:
                 d = json.loads(line)
                 run, _, rid = str(d["id"]).rpartition("/")
@@ -229,22 +220,10 @@ class Gate:
 
 def pending_in(folder: Path) -> list[dict]:
     """Requests in a society folder that have no decision yet (for the command line)."""
-    def read(p: Path) -> list[dict]:
-        if not p.exists():
-            return []
-        out = []
-        for line in p.read_text().splitlines():
-            try:
-                out.append(json.loads(line))
-            except json.JSONDecodeError:
-                pass
-        return out
-
-    decided = {d.get("id") for d in read(folder / "gate.jsonl")}
-    return [r for r in read(folder / "gate-requests.jsonl") if r["id"] not in decided]
+    decided = {d.get("id") for d in JsonlLog(folder / "gate.jsonl").read_all()}
+    return [r for r in JsonlLog(folder / "gate-requests.jsonl").read_all() if r["id"] not in decided]
 
 
 def record(folder: Path, request_id: str, approve: bool, always: bool = False, reason: str = "") -> None:
-    with open(folder / "gate.jsonl", "a") as f:
-        f.write(json.dumps({"id": request_id, "decision": "approve" if approve else "deny", "always": always,
-                            "reason": reason}) + "\n")
+    JsonlLog(folder / "gate.jsonl").append({"id": request_id, "decision": "approve" if approve else "deny",
+                                            "always": always, "reason": reason})

@@ -21,6 +21,8 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+from substrate.jsonl import JsonlLog
+
 SCALE = {0: "wrong or harmful", 1: "not useful", 2: "useful", 3: "very useful"}
 EVIDENCE = {0: 0.0, 1: 0.4, 2: 0.8, 3: 1.0}  # what a rating says about the work, as a reputation outcome
 
@@ -41,9 +43,10 @@ class Ratings:
         self.samples: dict[str, dict] = {}  # this run's samples by id (who did what), for applying ratings
         self.errors: list[str] = []
         self._paid = 0
-        self._offset = 0  # bytes of ratings.jsonl already read
         if self.folder:
             self.folder.mkdir(parents=True, exist_ok=True)
+        self._samples = JsonlLog(self.folder / "samples.jsonl" if self.folder else None)
+        self._ratings = JsonlLog(self.folder / "ratings.jsonl" if self.folder else None)
 
     def sample(self, record: dict) -> bool:
         """Offer every `every`-th paid job for rating. Deterministic, so the same run samples the same jobs."""
@@ -52,24 +55,13 @@ class Ratings:
             return False
         record = {"id": f"{self.run}/{record['job']}", **record}
         self.samples[record["id"]] = record
-        with open(self.folder / "samples.jsonl", "a") as f:
-            f.write(json.dumps(record) + "\n")
+        self._samples.append(record)
         return True
 
     def reload(self) -> list[Rating]:
         """New ratings since the last read. A later rating of the same job replaces the earlier one."""
-        path = self.folder / "ratings.jsonl" if self.folder else None
-        if not path or not path.exists():
-            return []
-        with open(path) as f:
-            f.seek(self._offset)
-            text = f.read()
-        complete = text[: text.rfind("\n") + 1]  # a line still being written waits for the next cycle
-        self._offset += len(complete.encode())
         new = []
-        for line in complete.splitlines():
-            if not line.strip():
-                continue
+        for line in self._ratings.read_new():
             try:
                 d = json.loads(line)
                 r = Rating(str(d["id"]), int(d["rating"]), str(d.get("note", ""))[:300])
@@ -84,25 +76,12 @@ class Ratings:
         return new
 
 
-def _read_jsonl(path: Path) -> list[dict]:
-    if not path.exists():
-        return []
-    out = []
-    for line in path.read_text().splitlines():
-        try:
-            out.append(json.loads(line))
-        except json.JSONDecodeError:
-            pass
-    return out
-
-
 def unrated(folder: Path) -> list[dict]:
-    done = {d.get("id") for d in _read_jsonl(folder / "ratings.jsonl")}
-    return [s for s in _read_jsonl(folder / "samples.jsonl") if s["id"] not in done]
+    done = {d.get("id") for d in JsonlLog(folder / "ratings.jsonl").read_all()}
+    return [s for s in JsonlLog(folder / "samples.jsonl").read_all() if s["id"] not in done]
 
 
 def add(folder: Path, sample_id: str, rating: int, note: str = "") -> None:
     if rating not in SCALE:
         raise ValueError(f"rating must be one of {sorted(SCALE)}")
-    with open(folder / "ratings.jsonl", "a") as f:
-        f.write(json.dumps({"id": sample_id, "rating": rating, "note": note}) + "\n")
+    JsonlLog(folder / "ratings.jsonl").append({"id": sample_id, "rating": rating, "note": note})

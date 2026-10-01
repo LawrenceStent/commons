@@ -149,7 +149,7 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
 - [x] **Done when:** the golden master passes twice on an untouched tree and catches a one-character change
 
 ### R1. Quick wins, in place (M) — D1 to D6, C3 (part), A6
-- [ ] R1.1 `JsonlLog` (append, incremental read, read all), used by ratings and the gate (D1, D6)
+- [x] R1.1 `JsonlLog` (append, incremental read, read all), used by ratings and the gate (D1, D6)
 - [ ] R1.2 One backend factory with the spend check, used by every command (D2, S5)
 - [ ] R1.3 Live economy defaults in the kernel; packs override only what differs (D3)
 - [ ] R1.4 `LLMGrader` adds the answer format itself; packs drop their copies (D4)
