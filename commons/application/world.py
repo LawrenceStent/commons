@@ -42,7 +42,6 @@ from commons.application.observation import (
     IdeaView,
     JobView,
     Observation,
-    Outcome,
     PartView,
     PeerView,
     PlaybookView,
@@ -52,19 +51,20 @@ from commons.application.observation import (
 from commons.application.operator import Operator
 from commons.application.params import Params
 from commons.application.population import Proposal
-from commons.application.ports import WebError, WebPort, host_of
+from commons.application.ports import WebPort
 from commons.application.ratings import Ratings
 from commons.application.services.board import JobBoard
 from commons.application.services.contract_net import ContractNet
 from commons.application.services.grading import Grading
 from commons.application.services.payments import Payments
 from commons.application.services.ratings import RatingDesk
+from commons.application.services.upkeep import Upkeep
 from commons.application.services.ventures import VentureDesk
+from commons.application.services.web import WebDesk
 from commons.domain.archive import ArchiveIndex
 from commons.domain.community import Community
 from commons.domain.contract import Contract
 from commons.domain.economy import PaymentPolicy, policy_for
-from commons.domain.gate import Request as GateRequest
 from commons.domain.goals import Plans
 from commons.domain.grading import Grader, StubGrader
 from commons.domain.ids import Sequences
@@ -80,15 +80,13 @@ from commons.domain.status import (
     ContractStatus,
     JobStatus,
     ProposalStatus,
-    RequestStatus,
 )
-from commons.domain.treasury import floor_top_up, members_to_wake
 from commons.domain.ventures import Appraiser, StubAppraiser, Venture
 from commons.protocol import Envelope, Message
 from commons.protocol.reputation import Gossip
 from commons.substrate.activity import ActivityLog
 from commons.substrate.bus import Bus, MemoryBus, RateLimited
-from commons.substrate.ledger import InsufficientFunds, Ledger, purse
+from commons.substrate.ledger import Ledger, purse
 from commons.substrate.meter import Meter
 from commons.substrate.registry import Registry
 from commons.substrate.reputation import Reputation
@@ -133,7 +131,7 @@ class World:
         self.meter = Meter(self.ledger, daily_ceiling=p.daily_ceiling, hub=self.hub)
         self.rep = Reputation(decay=p.decay, hub=self.hub)
         self.bus = bus or _default_bus(p, self.hub)
-        self.bus.standing = self._standing  # the bus rations messages by this society's trust
+        self.bus.standing = self.standing  # the bus rations messages by this society's trust
         self.registry = self.bus.registry
         self.grader = grader or StubGrader(cost=p.grade_cost)
         self.appraiser = appraiser or StubAppraiser()
@@ -147,7 +145,6 @@ class World:
         self.gate.policy = self.operator.gate
         if self.web:
             self.web.set_hosts(self.gate.policy.allow_hosts)
-        self.web_pages: dict[str, list[str]] = {}  # url -> archive passage ids, for pages read this run
         self.outputs: deque[dict] = deque(maxlen=p.outputs_keep)  # paid work, newest last: who did what, how it scored
         # how passing work is paid: given, or chosen once from the settings
         self.payment = payment or policy_for(p.economy, p.grant_budget, p.grant_cap_cycles)
@@ -168,6 +165,8 @@ class World:
         self.plans: defaultdict[str, Plans] = defaultdict(Plans)  # ideas and goals per community
         self.activity = activity or _default_activity(p)
         self.activity.watch(self.hub)
+        self.upkeep = Upkeep(self)
+        self.web_desk = WebDesk(self)
         self.rating_desk = RatingDesk(self)
         self.payments = Payments(self)
         self.venture_desk = VentureDesk(self)
@@ -185,7 +184,7 @@ class World:
             self.registry.register(c.name, c.identity.public, sorted(c.capabilities), c.charter)
             self.ledger.transfer("genesis", purse(c.name), p.purse_seed, cycle=0, kind="genesis")
 
-    def _add_community(self, c: Community) -> None:
+    def add_community(self, c: Community) -> None:
         """A community born mid-run (a fork). Its history starts empty, not back-filled."""
         p = self.params
         self.communities[c.name] = c
@@ -196,14 +195,14 @@ class World:
         self._stats[c.name] = Counter()
 
     # ── helpers ────────────────────────────────────────────────
-    def _standing(self, name: str) -> float:
+    def standing(self, name: str) -> float:
         return self.rep.standing(name) if self.params.reputation else 0.5
 
     def eligible(self, prime: str, bidder: str, capability: str) -> tuple[bool, str]:
         """Whether the commons lets `bidder` work for `prime` in `capability`. Deterministic; with
         reputation switched off (the control run) everyone is neutral and eligible."""
         floor = self.params.bid_floor
-        standing = self._standing(bidder)
+        standing = self.standing(bidder)
         if standing < floor:
             return False, f"{bidder}'s standing in the commons is {standing:.2f}, below the {floor:.2f} line"
         trust = self._trust(prime, bidder, capability)
@@ -214,23 +213,23 @@ class World:
     def _trust(self, observer: str, subject: str, capability: str) -> float:
         return self.rep.score(observer, subject, capability) if self.params.reputation else 0.5
 
-    def _tell(self, name: str, kind: str, text: str, ref: str | None = None) -> None:
+    def tell(self, name: str, kind: str, text: str, ref: str | None = None) -> None:
         self.inbox[name].append(Event(self.cycle, kind, text, ref))
 
-    def _stat(self, name: str, key: str, n: int = 1) -> None:
+    def stat(self, name: str, key: str, n: int = 1) -> None:
         self._stats[name][key] += n
 
-    def _send(self, c: Community, msg: Message) -> bool:
+    def send(self, c: Community, msg: Message) -> bool:
         try:
             self.bus.publish(Envelope.seal(c.identity, msg, self.cycle))
             return True
         except RateLimited:
             return False
 
-    def _active(self) -> list[Community]:
+    def active(self) -> list[Community]:
         return [c for c in self.communities.values() if c.active and not c.dissolved]
 
-    def _living(self) -> list[Community]:
+    def living(self) -> list[Community]:
         return [c for c in self.communities.values() if not c.dissolved]
 
     # ── the cycle ──────────────────────────────────────────────
@@ -243,39 +242,7 @@ class World:
             self.step()
         return self
 
-    def _floor(self) -> None:
-        """The basic budget tops up poor purses only: enough to think, not enough to coast.
-        A community that never wakes can't bank handouts, and a rich one doesn't need them."""
-        p = self.params
-        for c in self._living():
-            top_up = floor_top_up(purse=self.ledger.balance(purse(c.name)), cap=p.floor_cap,
-                                  treasury=self.ledger.balance("treasury"), budget=p.basic_budget)
-            if top_up is None:
-                return
-            if top_up:
-                self.ledger.transfer("treasury", purse(c.name), top_up, cycle=self.cycle, kind="floor")
-
-    def _upkeep(self) -> None:
-        """Each community decides how many members to wake, and pays for them. Thinking is the
-        cost of doing business, so it is a choice; none awake means silence this cycle."""
-        p = self.params
-        for c in list(self.communities.values()):
-            c.capacity = 0
-            if c.dissolved:
-                c.thinking, c.active = 0, False
-                continue
-            want = c.strategy.wake(self.observe(c))
-            c.thinking = members_to_wake(wanted=want, members=c.members, purse=self.ledger.balance(purse(c.name)),
-                                         upkeep=p.upkeep)
-            if c.thinking:
-                try:
-                    self.meter.charge(c.name, c.thinking * p.upkeep, cycle=self.cycle, memo="upkeep")
-                except InsufficientFunds:
-                    c.thinking = 0
-            c.active = c.thinking > 0
-            c.capacity = c.thinking * p.actions_per_member
-
-    def _turn(self, c: Community) -> None:
+    def turn(self, c: Community) -> None:
         with self.lock:
             obs = self.observe(c)
             self.inbox[c.name].clear()
@@ -286,94 +253,6 @@ class World:
     # ── called by the actions executor ────────────────────────
 
     # ── the web, behind the gate ───────────────────────────────
-    def _gate_cycle(self) -> None:
-        """A new cycle for the gate: fresh web budgets, your decisions from file, expired requests. Under the lock."""
-        self.gate.begin_cycle()
-        for r in self.gate.reload():
-            self._gate_decided(r)
-        for r in self.gate.expire(self.cycle):
-            self._tell(r.coop, "gate", f"{r.id} ({r.tool} {r.target[:80]}) expired without a decision", r.id)
-            self.hub.emit("gate.decision", self.cycle, id=r.id, coop=r.coop, status=r.status)
-
-    def gate_decide(self, ids, approve: bool, always: bool = False, reason: str = "") -> list[GateRequest]:
-        """Your decisions, from the dashboard. Approved requests run at the start of the next cycle."""
-        with self.lock:
-            done = self.gate.decide(ids, approve, always, reason)
-            for r in done:
-                self._gate_decided(r)
-            return done
-
-    def _gate_decided(self, r: GateRequest) -> None:
-        what = f"{r.tool} {r.target[:80]}"
-        if r.status == RequestStatus.DENIED:
-            self._tell(r.coop, "gate", f"the operator denied {r.id} ({what})" + (f": {r.reason}" if r.reason else ""), r.id)
-        else:
-            self._tell(r.coop, "gate", f"the operator approved {r.id} ({what}); it runs at the start of next cycle"
-                       + (f", and your reads from {r.host} no longer need approval" if r.always else ""), r.id)
-        self.activity.add(self.cycle, r.coop, "operator", "change", "gate", f"{r.status} {r.id}: {what}", r.status == RequestStatus.APPROVED,
-                          {"id": r.id, "always": r.always})
-        self.hub.emit("gate.decision", self.cycle, id=r.id, coop=r.coop, status=r.status, always=r.always)
-
-    def web_call(self, coop: str, actor: str, tool: str, target: str):
-        """A web read an agent asked for. Called WITHOUT the world's lock: the network is slow, so the lock is taken
-        only to ask the gate and to record the result."""
-        target = str(target).strip()[:500]
-        if not self.web or not self.gate.policy.allow_hosts:
-            return Outcome(False, "this society has no web access (the operator allows no hosts)")
-        if tool == "web_fetch":
-            with self.lock:
-                if target in self.web_pages:
-                    ids = self.web_pages[target]
-                    return Outcome(True, f"already read: {target} is archive passages {', '.join(ids)}; use read_archive",
-                                   ids[0] if ids else None)
-            host = host_of(target)
-        else:
-            if self.web.search_host is None or self.gate.policy.search == "none":
-                return Outcome(False, "this society has no web search; web_fetch a page on an allowed host instead")
-            host = self.web.search_host
-        with self.lock:
-            verdict, r = self.gate.ask(coop, actor, tool, target, host, self.cycle)
-            if isinstance(r, GateRequest):
-                self.hub.emit("gate.request", self.cycle, id=r.id, coop=coop, tool=tool, target=target, host=host,
-                              status=r.status)
-        if verdict == "deny":
-            return Outcome(False, f"the gate refused: {r}")
-        if verdict == "pending":
-            return Outcome(False, f"waiting for the operator's approval as {r.id}. If approved it runs at the start of a "
-                                  f"later cycle and you'll be told the result; don't ask again.", r.id)
-        return self._execute_web(r)
-
-    def _run_approved_web(self) -> None:
-        """Requests you approved since last cycle: run them (outside the lock) and tell whoever asked."""
-        with self.lock:
-            todo = self.gate.approved()
-        for r in todo:
-            out = self._execute_web(r)
-            with self.lock:
-                self._tell(r.coop, "gate", f"{r.id} ran: {out.message[:700]}", r.id)
-
-    def _execute_web(self, r: GateRequest):
-        try:
-            if r.tool == "web_search":
-                results = self.web.search(r.target, k=5)
-                text = "\n".join(f"- {x.title}: {x.url}\n  {x.snippet[:200]}" for x in results) or "no results"
-                msg, ref = f"search results for {r.target!r} (web_fetch a url to read it):\n{text}", None
-            else:
-                page = self.web.fetch(r.target)
-                with self.lock:
-                    ids = self.archive.add_page(page.url, page.title, page.text, fetched=f"cycle {self.cycle}")
-                    self.web_pages[r.target] = self.web_pages[page.url] = ids
-                first = self.archive.get(ids[0]).text if ids else ""
-                msg, ref = (f"read {page.url} ({page.title[:80]}) into the archive as {len(ids)} passage(s): "
-                            f"{', '.join(ids[:12])}{' …' if len(ids) > 12 else ''}. Cite them as [archive: <id>]. The "
-                            f"first:\n<untrusted>\n{first[:1500]}\n</untrusted>"), (ids[0] if ids else None)
-            ok = True
-        except WebError as e:
-            msg, ref, ok = f"{r.tool} failed: {e}", None, False
-        with self.lock:
-            r.status, r.result = (RequestStatus.DONE if ok else RequestStatus.FAILED), msg[:300]
-            self.hub.emit("web.call", self.cycle, id=r.id, coop=r.coop, tool=r.tool, target=r.target, ok=ok)
-        return Outcome(ok, msg, ref)
 
     def efficiency(self, name: str) -> dict[str, float]:
         """Value per unit of thought: what a co-op has earned against what it has spent to think (upkeep, work
@@ -398,7 +277,7 @@ class World:
                 for cap, part in sorted(j.parts.items())), j.deadline)
 
         def contract_view(c: Contract, as_prime: bool) -> ContractView:
-            bids = tuple(BidView(b, price, round(self._trust(name, b, c.capability), 3), round(self._standing(b), 3),
+            bids = tuple(BidView(b, price, round(self._trust(name, b, c.capability), 3), round(self.standing(b), 3),
                                  *self.eligible(name, b, c.capability))
                          for b, price in sorted(c.bids.items())) if as_prime else ()
             show = as_prime and c.status != ContractStatus.OPEN or c.winner == name
@@ -410,7 +289,7 @@ class World:
         return Observation(
             cycle=self.cycle, name=name, charter=me.charter, capabilities=tuple(sorted(me.capabilities)),
             members=me.members, funded=me.thinking, capacity=me.capacity,
-            purse=self.ledger.balance(purse(name)), standing=round(self._standing(name), 3),
+            purse=self.ledger.balance(purse(name)), standing=round(self.standing(name), 3),
             board=tuple(job_view(j) for j in self.jobs.values() if j.status == JobStatus.OPEN),
             my_jobs=tuple(job_view(j) for j in self.jobs.values() if j.status == JobStatus.CLAIMED and j.prime == name),
             # a world rule: contracts the commons would refuse my bid on aren't offered at all
@@ -426,13 +305,13 @@ class World:
             to_attest=tuple(contract_view(c, False) for c in cs
                             if c.winner == name and c.closed is not None and c.status in (ContractStatus.ACCEPTED, ContractStatus.REJECTED, ContractStatus.FAILED)
                             and not c.winner_attested),
-            peers=tuple(PeerView(o.name, tuple(sorted(o.capabilities)), o.members, round(self._standing(o.name), 3),
+            peers=tuple(PeerView(o.name, tuple(sorted(o.capabilities)), o.members, round(self.standing(o.name), 3),
                                  {cap: round(self._trust(name, o.name, cap), 3) for cap in sorted(o.capabilities)})
-                        for o in self._living() if o.name != name),
-            spawn_requests=tuple(ProposalView(x.id, x.kind, x.proposer, x.deadline, x.role, round(self._standing(x.proposer), 3))
+                        for o in self.living() if o.name != name),
+            spawn_requests=tuple(ProposalView(x.id, x.kind, x.proposer, x.deadline, x.role, round(self.standing(x.proposer), 3))
                                  for x in self.proposals.values()
                                  if x.kind == "spawn" and x.status == ProposalStatus.OPEN and x.proposer != name),
-            merge_offers=tuple(ProposalView(x.id, x.kind, x.proposer, x.deadline, "", round(self._standing(x.proposer), 3))
+            merge_offers=tuple(ProposalView(x.id, x.kind, x.proposer, x.deadline, "", round(self.standing(x.proposer), 3))
                                for x in self.proposals.values()
                                if x.kind == "merge" and x.status == ProposalStatus.OPEN and x.target == name),
             my_proposals=tuple(ProposalView(x.id, x.kind, x.proposer, x.deadline, x.role or x.target, 0.0)
@@ -446,7 +325,7 @@ class World:
             params={"sub_share": p.sub_share, "work_cost": p.work_cost, "advance_frac": p.advance_frac, "publish_cost": p.publish_cost,
                     "spawn_fee": p.spawn_fee, "venture_fee": p.venture_fee, "learn_cost": p.learn_cost, "audit_cost": p.audit_cost,
                     "max_members": p.max_members, "pass_score": p.pass_score, "max_communities": p.max_communities,
-                    "communities": len(self._living()),
+                    "communities": len(self.living()),
                     "upkeep": p.upkeep, "actions_per_member": p.actions_per_member, "job_ttl": p.job_ttl},
             track=dict(me.deliveries),
             owed=sum(c.owed for c in cs if c.prime == name and c.status in (ContractStatus.AWARDED, ContractStatus.DELIVERED)),
@@ -465,12 +344,12 @@ class World:
 
     # ── gossip and records ─────────────────────────────────────
     def _gossip(self) -> None:
-        for c in self._active():
+        for c in self.active():
             if not c.strategy.gossips:
                 continue
             beliefs = sorted(self.rep.beliefs(c.name), key=lambda b: -b[3])[: self.params.gossip_fanout]
             for subject, cap, score, n in beliefs:
-                self._send(c, Gossip(subject=subject, capability=cap, score=round(score, 4), evidence=round(n, 3)))
+                self.send(c, Gossip(subject=subject, capability=cap, score=round(score, 4), evidence=round(n, 3)))
         # every community consumes the reputation stream through its own consumer group
         heard = 0
         for listener in self.communities.values():
@@ -485,7 +364,7 @@ class World:
         for name, c in self.communities.items():
             s = self._stats[name]
             self.history[name].append(Snapshot(
-                cycle=self.cycle, purse=self.ledger.balance(purse(name)), standing=self._standing(name),
+                cycle=self.cycle, purse=self.ledger.balance(purse(name)), standing=self.standing(name),
                 allowance=self.bus.allowance(name), active=c.active, thinking=c.thinking,
                 won=s["won"], delivered_ok=s["ok"], earned=s["earned"],
             ))

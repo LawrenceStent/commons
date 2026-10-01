@@ -42,7 +42,7 @@ class Grading:
         if not job.complete or job.status != JobStatus.CLAIMED or job.id in self.awaiting_grade:
             return
         self.awaiting_grade[job.id] = 0
-        self.w._tell(job.prime, "submitted", f"{job.id} is complete and goes to the grader at the end of this cycle", job.id)
+        self.w.tell(job.prime, "submitted", f"{job.id} is complete and goes to the grader at the end of this cycle", job.id)
 
     def settle(self) -> None:
         """Grade every submitted job and every filed audit. Model calls run outside the world's lock;
@@ -122,13 +122,13 @@ class Grading:
                 self.awaiting_grade.pop(jid)
                 self.w.board.fail(job, "the grader was unavailable")
             else:
-                self.w._tell(job.prime, "grading_delayed", f"{jid} is waiting for the grader: {errors[0]}", jid)
+                self.w.tell(job.prime, "grading_delayed", f"{jid} is waiting for the grader: {errors[0]}", jid)
             return
         self.awaiting_grade.pop(jid, None)
         if defer and job.passed(self.w.params.pass_score):
             job.defer(until=self.w.cycle + defer)
             self.deferred.add(jid)
-            self.w._tell(job.prime, "job_graded", f"{jid} passed for now; its outcome settles at cycle {job.settle_at}", jid)
+            self.w.tell(job.prime, "job_graded", f"{jid} passed for now; its outcome settles at cycle {job.settle_at}", jid)
             return
         self.w.board.finish(job)
 

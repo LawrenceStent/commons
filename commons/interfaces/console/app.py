@@ -301,7 +301,7 @@ def create_app(world: World | None = None, cycles_per_second: float = 4.0, autos
             ok = await asyncio.to_thread(locked, w.gate.revoke, str(rv.get("coop")), str(rv.get("host")))
             return {"ok": ok}
         ids = [str(i) for i in body.get("ids", [])][:500]
-        done = await asyncio.to_thread(w.gate_decide, ids, bool(body.get("approve")), bool(body.get("always")),
+        done = await asyncio.to_thread(w.web_desk.decide, ids, bool(body.get("approve")), bool(body.get("always")),
                                        str(body.get("reason", ""))[:200])
         return {"ok": True, "decided": [r.id for r in done]}
 

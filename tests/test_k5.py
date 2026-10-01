@@ -56,8 +56,8 @@ def world(tmp_path, gate="read = \"ask\"\nallow_hosts = [\"example.org\", \"*.wi
 def told(w):
     """Record what the world tells co-ops (their inboxes are cleared after every turn)."""
     out = []
-    real = w._tell
-    w._tell = lambda name, kind, text, ref=None: (out.append((name, text)), real(name, kind, text, ref))
+    real = w.tell
+    w.tell = lambda name, kind, text, ref=None: (out.append((name, text)), real(name, kind, text, ref))
     return out
 
 
@@ -80,7 +80,7 @@ def test_a_gated_read_never_reaches_the_network_without_approval(tmp_path):
     for _ in range(3):
         w.step()
     assert net.calls == [], "no decision, no request"
-    w.gate_decide(["G1"], approve=False, reason="not now")
+    w.web_desk.decide(["G1"], approve=False, reason="not now")
     w.step()
     assert net.calls == [] and w.gate.requests["G1"].status == "denied"
     assert ("coop-a", "the operator denied G1 (web_fetch https://example.org/pumps): not now") in said
@@ -91,11 +91,11 @@ def test_an_approved_read_runs_next_cycle_joins_the_archive_and_can_be_cited(tmp
     said = told(w)
     w.step()
     act(w).web_fetch("https://example.org/pumps")
-    w.gate_decide(["G1"], approve=True)
+    w.web_desk.decide(["G1"], approve=True)
     assert net.calls == []  # approval alone sends nothing; the world runs it at the start of the next cycle
     w.step()
     assert net.calls == ["https://example.org/robots.txt", "https://example.org/pumps"]
-    ids = w.web_pages["https://example.org/pumps"]
+    ids = w.web_desk.web_pages["https://example.org/pumps"]
     assert ids == ["web-example-org-pumps#1"] and "spare parts are hard to find" in w.archive.get(ids[0]).text
     assert "track()" not in w.archive.get(ids[0]).text and "menu" not in w.archive.get(ids[0]).text
     assert any(n == "coop-a" and text.startswith("G1 ran: read https://example.org/pumps") for n, text in said)
@@ -111,7 +111,7 @@ def test_expired_requests_never_run(tmp_path):
     act(w).web_fetch("https://example.org/a")
     w.run(3)
     assert w.gate.requests["G1"].status == "expired" and net.calls == []
-    assert not w.gate_decide(["G1"], approve=True)  # too late
+    assert not w.web_desk.decide(["G1"], approve=True)  # too late
 
 
 # ── policies ───────────────────────────────────────────────────
@@ -128,7 +128,7 @@ def test_always_approves_that_coop_and_host_only(tmp_path):
     w, net = world(tmp_path)
     w.step()
     act(w).web_fetch("https://example.org/a")
-    w.gate_decide(["G1"], approve=True, always=True)
+    w.web_desk.decide(["G1"], approve=True, always=True)
     w.step()
     assert act(w).web_fetch("https://example.org/b"), "standing approval: runs at once"
     assert not act(w, "coop-b").web_fetch("https://example.org/c"), "another co-op still asks"
@@ -211,7 +211,7 @@ def test_the_network_layer_holds_even_if_the_gate_approved(tmp_path):
     w, net = world(tmp_path)
     w.step()
     act(w).web_fetch("https://example.org/a")
-    w.gate_decide(["G1"], approve=True)
+    w.web_desk.decide(["G1"], approve=True)
     (tmp_path / "op" / "config.toml").write_text('[gate]\nread = "ask"\nallow_hosts = ["other.org"]\n')
     w.step()
     assert net.calls == [] and w.gate.requests["G1"].status == "failed"

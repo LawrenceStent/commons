@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 def check(w: World, me: Community, title: str, pitch: str, parts: list[tuple[str, str, str]]) -> str | None:
     """A reason to refuse, or None. Deterministic: the same proposal in the same world gets the same answer."""
     p = w.params
-    standing = w._standing(me.name)
+    standing = w.standing(me.name)
     if standing < p.bid_floor:
         return f"your standing is {standing:.2f}, below the {p.bid_floor:.2f} line"
     if any(v.proposer == me.name and v.status == VentureStatus.PENDING for v in w.ventures.values()):

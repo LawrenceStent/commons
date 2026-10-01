@@ -202,7 +202,10 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
       settlement and audits (`Grading`), in `application/services/`. Moved verbatim by a tool that rewrites references
 - [x] R6.3 Services: ventures (`VentureDesk`), payments with the economy's pool and queue (`Payments`), ratings
       (`RatingDesk`). The scorecard is evaluated by the recorder, so it moves with it in R6.5
-- [ ] R6.4 Services: population (owns its counters; no private access), knowledge and archive, web and gate
+- [x] R6.4 Services: web and gate (`WebDesk`), upkeep (`Upkeep`: floor and waking). Population no longer touches the
+      world's privates: one sequencer (`world.ids`) numbers jobs, ventures, ideas and goals, and proposals, and the
+      world's shared helpers are public (`tell`, `send`, `stat`, `standing`, `add_community`, `turn`). Knowledge and the
+      archive stay as world state (`library`, `archive`) with `add_playbook`: three lines don't need a service
 - [ ] R6.5 Services: gossip and the recorder (history, `world.cycle` telemetry)
 - [ ] R6.6 `ObservationBuilder` replaces `World.observe`
 - [ ] R6.7 `Society` facade with today's `World` API (`World` kept as an alias)

@@ -47,14 +47,14 @@ class ContractNet:
             if c.status == ContractStatus.OPEN:
                 c.expire(at=now)
                 self.stage(c, c.status)
-                self.w._tell(c.prime, "expired", f"{c.id} closed with no award", c.id)
+                self.w.tell(c.prime, "expired", f"{c.id} closed with no award", c.id)
             elif c.status == ContractStatus.AWARDED:
                 # non-delivery is objective: the substrate files the prime's complaint for it
                 c.fail(at=now)
                 self.stage(c, c.status)
                 self.w.rep.attest(c.prime, c.winner, c.capability, 0.0)
-                self.w._tell(c.prime, "failed", f"{c.winner} never delivered {c.id}", c.id)
-                self.w._tell(c.winner, "failed", f"you missed the delivery deadline on {c.id}", c.id)
+                self.w.tell(c.prime, "failed", f"{c.winner} never delivered {c.id}", c.id)
+                self.w.tell(c.winner, "failed", f"you missed the delivery deadline on {c.id}", c.id)
             elif c.status == ContractStatus.DELIVERED and c.id not in self.w.grading.pending_reviews:
                 if self.pay_remainder(c):
                     self.close_review(c, True, "accepted by default: the prime didn't review in time")
@@ -80,21 +80,21 @@ class ContractNet:
 
     def award(self, c: Contract, bidder: str, price: Micros, advance: Micros) -> None:
         c.award(bidder, price, advance, deliver_by=self.w.cycle + self.w.params.deliver_ttl)
-        self.w._stat(bidder, "won")
-        self.w._stat(bidder, "earned", advance)
-        self.w._tell(bidder, "awarded", f"you won {c.id} at {price}; advance {advance} paid; deliver by cycle {c.deadline}", c.id)
+        self.w.stat(bidder, "won")
+        self.w.stat(bidder, "earned", advance)
+        self.w.tell(bidder, "awarded", f"you won {c.id} at {price}; advance {advance} paid; deliver by cycle {c.deadline}", c.id)
         for loser in c.bids:
             if loser != bidder:
-                self.w._tell(loser, "bid_lost", f"{c.id} went to another bidder", c.id)
+                self.w.tell(loser, "bid_lost", f"{c.id} went to another bidder", c.id)
         self.stage(c, ContractStatus.AWARDED)
 
     def deliver(self, c: Contract, artifact: str, cites: tuple[str, ...]) -> None:
         c.deliver(artifact, cites, review_by=self.w.cycle + self.w.params.review_ttl)
         if self.w.params.grader_reviews:
             self.w.grading.pending_reviews[c.id] = 0
-            self.w._tell(c.prime, "delivered", f"{c.winner} delivered {c.id}; the grader judges it at the end of this cycle", c.id)
+            self.w.tell(c.prime, "delivered", f"{c.winner} delivered {c.id}; the grader judges it at the end of this cycle", c.id)
         else:
-            self.w._tell(c.prime, "delivered", f"{c.winner} delivered {c.id}; review by cycle {c.deadline}", c.id)
+            self.w.tell(c.prime, "delivered", f"{c.winner} delivered {c.id}; review by cycle {c.deadline}", c.id)
         self.stage(c, ContractStatus.DELIVERED)
 
     def pay_remainder(self, c: Contract) -> bool:
@@ -103,7 +103,7 @@ class ContractNet:
             self.w.ledger.transfer(purse(c.prime), purse(c.winner), owed, cycle=self.w.cycle, kind="contract", memo=f"settle {c.id}")
         except InsufficientFunds:
             return False
-        self.w._stat(c.winner, "earned", owed)
+        self.w.stat(c.winner, "earned", owed)
         return True
 
     def close_review(self, c: Contract, accept: bool, reason: str) -> None:
@@ -111,16 +111,16 @@ class ContractNet:
         self.stage(c, c.status)
         self.w.rep.attest(c.prime, c.winner, c.capability, 1.0 if accept else 0.0)
         if accept:
-            self.w._stat(c.winner, "ok")
+            self.w.stat(c.winner, "ok")
             track = self.w.communities[c.winner].deliveries
             track[c.capability] = track.get(c.capability, 0) + 1
-            self.w._tell(c.winner, "accepted", f"{c.prime} accepted {c.id} and paid {c.owed}", c.id)
+            self.w.tell(c.winner, "accepted", f"{c.prime} accepted {c.id} and paid {c.owed}", c.id)
             job = self.w.jobs.get(c.job_id)
             if job and job.status == JobStatus.CLAIMED and job.parts[c.capability].artifact is None:
                 job.fill(c.capability, c.artifact, source=c.id, cites=c.cites)
                 self.w.grading.maybe_submit(job)
         else:
-            self.w._tell(c.winner, "rejected", f"{c.prime} rejected {c.id}: {reason or 'no reason given'}", c.id)
+            self.w.tell(c.winner, "rejected", f"{c.prime} rejected {c.id}: {reason or 'no reason given'}", c.id)
 
     def audit(self, c: Contract, reason: str) -> Outcome:
         """File a dispute. The grader decides at the end of this cycle, outside the world's lock, so an
@@ -128,7 +128,7 @@ class ContractNet:
         c.file_dispute()
         self.w.grading.pending_audits[c.id] = {"reason": reason, "attempts": 0}
         self.stage(c, "audit_filed")
-        self.w._tell(c.prime, "audit_filed", f"{c.winner} disputed your rejection of {c.id}; the grader decides this cycle", c.id)
+        self.w.tell(c.prime, "audit_filed", f"{c.winner} disputed your rejection of {c.id}; the grader decides this cycle", c.id)
         return Outcome(True, f"audit of {c.id} filed; the grader decides at the end of this cycle")
 
     def apply_audit(self, c: Contract, g, reason: str) -> None:
@@ -138,8 +138,8 @@ class ContractNet:
         if g.score < p.pass_score:
             self.w.rep.attest("audit", c.winner, c.capability, 0.0)
             self.stage(c, "audit_upheld", score=g.score)
-            self.w._tell(c.prime, "audit", f"the audit upheld your rejection of {c.id} ({g.score:.2f})", c.id)
-            self.w._tell(c.winner, "audit", f"the audit upheld the rejection of {c.id}: your delivery scored {g.score:.2f}; the fee is gone", c.id)
+            self.w.tell(c.prime, "audit", f"the audit upheld your rejection of {c.id} ({g.score:.2f})", c.id)
+            self.w.tell(c.winner, "audit", f"the audit upheld the rejection of {c.id}: your delivery scored {g.score:.2f}; the fee is gone", c.id)
             return
         owed = c.owed
         try:
@@ -154,19 +154,19 @@ class ContractNet:
         if not paid:
             c.default(at=self.w.cycle)
             self.stage(c, c.status)
-            self.w._tell(c.winner, "audit", f"the audit found for you on {c.id}, but {c.prime} can't pay", c.id)
+            self.w.tell(c.winner, "audit", f"the audit found for you on {c.id}, but {c.prime} can't pay", c.id)
             return
-        self.w._stat(c.winner, "earned", owed + p.audit_cost)
-        self.w._stat(c.winner, "ok")
+        self.w.stat(c.winner, "earned", owed + p.audit_cost)
+        self.w.stat(c.winner, "ok")
         c.overturn(f"overturned on audit ({g.score:.2f}): {reason}", at=self.w.cycle)
         self.stage(c, c.status)
         self.stage(c, "audit_overturned", score=g.score)
-        self.w._tell(c.prime, "audit", f"the audit overturned your rejection of {c.id}; you paid {owed} plus the {p.audit_cost} fee", c.id)
+        self.w.tell(c.prime, "audit", f"the audit overturned your rejection of {c.id}; you paid {owed} plus the {p.audit_cost} fee", c.id)
         job = self.w.jobs.get(c.job_id)
         if job and job.status == JobStatus.CLAIMED and job.parts[c.capability].artifact is None:
             job.fill(c.capability, c.artifact, source=c.id, cites=c.cites)
             self.w.grading.maybe_submit(job)
-        self.w._tell(c.winner, "audit", f"the audit found for you on {c.id} ({g.score:.2f}): {c.prime} paid {owed} plus your {p.audit_cost} fee", c.id)
+        self.w.tell(c.winner, "audit", f"the audit found for you on {c.id} ({g.score:.2f}): {c.prime} paid {owed} plus your {p.audit_cost} fee", c.id)
 
     def settle_review(self, cid: ContractId, g) -> None:
         """The grader's verdict on a delivery decides the contract (option B). Under the lock."""
@@ -203,7 +203,7 @@ class ContractNet:
         self.stage(c, c.status)
         self.w.rep.attest(c.winner, c.prime, c.capability, 0.0)
         c.rated_by_winner()
-        self.w._tell(c.winner, "defaulted", f"{c.prime} never paid for {c.id}", c.id)
+        self.w.tell(c.winner, "defaulted", f"{c.prime} never paid for {c.id}", c.id)
 
     def settle_audit(self, cid: ContractId, g) -> None:
         entry = self.w.grading.pending_audits[cid]
@@ -218,7 +218,7 @@ class ContractNet:
                 c.drop_dispute()  # it may be filed again
                 self.w.ledger.transfer("treasury", purse(c.winner), self.w.params.audit_cost, cycle=self.w.cycle, kind="audit",
                                      memo=f"refund {cid}")
-                self.w._tell(c.winner, "audit", f"the grader was unavailable for the audit of {cid}; your fee was refunded", cid)
+                self.w.tell(c.winner, "audit", f"the grader was unavailable for the audit of {cid}; your fee was refunded", cid)
             return
         self.w.grading.pending_audits.pop(cid)
         self.w.grading.charge(g, job=c.job_id, part=c.capability, payers=("treasury", purse(c.winner)), audit=cid)

@@ -359,11 +359,11 @@ class Actions:
     # ── the web (behind the gate; not under the world's lock, see World.web_call) ──
     def web_search(self, query: str) -> Outcome:
         """Search the web through the gate. Free in credits; the operator's policy may make it wait for approval."""
-        return self.w.web_call(self.me.name, self.actor, "web_search", query)
+        return self.w.web_desk.call(self.me.name, self.actor, "web_search", query)
 
     def web_fetch(self, url: str) -> Outcome:
         """Read a page through the gate; it joins the archive, to cite as [archive: <id>]."""
-        return self.w.web_call(self.me.name, self.actor, "web_fetch", url)
+        return self.w.web_desk.call(self.me.name, self.actor, "web_fetch", url)
 
     # ── ventures ───────────────────────────────────────────────
     def propose_venture(self, title: str, pitch: str, parts: list, idea_id: IdeaId | None = None) -> Outcome:

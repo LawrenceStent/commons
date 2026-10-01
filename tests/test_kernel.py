@@ -71,6 +71,6 @@ def test_the_world_runs_on_infrastructure_it_is_given(tmp_path):
     activity = ActivityLog(path=str(tmp_path / "activity.jsonl"))
     w = World(Params(seed=0), hub=hub, ledger=ledger, bus=bus, activity=activity).run(10)
     assert w.ledger is ledger and w.bus is bus and w.registry is bus.registry and w.activity is activity
-    assert bus.standing("coop-a") == w._standing("coop-a")  # the bus rations by this society's trust
+    assert bus.standing("coop-a") == w.standing("coop-a")  # the bus rations by this society's trust
     ledger.check()
     assert (tmp_path / "activity.jsonl").read_text().count("\n") == len(w.activity.ring)

@@ -75,7 +75,7 @@ def propose_spawn(w: World, me: Community, role: str) -> Outcome:
     w.proposals[pid] = Proposal(pid, "spawn", me.name, w.cycle, w.cycle + p.spawn_window, role=role[:60])
     for other in w.communities.values():
         if other.name != me.name and not other.dissolved:
-            w._tell(other.name, "spawn_request", f"{me.name} wants to add a {role[:60]} member; second it with {pid}", pid)
+            w.tell(other.name, "spawn_request", f"{me.name} wants to add a {role[:60]} member; second it with {pid}", pid)
     w.hub.emit("population.proposal", w.cycle, id=pid, type="spawn", proposer=me.name, role=role[:60])
     return Outcome(True, f"proposed {pid}; it needs a second from another community by cycle {w.proposals[pid].deadline}", pid)
 
@@ -94,13 +94,13 @@ def second_spawn(w: World, me: Community, pid: str) -> Outcome:
         w.ledger.transfer(purse(prop.name), "treasury", w.params.spawn_fee, cycle=w.cycle, kind="spawn", memo=pid)
     except InsufficientFunds:
         x.status = ProposalStatus.FAILED
-        w._tell(prop.name, "spawn_failed", f"{pid} was seconded but you couldn't pay the fee", pid)
+        w.tell(prop.name, "spawn_failed", f"{pid} was seconded but you couldn't pay the fee", pid)
         return Outcome(False, f"{prop.name} can no longer pay the spawn fee")
     prop.members += 1
     x.status = ProposalStatus.DONE
     agent = f"{prop.name}#{prop.members}"
-    w._send(prop, Spawn(agent=agent, role=x.role, seconded_by=me.name))
-    w._tell(prop.name, "spawned", f"{me.name} seconded {pid}: {agent} joined as {x.role}", pid)
+    w.send(prop, Spawn(agent=agent, role=x.role, seconded_by=me.name))
+    w.tell(prop.name, "spawned", f"{me.name} seconded {pid}: {agent} joined as {x.role}", pid)
     w.hub.emit("population.spawn", w.cycle, community=prop.name, agent=agent, role=x.role, seconded_by=me.name,
                members=prop.members, fee=w.params.spawn_fee)
     return Outcome(True, f"seconded {pid}; {prop.name} now has {prop.members} members")
@@ -111,7 +111,7 @@ def retire(w: World, me: Community) -> Outcome:
         return Outcome(False, "a community keeps at least one member; merge or go quiet instead")
     agent = f"{me.name}#{me.members}"
     me.members -= 1
-    w._send(me, Retire(agent=agent))
+    w.send(me, Retire(agent=agent))
     w.hub.emit("population.retire", w.cycle, community=me.name, agent=agent, members=me.members)
     return Outcome(True, f"{agent} retired; {me.members} members remain")
 
@@ -136,13 +136,13 @@ def fork(w: World, me: Community, name: str, members: int, capabilities: tuple[s
     child = Community(name, members, set(caps), copy.deepcopy(me.strategy), charter=charter[:200] or me.charter,
                       parent=me.name)
     child.strategy.rng = random.Random(f"{p.seed}:{name}")
-    w._add_community(child)
+    w.add_community(child)
     if share:
         w.ledger.transfer(purse(me.name), purse(name), share, cycle=w.cycle, kind="fork", memo=f"{me.name} -> {name}")
     me.members -= members
     w.rep.inherit(me.name, name, caps, good=p.fork_good_keep, bad=1.0)
-    w._send(me, Fork(new_community=name, members=[f"{name}#{i + 1}" for i in range(members)]))
-    w._tell(name, "forked", f"you split from {me.name} with {members} members and {share}", me.name)
+    w.send(me, Fork(new_community=name, members=[f"{name}#{i + 1}" for i in range(members)]))
+    w.tell(name, "forked", f"you split from {me.name} with {members} members and {share}", me.name)
     w.hub.emit("population.fork", w.cycle, parent=me.name, child=name, members=members, capabilities=list(caps), share=share)
     return Outcome(True, f"{name} forked with {members} members, {', '.join(caps)}, and {share}; {me.members} members stay", name)
 
@@ -154,7 +154,7 @@ def propose_merge(w: World, me: Community, target: str) -> Outcome:
         return Outcome(False, f"no community {target} to merge into")
     pid = _new_id(w, "merge")
     w.proposals[pid] = Proposal(pid, "merge", me.name, w.cycle, w.cycle + w.params.merge_window, target=target)
-    w._tell(target, "merge_offer", f"{me.name} offers to merge into you; accept with {pid}", pid)
+    w.tell(target, "merge_offer", f"{me.name} offers to merge into you; accept with {pid}", pid)
     w.hub.emit("population.proposal", w.cycle, id=pid, type="merge", proposer=me.name, target=target)
     return Outcome(True, f"offered to merge into {target}; they have until cycle {w.proposals[pid].deadline}", pid)
 
@@ -179,11 +179,11 @@ def accept_merge(w: World, me: Community, pid: str) -> Outcome:
     for pb in w.library.values():
         if pb.author == joiner.name:
             pb.author = me.name  # royalties follow the members who wrote it
-    w._send(joiner, Merge(target=me.name))
+    w.send(joiner, Merge(target=me.name))
     joiner.members, joiner.dissolved, joiner.active = 0, True, False
     w.registry.register(me.name, me.identity.public, sorted(me.capabilities), me.charter)
     x.status = ProposalStatus.DONE
-    w._tell(me.name, "merged", f"{joiner.name} joined you with {moved}", pid)
+    w.tell(me.name, "merged", f"{joiner.name} joined you with {moved}", pid)
     w.hub.emit("population.merge", w.cycle, joiner=joiner.name, target=me.name, purse=moved, members=me.members)
     return Outcome(True, f"{joiner.name} merged into you; you now have {me.members} members")
 
@@ -209,7 +209,7 @@ def learn(w: World, me: Community, capability: str, playbook_id: PlaybookId | No
         w.ledger.transfer(purse(me.name), purse(pb.author), royalty, cycle=w.cycle, kind="royalty", memo=f"learn {pb.id}")
         pb.uses += 1
         w.royalties_paid[pb.author] = w.royalties_paid.get(pb.author, 0) + royalty
-        w._tell(pb.author, "royalty", f"{me.name} learned {capability} from your playbook: {royalty}", pb.id)
+        w.tell(pb.author, "royalty", f"{me.name} learned {capability} from your playbook: {royalty}", pb.id)
     me.capabilities = frozenset(me.capabilities | {capability})
     w.registry.register(me.name, me.identity.public, sorted(me.capabilities), me.charter)
     w.hub.emit("population.learn", w.cycle, community=me.name, capability=capability, cost=cost, playbook=playbook_id, royalty=royalty)
@@ -221,7 +221,7 @@ def expire_proposals(w: World) -> None:
     for x in w.proposals.values():
         if x.status == ProposalStatus.OPEN and w.cycle > x.deadline:
             x.status = ProposalStatus.EXPIRED
-            w._tell(x.proposer, f"{x.kind}_expired", f"{x.id} expired without {'a second' if x.kind == 'spawn' else 'an answer'}", x.id)
+            w.tell(x.proposer, f"{x.kind}_expired", f"{x.id} expired without {'a second' if x.kind == 'spawn' else 'an answer'}", x.id)
     for k in [k for k, x in w.proposals.items() if x.status != ProposalStatus.OPEN and x.deadline < w.cycle - w.params.retain]:
         del w.proposals[k]
 

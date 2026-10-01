@@ -52,7 +52,7 @@ def _start(w: World) -> None:
         w.gate.policy = w.operator.gate
         if w.web:
             w.web.set_hosts(w.gate.policy.allow_hosts)
-    w._gate_cycle()
+    w.web_desk.begin_cycle()
     w.bus.begin_cycle(w.cycle)
     w._stats = {n: Counter() for n in w.communities}
 
@@ -63,7 +63,7 @@ def _deadlines(w: World) -> None:
 
 
 def _order(w: World) -> None:
-    w.turn_order = w._active()
+    w.turn_order = w.active()
     w.rng.shuffle(w.turn_order)  # turn order must not decide who wins
 
 
@@ -72,12 +72,12 @@ def _turns(w: World) -> None:
     if w.params.parallel_turns and len(order) > 1:
         # the lock is released here: each action takes it, model calls don't
         with ThreadPoolExecutor(max_workers=w.params.parallel_workers) as pool:
-            for f in [pool.submit(w._turn, c) for c in order]:
+            for f in [pool.submit(w.turn, c) for c in order]:
                 f.result()  # re-raise anything a turn raised (a kill-switch, say)
     else:
         with w.lock:
             for c in order:
-                w._turn(c)
+                w.turn(c)
 
 
 def _gossip(w: World) -> None:
@@ -97,14 +97,14 @@ PHASES: tuple[Phase, ...] = (
     Phase("start", _start),
     Phase("fund", lambda w: w.payments.fund()),
     Phase("ratings", lambda w: w.rating_desk.apply()),
-    Phase("floor", lambda w: w._floor()),
-    Phase("wake", lambda w: w._upkeep()),
+    Phase("floor", lambda w: w.upkeep.floor()),
+    Phase("wake", lambda w: w.upkeep.wake()),
     Phase("deadlines", _deadlines),
     Phase("proposals", expire_proposals),
     Phase("post", lambda w: w.board.post()),
     Phase("order", _order),
     Phase("appraise", lambda w: w.venture_desk.appraise(), locked=False),
-    Phase("web", lambda w: w._run_approved_web(), locked=False),
+    Phase("web", lambda w: w.web_desk.run_approved(), locked=False),
     Phase("turns", _turns, locked=False),
     Phase("allocate", lambda w: w.board.allocate()),
     Phase("grade", lambda w: w.grading.settle(), locked=False),

@@ -323,7 +323,7 @@ def test_stewards_think_at_the_same_time_and_the_world_stays_readable():
 
     w, _ = llm_world(slow, parallel_turns=True)
     llm_b = Community("llm-b", 3, {"research", "write"}, LLMStrategy(FakeBackend(converse=slow)))
-    w._add_community(llm_b)
+    w.add_community(llm_b)
     w.ledger.transfer("genesis", purse("llm-b"), 150_000, cycle=0, kind="genesis")
     t = threading.Thread(target=w.step)
     t.start()

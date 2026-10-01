@@ -37,7 +37,7 @@ class VentureDesk:
         for v, a in self.w.grading.map_calls(appraise, todo):
             if isinstance(a, AppraisalError):
                 with self.w.lock:
-                    self.w._tell(v.proposer, "venture_delayed", f"{v.id} couldn't be appraised yet: {a}", v.id)
+                    self.w.tell(v.proposer, "venture_delayed", f"{v.id} couldn't be appraised yet: {a}", v.id)
             else:
                 results[v.id] = a
         with self.w.lock:
@@ -63,13 +63,13 @@ class VentureDesk:
                 if i < p.venture_budget:
                     self.decide(v, approved=True)
                 else:
-                    self.w._tell(v.proposer, "venture_waiting", f"{v.id} scored {v.score} but the market's budget this "
+                    self.w.tell(v.proposer, "venture_waiting", f"{v.id} scored {v.score} but the market's budget this "
                                f"cycle went to better-scored ventures; it stays in line", v.id)
 
     def decide(self, v: Venture, approved: bool) -> None:
         if not approved:
             v.status = VentureStatus.REJECTED
-            self.w._tell(v.proposer, "venture_rejected", f"{v.id} {v.title!r} rejected (score {v.score}): {v.reason}", v.id)
+            self.w.tell(v.proposer, "venture_rejected", f"{v.id} {v.title!r} rejected (score {v.score}): {v.reason}", v.id)
             self.w.hub.emit("venture.decided", self.w.cycle, id=v.id, proposer=v.proposer, title=v.title, status=VentureStatus.REJECTED,
                           score=v.score, reward=0, reason=v.reason)
             return
@@ -78,7 +78,7 @@ class VentureDesk:
         job.claim(v.proposer, deadline=self.w.cycle + self.w.params.job_ttl)
         self.w.jobs[job.id] = job
         v.status, v.job_id = VentureStatus.APPROVED, job.id
-        self.w._tell(v.proposer, "venture_approved", f"{v.id} {v.title!r} approved as job {job.id}, reward {v.reward} µcr "
+        self.w.tell(v.proposer, "venture_approved", f"{v.id} {v.title!r} approved as job {job.id}, reward {v.reward} µcr "
                    f"(score {v.score}: {v.reason}); deliver every part by cycle {job.deadline}", job.id)
         self.w.hub.emit("venture.decided", self.w.cycle, id=v.id, proposer=v.proposer, title=v.title, status=VentureStatus.APPROVED,
                       score=v.score, reward=v.reward, reason=v.reason, job=job.id)

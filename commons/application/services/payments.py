@@ -64,12 +64,12 @@ class Payments:
         self.w.board.settle_bond(job, returned=True)
         job.pay()
         self.w.jobs_done += 1
-        self.w._stat(prime, "earned", share)
+        self.w.stat(prime, "earned", share)
         track = self.w.communities[prime].deliveries
         for cap, part in job.parts.items():
             if part.source == "self":
                 track[cap] = track.get(cap, 0) + 1
-        self.w._tell(prime, "job_paid", f"{job.id} passed grading (mean score {mean:.2f}); {self.w.payment.payer} paid {payout} "
+        self.w.tell(prime, "job_paid", f"{job.id} passed grading (mean score {mean:.2f}); {self.w.payment.payer} paid {payout} "
                    f"of {job.reward}, you received {share}", job.id)
         record = {"job": job.id, "title": job.title, "prime": prime, "cycle": self.w.cycle, "scores": dict(job.scores),
                   "payout": payout, "parts": {cap: {"by": self.done_by(job, part), "spec": part.spec,
@@ -79,9 +79,9 @@ class Payments:
         if self.w.ratings:
             self.w.ratings.sample(record)
         for author, amount in split.royalties.items():
-            self.w._stat(author, "earned", amount)
+            self.w.stat(author, "earned", amount)
             self.w.royalties_paid[author] = self.w.royalties_paid.get(author, 0) + amount
-            self.w._tell(author, "royalty", f"your playbook was used in {job.id}: {amount}", job.id)
+            self.w.tell(author, "royalty", f"your playbook was used in {job.id}: {amount}", job.id)
         self.w.hub.emit("market.job", self.w.cycle, id=job.id, stage="paid", prime=prime, caps=sorted(job.parts),
                       reward=job.reward, payout=payout, scores=job.scores, royalties=split.royalties, taxed=tax)
 

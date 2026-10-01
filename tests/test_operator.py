@@ -45,7 +45,7 @@ def test_limits_are_world_rules_for_every_kind_of_agent(folder):
     coop_a = Actions(w, w.communities["coop-a"])  # a scripted co-op: limits apply to it too
     assert "doesn't allow propose merge" in coop_a.propose_merge("coop-b").message
     studio = Community("studio", 2, {"write"}, default_population()[0].strategy)
-    w._add_community(studio)
+    w.add_community(studio)
     act = Actions(w, studio)
     studio.capacity = 5
     contract = next((c for c in w.contracts.values() if c.status == "open"), None)

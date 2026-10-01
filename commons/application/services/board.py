@@ -59,7 +59,7 @@ class JobBoard:
         if not self.w.payment.pays_at_once:
             job.await_grants()
             self.w.payments.payment_queue.append(job.id)
-            self.w._tell(job.prime, "job_graded", f"{job.id} passed grading; {self.w.payment.queued}", job.id)
+            self.w.tell(job.prime, "job_graded", f"{job.id} passed grading; {self.w.payment.queued}", job.id)
             return
         self.w.payments.pay(job)
 
@@ -84,7 +84,7 @@ class JobBoard:
             def key(name: str) -> tuple:
                 c = self.w.communities[name]
                 fit = sum(cap in c.capabilities for cap in job.parts) / len(job.parts)
-                return (-round(self.w._standing(name), 3), -fit, self.held_jobs(name), draw.random())
+                return (-round(self.w.standing(name), 3), -fit, self.held_jobs(name), draw.random())
 
             bond = bond_for(job.reward, p.claim_bond)
             for name in sorted(sorted(claimants), key=key):
@@ -95,14 +95,14 @@ class JobBoard:
                     try:
                         self.w.ledger.transfer(purse(name), "escrow", bond, cycle=self.w.cycle, kind="bond", memo=jid)
                     except InsufficientFunds:
-                        self.w._tell(name, "claim_lost", f"you couldn't post the {bond} bond for {jid}", jid)
+                        self.w.tell(name, "claim_lost", f"you couldn't post the {bond} bond for {jid}", jid)
                         continue
                 job.claim(name, deadline=self.w.cycle + p.job_ttl, bond=bond)
-                self.w._tell(name, "claim_won", f"{jid} is yours (bond {bond}, returned when it's paid); "
+                self.w.tell(name, "claim_won", f"{jid} is yours (bond {bond}, returned when it's paid); "
                            f"submit every part by cycle {job.deadline}", jid)
                 for other in claimants:
                     if other != name:
-                        self.w._tell(other, "claim_lost", f"{jid} went to {name} (more trusted, a better fit, or less loaded)", jid)
+                        self.w.tell(other, "claim_lost", f"{jid} went to {name} (more trusted, a better fit, or less loaded)", jid)
                 self.w.hub.emit("market.job", self.w.cycle, id=jid, stage="claimed", prime=name, caps=sorted(job.parts),
                               reward=job.reward, claimants=sorted(claimants), bond=bond)
                 break
@@ -122,6 +122,6 @@ class JobBoard:
             if c.job_id == job.id and c.status == ContractStatus.OPEN:
                 c.withdraw(at=self.w.cycle)
                 self.w.contract_net.stage(c, c.status)
-        self.w._tell(job.prime, "job_failed", f"{job.id} failed: {why}", job.id)
+        self.w.tell(job.prime, "job_failed", f"{job.id} failed: {why}", job.id)
         self.w.hub.emit("market.job", self.w.cycle, id=job.id, stage="failed", prime=job.prime, caps=sorted(job.parts),
                       reward=job.reward, why=why)

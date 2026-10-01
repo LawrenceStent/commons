@@ -24,6 +24,6 @@ class RatingDesk:
             for cap, part in sample["parts"].items():
                 if part["by"] in self.w.communities:
                     self.w.rep.attest("operator", part["by"], cap, EVIDENCE[r.rating])
-                    self.w._tell(part["by"], "rated", f"the operator rated your {cap} for {sample['job']} {r.rating}/3"
+                    self.w.tell(part["by"], "rated", f"the operator rated your {cap} for {sample['job']} {r.rating}/3"
                                + (f": {r.note}" if r.note else ""), sample["job"])
             self.w.hub.emit("operator.rating", self.w.cycle, id=r.id, job=sample["job"], rating=r.rating, note=r.note)
