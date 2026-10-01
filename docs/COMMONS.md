@@ -99,8 +99,8 @@ Commons replaces the planner with **a market and a reputation**:
 | 3 | More channels: content, services, affiliate | Planned |
 | 4 | On-chain settlement (Coinbase Agentic Wallets, x402) | Planned |
 
-**Code:** about 3,000 lines of Python in `substrate/`, `protocol/`, `society/`, `sim/` and
-`console/`, plus 94 tests. Nothing yet has spent a real dollar. All money so far is simulated
+**Code:** about 10,600 lines of Python in `commons/` (layered; see `docs/ARCHITECTURE.md`) and 650 in `packs/`,
+plus 304 tests. Nothing yet has spent a real dollar. All money so far is simulated
 credits.
 
 ---
@@ -373,40 +373,48 @@ deadlines). Nothing below the agents can assign work to a community that didn't 
 | `commons/protocol/{contract,reputation,knowledge,population}.py` | 116 | The four message families and their verbs (§5.3) |
 | **domain** | | |
 | `commons/domain/status.py` | 62 | The states jobs, contracts, ventures, proposals, goals, ideas and gate requests move through (StrEnums) |
-| `commons/domain/market.py`, `grading.py` | 40, 63 | Jobs and parts; grades, the `Grader` interface, quality tags and `StubGrader` |
-| `commons/domain/pack.py` | 107 | `Pack`, `WorkSource`, `TemplateWorkSource`, the live economy, `load(name)` |
-| `commons/domain/community.py` | 40 | The `Community` record and the `Agent` interface |
+| `commons/domain/market.py`, `grading.py` | 116, 64 | The job aggregate (its transition table) and parts; grades, the `Grader` interface, quality tags and `StubGrader` |
+| `commons/domain/pack.py` | 114 | `Pack`, `WorkSource`, `TemplateWorkSource`, the live economy, `load(name)` |
+| `commons/domain/contract.py`, `economy.py` | 127, 87 | The contract aggregate (its transition table); the economies (`MarketPayment`, `GrantPayment`, `policy_for`) |
+| `commons/domain/events.py`, `ids.py`, `money.py`, `errors.py` | 356, 24, 10, 6 | The domain events (about 50); ids and the `Sequences` that issue them; `Micros`; `DomainError` |
+| `commons/domain/reputation.py`, `treasury.py` | 115, 54 | Beta evidence per (observer, subject, capability), gossip, asymmetric decay, standing, fork inheritance; bonds and the treasury's rules |
+| `commons/domain/community.py` | 45 | The `Community` record and the `Agent` interface |
 | `commons/domain/compute.py` | 44 | Token usage, the price table, what a call costs |
-| `commons/domain/gate.py`, `ventures.py`, `founding.py`, `operator.py`, `ratings.py` | 82, 77, 57, 76, 16 | The pure rules of each: gate policy and requests; venture shape, appraisal and price formula; blueprints and their checks; operator limits; the rating scale |
-| `commons/domain/archive.py` | 117 | The archive index: passages, BM25 search, the citation format |
-| `commons/domain/goals.py`, `scorecard.py` | 67, 140 | Ideas and goals; scorecard metrics and statuses |
+| `commons/domain/gate.py`, `ventures.py`, `founding.py`, `operator.py`, `ratings.py` | 82, 79, 57, 78, 16 | The pure rules of each: gate policy and requests; venture shape, appraisal and price formula; blueprints and their checks; operator limits; the rating scale |
+| `commons/domain/archive.py` | 119 | The archive index: passages, BM25 search, the citation format |
+| `commons/domain/goals.py`, `scorecard.py` | 68, 140 | Ideas and goals; scorecard metrics and statuses |
 | **substrate** | | |
-| `commons/substrate/ledger.py` | 199 | Double-entry SQLite ledger with two currencies (SIM, USD), per-currency external accounts, the revenue split |
-| `commons/substrate/meter.py` | 108 | Notional charges, real-dollar recording, both kill-switches |
-| `commons/substrate/bus.py` | 130 | `Bus` front door: signature check plus reputation-scaled rate limit; `MemoryBus` |
-| `commons/substrate/reputation.py` | 115 | Beta evidence per (observer, subject, capability); gossip; asymmetric decay; standing; fork inheritance |
-| `commons/substrate/telemetry.py`, `activity.py` | 80, 150 | The telemetry hub (bounded rings); the activity log of every action, decision and change |
+| `commons/substrate/ledger.py` | 191 | Double-entry SQLite ledger with two currencies (SIM, USD), per-currency external accounts, the revenue split |
+| `commons/substrate/meter.py` | 114 | Notional charges, real-dollar recording, both kill-switches |
+| `commons/substrate/bus.py` | 134 | `Bus` front door: signature check plus reputation-scaled rate limit; `MemoryBus` |
+| `commons/substrate/telemetry.py`, `activity.py` | 88, 150 | The telemetry hub (bounded rings); the activity log of every action, decision and change |
 | `commons/substrate/registry.py`, `workspace.py`, `jsonl.py` | 35, 30, 45 | Agent cards and keys; a sandboxed folder per community; append-only JSON-lines files |
 | **application** | | |
-| `commons/application/world.py` | 1,272 | `World`: the cycle, deadlines, grading, settlement, grants, the web call path, observation, gossip, records (R6 splits it) |
-| `commons/application/actions.py` | 492 | The actions executor: the only way an agent touches the world |
+| `commons/application/society.py` | 247 | `Society` (alias `World`): the society's state and the facade over its services |
+| `commons/application/cycle.py` | 123 | One cycle's phases in order, each run under the lock or outside it |
+| `commons/application/services/` | 987 | One responsibility each: board, contract net, grading, payments, ventures, web, upkeep, ratings, gossip, recorder |
+| `commons/application/actions.py`, `commands/` | 24, 600 | `Actions`, the executor (the only way an agent touches the world), made of commands by area: market, population, knowledge, planning, runtime hooks; `pipeline.py` wraps each in lock, log and operator limits |
+| `commons/application/events.py` | 652 | Domain events published: what co-ops are told, the activity log, telemetry (one function per event type) |
+| `commons/application/observe.py`, `queries.py` | 141, 225 | What a co-op sees each turn; the dashboard's read models |
+| `commons/application/params.py` | 141 | Every setting, in frozen groups: `params.<group>.<field>` |
 | `commons/application/ports.py` | 126 | What the society needs from outside: the model port and the web port |
-| `commons/application/observation.py` | 217 | What a community sees (`Observation` and its views) and the `ActionsAPI` it may call |
+| `commons/application/observation.py` | 240 | What a community sees (`Observation` and its views) and the `ActionsAPI` it may call |
 | `commons/application/population.py` | 230 | Spawn, retire, fork, merge, learn, proposal expiry |
 | `commons/application/graders.py`, `calibration.py` | 138, 106 | LLM, panel and hybrid graders; running a grader or appraiser over hand-labelled cases |
 | `commons/application/ventures.py` | 124 | Venture checks against the world; the LLM appraiser |
 | `commons/application/gate.py`, `operator.py`, `ratings.py`, `archive.py`, `founding.py` | 157, 178, 77, 34, 233 | The gate's queue and decisions; the operator folder; ratings files; the archive folder; founding a society folder |
 | **agents** | | |
-| `commons/agents/scripted/base.py`, `scripted.py` | 243, 56 | The honest default strategy; Cooperator, Defector, FreeRider (the regression suite) |
-| `commons/agents/llm/steward.py` | 302 | `LLMStrategy`: the steward loop, members via `commission` (with a look-up loop), drafts, metering, transcripts |
-| `commons/agents/llm/render.py`, `tools.py`, `fakes.py` | 259, 128, 45 | The preamble and observation renderer; the steward tools; a fake steward for dry runs |
+| `commons/agents/scripted/base.py`, `scripted.py` | 226, 56 | The honest default strategy; Cooperator, Defector, FreeRider (the regression suite) |
+| `commons/agents/llm/steward.py`, `member.py` | 230, 155 | `LLMStrategy` and the steward loop (tool calls dispatched through `CALLS`); `MemberWorker`: members write drafts via `commission`, with a look-up loop |
+| `commons/agents/waking.py`, `llm/prompts.py` | 40, 42 | How many members a co-op wakes; the system prompts |
+| `commons/agents/llm/render.py`, `tools.py`, `fakes.py` | 281, 128, 45 | The preamble and observation renderer; the steward tools; a fake steward for dry runs |
 | **adapters** | | |
-| `commons/adapters/models.py` | 317 | Anthropic, LM Studio and fake backends; choosing one with the spend check |
+| `commons/adapters/models.py` | 335 | Anthropic, LM Studio and fake backends; choosing one with the spend check |
 | `commons/adapters/web.py` | 248 | The only way agents reach the web: egress allowlist, safe fetcher, robots, Wikipedia search |
 | `commons/adapters/redis_bus.py` | 52 | The bus on Redis Streams, for multi-process societies |
 | **interfaces** | | |
-| `commons/interfaces/cli/` | 550 | `commons` and its subcommands: run, sim, found, approve, rate, calibrate (`docs/COMMANDS.md`) |
-| `commons/interfaces/console/app.py`, `dashboard.html`, `host.py` | 351, 538, 51 | The dashboard: snapshot, SSE stream, controls, gate and operator panels; the page; host monitor |
+| `commons/interfaces/cli/` | 820 | `commons` and its subcommands: run, sim, console, found, approve, rate, calibrate, metrics, golden (`docs/COMMANDS.md`); each a testable `main(argv)` |
+| `commons/interfaces/console/app.py`, `runner.py`, `dashboard.html`, `host.py` | 134, 91, 538, 51 | The dashboard: thin routes, SSE stream; the run loop and its controls; the page; host monitor |
 | **packs** | | |
 | `packs/earn_online/` | 237 | Pack 0: skills, job templates, co-ops, brief, grader and appraiser instructions, calibration sets |
 | `packs/tech_for_good/` | 408 | Pack 1: scout, assess, design, write; grant economy; panel lenses; scorecard; calibration sets |
@@ -440,10 +448,10 @@ A strategy never touches the ledger, bus or reputation directly. The path is alw
 strategy.turn(observation, actions)
         │  calls e.g. actions.bid("J12.write.1", 16_000)
         ▼
-commons/application/actions.py      validate → spend capacity → sign & publish on the bus → move money via ledger
+commons/application/commands/     validate → spend capacity → sign & publish on the bus → move money via ledger
         │           returns Outcome(ok, message) — failures are readable text, never exceptions
         ▼
-commons/application/world.py       state changes, deadlines, grading, settlement, telemetry events
+commons/application/services/     state changes through the aggregates, deadlines, grading, settlement; domain events
 ```
 
 This matters most for LLM agents. Every refusal comes back as a sentence the model can read and
@@ -676,7 +684,7 @@ community's charter → venture (a product idea, KPIs, a channel)
 
 ## 9. The economy's numbers
 
-Current defaults (`commons/application/world.py` → `Params`). Amounts are micro-credits (1 cr = 1,000,000). They are
+Current defaults (`commons/application/params.py` → `Params`). Amounts are micro-credits (1 cr = 1,000,000). They are
 chosen to mirror plausible micro-dollar costs, so 80,000 is about 8 cents.
 
 | Parameter | Value | Meaning |

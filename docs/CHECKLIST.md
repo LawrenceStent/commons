@@ -536,6 +536,11 @@ package cycles, a flag-driven economy, duplication. The refactor moves the code 
 tactical patterns, protected by a golden master that pins today's runs byte for byte. Progress is the per-stage
 checklists in the plan (R0 to R12), on branch `refactor/architecture`; no feature work until it merges.
 
+- [x] Done 1 Oct, R0 to R12, each stage committed with the full suite and the golden master green; behaviour
+  unchanged. The layers and how to extend them: `docs/ARCHITECTURE.md`. Every command: `docs/COMMANDS.md`.
+- [ ] After the merge, with your approval: the three bugs found along the way (`REFACTOR-PLAN.md` §7) and type
+  checking (R13, proposed)
+
 ## Framework track: one kernel, many societies (planned 26 Sep; see `docs/FRAMEWORK.md`)
 
 **Principle added:** effectiveness and efficiency, not speed. No mechanism may reward being first.
