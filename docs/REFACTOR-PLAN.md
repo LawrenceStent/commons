@@ -236,8 +236,9 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
       `@command(lock=False)`; `commands/pipeline.py`); no `setattr` at import
 - [x] R8.2 The executor split by area behind one facade with today's method names: `commands/` market (202 lines),
       population, knowledge, planning, runtime hooks, and their shared base; `Actions` is their composition
-- [ ] R8.3 Role interfaces for agents; `ActionsAPI` is their union
-- [ ] **Done when:** any command's call path is readable from its definition; golden identical
+- [x] R8.3 Role interfaces for agents (`MarketActions`, `PopulationActions`, `KnowledgeActions`, `PlanningActions`);
+      `ActionsAPI` is their union; a test holds the executor to every role
+- [x] **Done when:** any command's call path is readable from its definition; golden identical
 
 ### R9. Configuration (S) — S7, D3
 - [ ] R9.1 Grouped, typed configs (economy, contracts, population, knowledge, runtime, storage)
