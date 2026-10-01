@@ -271,6 +271,10 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
 - [x] **Done when:** `create_app` under 60 lines (22); every command documented and tested through `main(argv)`
 
 ### R12. Tests and docs (M) — C5, C7
+- [x] R12.0a Reputation moves into the domain: it reports evidence through an `emit` function the society gives it,
+      not the telemetry hub (promised in §1.2)
+- [x] R12.0b The two model-backend `chat` methods (46 and 43 lines) lose their message translation to functions; no
+      function in the codebase is over 40 lines
 - [ ] R12.1 Tests regrouped by layer and context; acceptance tests in `tests/acceptance/`
 - [ ] R12.2 No test touches a private member
 - [ ] R12.3 `docs/ARCHITECTURE.md`: layers, the dependency rule, patterns, and how to add a pack, economy, tool,

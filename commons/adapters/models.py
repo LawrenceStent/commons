@@ -95,20 +95,7 @@ class AnthropicBackend:
         so a frozen preamble followed by a per-community charter caches in two layers."""
         import anthropic
 
-        wire = []
-        for m in messages:
-            if m["role"] == "user":
-                wire.append({"role": "user", "content": m["text"]})
-            elif m["role"] == "assistant":
-                content = m.get("raw")
-                if content is None:
-                    content = ([{"type": "text", "text": m["text"]}] if m.get("text") else []) + [
-                        {"type": "tool_use", "id": c.id, "name": c.name, "input": c.input} for c in m.get("tool_calls", [])]
-                wire.append({"role": "assistant", "content": content})
-            else:  # all results of one round in one user message, as parallel tool use requires
-                wire.append({"role": "user", "content": [
-                    {"type": "tool_result", "tool_use_id": r.call_id, "content": r.content, "is_error": r.is_error}
-                    for r in m["results"]]})
+        wire = _anthropic_messages(messages)
         kw: dict[str, Any] = {}
         if tools:
             kw["tools"] = tools
@@ -133,6 +120,43 @@ class AnthropicBackend:
         text = "".join(b.text for b in r.content if b.type == "text")
         calls = tuple(ToolCall(b.id, b.name, dict(b.input)) for b in r.content if b.type == "tool_use")
         return Turn(text, calls, r.stop_reason or "end_turn", usage, r.model, model, True, ms, raw=r.content)
+
+
+def _anthropic_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The backend-neutral conversation (commons/application/ports.py) in the Messages API's shape."""
+    wire = []
+    for m in messages:
+        if m["role"] == "user":
+            wire.append({"role": "user", "content": m["text"]})
+        elif m["role"] == "assistant":
+            content = m.get("raw")
+            if content is None:
+                content = ([{"type": "text", "text": m["text"]}] if m.get("text") else []) + [
+                    {"type": "tool_use", "id": c.id, "name": c.name, "input": c.input} for c in m.get("tool_calls", [])]
+            wire.append({"role": "assistant", "content": content})
+        else:  # all results of one round in one user message, as parallel tool use requires
+            wire.append({"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": r.call_id, "content": r.content, "is_error": r.is_error}
+                for r in m["results"]]})
+    return wire
+
+
+def _openai_messages(system: list[str], messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The backend-neutral conversation in the OpenAI-compatible shape LM Studio takes (system blocks joined)."""
+    wire: list[dict[str, Any]] = [{"role": "system", "content": "\n\n".join(system)}]
+    for m in messages:
+        if m["role"] == "user":
+            wire.append({"role": "user", "content": m["text"]})
+        elif m["role"] == "assistant":
+            msg: dict[str, Any] = {"role": "assistant", "content": m.get("text") or None}
+            if m.get("tool_calls"):
+                msg["tool_calls"] = [{"id": c.id, "type": "function",
+                                      "function": {"name": c.name, "arguments": json.dumps(c.input)}}
+                                     for c in m["tool_calls"]]
+            wire.append(msg)
+        else:
+            wire += [{"role": "tool", "tool_call_id": r.call_id, "content": r.content} for r in m["results"]]
+    return wire
 
 
 # ── LM Studio ──────────────────────────────────────────────────
@@ -186,20 +210,8 @@ class LMStudioBackend:
         if tools and not self.supports_tools(model):
             raise ModelError(f"LM Studio doesn't give {model} tool use, so it can't act. Load a tool-capable model "
                              f"(`curl localhost:1234/api/v0/models` lists capabilities)")
-        wire: list[dict[str, Any]] = [{"role": "system", "content": "\n\n".join(system)}]
-        for m in messages:
-            if m["role"] == "user":
-                wire.append({"role": "user", "content": m["text"]})
-            elif m["role"] == "assistant":
-                msg: dict[str, Any] = {"role": "assistant", "content": m.get("text") or None}
-                if m.get("tool_calls"):
-                    msg["tool_calls"] = [{"id": c.id, "type": "function",
-                                          "function": {"name": c.name, "arguments": json.dumps(c.input)}}
-                                         for c in m["tool_calls"]]
-                wire.append(msg)
-            else:
-                wire += [{"role": "tool", "tool_call_id": r.call_id, "content": r.content} for r in m["results"]]
-        body: dict[str, Any] = {"model": model, "messages": wire, "max_tokens": max_tokens, "temperature": 0.3}
+        body: dict[str, Any] = {"model": model, "messages": _openai_messages(system, messages), "max_tokens": max_tokens,
+                                "temperature": 0.3}
         if not reasoning:
             # Tested 26 Sep on Qwen 3.5 35B-A3B: only reasoning_effort "none" works. "/no_think",
             # chat_template_kwargs and reasoning_effort "low" all still reason until the allowance runs out.
@@ -208,6 +220,9 @@ class LMStudioBackend:
             body["tools"] = [{"type": "function", "function": {"name": t["name"], "description": t["description"],
                                                                "parameters": t["input_schema"]}} for t in tools]
         r, ms = self._post(body)
+        return self._turn(r, model, ms)
+
+    def _turn(self, r: dict[str, Any], model: str, ms: int) -> Turn:
         try:
             choice = r["choices"][0]
             msg = choice["message"]

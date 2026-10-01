@@ -7,9 +7,8 @@ so an unknown party scores 0.5 and every observation moves the score less than t
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass
-
-from commons.substrate.telemetry import NULL, Hub
 
 Key = tuple[str, str, str]  # (observer, subject, capability)
 
@@ -28,8 +27,9 @@ class Evidence:
 
 
 class Reputation:
-    def __init__(self, decay: float = 0.995, gossip_discount: float = 0.5, bad_memory: float = 4.0, hub: Hub = NULL):
-        self.hub = hub
+    def __init__(self, decay: float = 0.995, gossip_discount: float = 0.5, bad_memory: float = 4.0,
+                 emit: Callable[..., object] = lambda kind, cycle, **fields: None):
+        self.emit = emit  # where evidence is reported (the society passes its telemetry hub's emit)
         self.cycle: int | None = None  # set by the world, for telemetry only
         self.decay = decay
         # Bad evidence fades `bad_memory` times more slowly than good. With symmetric decay
@@ -48,7 +48,7 @@ class Reputation:
         e = self.direct[(observer, subject, capability)]
         e.good += outcome
         e.bad += 1 - outcome
-        self.hub.emit("reputation.attest", self.cycle, observer=observer, subject=subject, capability=capability, outcome=outcome)
+        self.emit("reputation.attest", self.cycle, observer=observer, subject=subject, capability=capability, outcome=outcome)
 
     def hear(self, listener: str, source: str, subject: str, capability: str, score: float, evidence: float) -> None:
         """Take in gossip, weighted by how much the listener trusts the source overall."""
@@ -66,7 +66,7 @@ class Reputation:
         for (o, s, c), e in list(self.direct.items()):
             if s == parent and c in caps and o != child:
                 self.direct[(o, child, c)] = Evidence(e.good * good, e.bad * bad)
-        self.hub.emit("reputation.inherit", self.cycle, parent=parent, child=child, capabilities=sorted(caps))
+        self.emit("reputation.inherit", self.cycle, parent=parent, child=child, capabilities=sorted(caps))
 
     def tick(self) -> None:
         # Slow forgetting applies only to records that are mostly bad. Applied to every record,

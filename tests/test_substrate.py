@@ -1,6 +1,7 @@
 import pytest
 
 from commons.domain.compute import Usage, cost_micros
+from commons.domain.reputation import Reputation
 from commons.protocol import Envelope, Identity
 from commons.protocol.contract import Announce, Bid, Deliver
 from commons.protocol.reputation import Attest, Gossip
@@ -8,7 +9,6 @@ from commons.substrate.bus import BadSignature, MemoryBus, RateLimited, allowanc
 from commons.substrate.ledger import InsufficientFunds, Ledger, purse
 from commons.substrate.meter import KillSwitch, Meter
 from commons.substrate.registry import Registry
-from commons.substrate.reputation import Reputation
 from commons.substrate.workspace import Workspace, WorkspaceEscape
 
 

@@ -62,6 +62,7 @@ from commons.domain.market import MarketJob
 from commons.domain.pack import Pack
 from commons.domain.pack import load as load_pack
 from commons.domain.population import Proposal
+from commons.domain.reputation import Reputation
 from commons.domain.ventures import Appraiser, StubAppraiser, Venture
 from commons.protocol import Envelope, Message
 from commons.substrate.activity import ActivityLog
@@ -69,7 +70,6 @@ from commons.substrate.bus import Bus, MemoryBus, RateLimited
 from commons.substrate.ledger import Ledger, purse
 from commons.substrate.meter import Meter
 from commons.substrate.registry import Registry
-from commons.substrate.reputation import Reputation
 from commons.substrate.telemetry import Hub
 
 
@@ -101,7 +101,7 @@ class Society:
         p = self.params
         self.ledger = ledger or Ledger(p.storage.ledger_path, hub=self.hub)
         self.meter = Meter(self.ledger, daily_ceiling=p.money.daily_ceiling, hub=self.hub)
-        self.rep = Reputation(decay=p.trust.decay, hub=self.hub)
+        self.rep = Reputation(decay=p.trust.decay, emit=self.hub.emit)
         self.bus = bus or MemoryBus(Registry(), base_allowance=p.trust.base_allowance, verify=p.run.verify, hub=self.hub)
         self.bus.standing = self.standing  # the bus rations messages by this society's trust
         self.registry = self.bus.registry
