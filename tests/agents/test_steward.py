@@ -167,7 +167,6 @@ def test_anthropic_chat_replays_raw_content_and_groups_tool_results():
 
 
 def test_lmstudio_chat_translates_tool_calls_both_ways():
-    b = LMStudioBackend()
     sent = {}
 
     def fake_post(body):
@@ -176,8 +175,7 @@ def test_lmstudio_chat_translates_tool_calls_both_ways():
             "finish_reason": "tool_calls", "message": {"content": None, "tool_calls": [
                 {"id": "x1", "type": "function", "function": {"name": "bid", "arguments": '{"contract_id": "C1", "price": 9}'}}]}}]}, 12
 
-    b._post = fake_post
-    b._tool_capable["hermes"] = True
+    b = LMStudioBackend(post=fake_post, tool_capable={"hermes": True})
     t = b.chat(model="hermes", system=["a", "b"], tools=TOOLS, messages=[
         {"role": "user", "text": "obs"},
         {"role": "assistant", "text": "", "tool_calls": [ToolCall("x0", "claim", {"job_id": "J1"})]},
@@ -194,8 +192,7 @@ def test_lmstudio_refuses_tools_for_a_model_that_cannot_use_them():
 
     from commons.application.ports import ModelError
 
-    b = LMStudioBackend()
-    b._tool_capable["plain-model"] = False
+    b = LMStudioBackend(tool_capable={"plain-model": False})
     with pytest.raises(ModelError, match="tool use"):
         b.chat(model="plain-model", system=["s"], messages=[{"role": "user", "text": "x"}], tools=TOOLS)
 
@@ -283,18 +280,16 @@ def test_members_are_asked_not_to_reason():
 
 
 def test_lmstudio_turns_reasoning_off_only_when_asked():
-    b = LMStudioBackend()
-    b._tool_capable["m"] = True
     sent = []
-    b._post = lambda body: (sent.append(body) or {"choices": [{"finish_reason": "stop", "message": {"content": "ok"}}]}, 1)
+    b = LMStudioBackend(tool_capable={"m": True}, post=lambda body: (
+        sent.append(body) or {"choices": [{"finish_reason": "stop", "message": {"content": "ok"}}]}, 1))
     b.chat(model="m", system=["s"], messages=[{"role": "user", "text": "write it"}], reasoning=False)
     b.chat(model="m", system=["s"], messages=[{"role": "user", "text": "plan it"}])
     assert sent[0]["reasoning_effort"] == "none" and "reasoning_effort" not in sent[1]
 
 
 def test_a_reply_that_is_all_reasoning_reads_as_out_of_tokens():
-    b = LMStudioBackend()
-    b._post = lambda body: ({"choices": [{"finish_reason": "stop", "message": {"content": "", "reasoning_content": "hmm…"}}]}, 1)
+    b = LMStudioBackend(post=lambda body: ({"choices": [{"finish_reason": "stop", "message": {"content": "", "reasoning_content": "hmm…"}}]}, 1))
     assert b.chat(model="m", system=["s"], messages=[{"role": "user", "text": "x"}]).stop == "max_tokens"
 
 

@@ -70,7 +70,7 @@ def test_snapshot_stays_bounded_over_a_long_run():
     for n in (500, 3000):
         w.run(n - w.cycle)
         sizes.append(len(json.dumps(snapshot(state))))
-    assert all(len(r) <= 200 for r in w.hub._rings.values())
+    assert max(w.hub.kept().values()) <= 200
     assert sizes[1] < sizes[0] * 1.5, sizes
 
 

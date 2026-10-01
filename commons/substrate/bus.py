@@ -115,6 +115,10 @@ class MemoryBus(Bus):
         self._cursors[(family, group)] = len(stream)
         return stream[start:]
 
+    def backlog(self, family: str) -> int:
+        """Envelopes still held in one stream."""
+        return len(self._streams[family])
+
     def compact(self) -> None:
         """Drop envelopes every known group has consumed, then cap each stream at `max_backlog`
         (like Redis MAXLEN): a family nobody reads, or a group that has stopped reading, must

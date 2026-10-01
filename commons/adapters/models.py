@@ -168,9 +168,12 @@ class LMStudioBackend:
     real = False
 
     def __init__(self, base_url: str = "http://localhost:1234/v1", price_as: str = "claude-haiku-4-5",
-                 timeout: float = 180.0):
+                 timeout: float = 180.0, post: Callable[[dict[str, Any]], tuple[dict[str, Any], int]] | None = None,
+                 tool_capable: dict[str, bool] | None = None):
+        """`post` replaces the HTTP call and `tool_capable` answers `supports_tools` without asking (both for tests)."""
         self.base_url, self.price_as, self.timeout = base_url.rstrip("/"), price_as, timeout
-        self._tool_capable: dict[str, bool] = {}
+        self._post = post or self._http_post
+        self._tool_capable: dict[str, bool] = dict(tool_capable or {})
 
     def supports_tools(self, model: str) -> bool:
         """LM Studio silently drops `tools` for models it doesn't mark tool-capable; the model then
@@ -244,7 +247,7 @@ class LMStudioBackend:
         usage = Usage(input_tokens=u.get("prompt_tokens", 0), output_tokens=u.get("completion_tokens", 0))
         return Turn(msg.get("content") or "", tuple(calls), stop, usage, r.get("model", model), self.price_as, False, ms)
 
-    def _post(self, body: dict[str, Any]) -> tuple[dict[str, Any], int]:
+    def _http_post(self, body: dict[str, Any]) -> tuple[dict[str, Any], int]:
         req = urllib.request.Request(f"{self.base_url}/chat/completions", data=json.dumps(body).encode(),
                                      headers={"Content-Type": "application/json"})
         t = time.perf_counter()

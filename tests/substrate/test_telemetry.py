@@ -27,7 +27,7 @@ def test_subscribers_see_events_and_a_broken_one_is_dropped():
     hub.subscribe(lambda e: 1 / 0)
     hub.emit("world.cycle", 1)
     hub.emit("world.cycle", 2)
-    assert [e.cycle for e in seen] == [1, 2] and len(hub._subs) == 1
+    assert [e.cycle for e in seen] == [1, 2] and hub.subscribers == 1
     unsubscribe()
     hub.emit("world.cycle", 3)
     assert len(seen) == 2

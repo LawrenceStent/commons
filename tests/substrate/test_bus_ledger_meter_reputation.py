@@ -200,5 +200,5 @@ def test_memory_bus_backlog_is_capped_even_with_no_readers():
     for i in range(500):
         bus.publish(Envelope.seal(me, Publish(playbook_id=str(i), capability="write", title="t", content_hash="h"), 0))
         bus.compact()
-    assert len(bus._streams["knowledge"]) == 50
+    assert bus.backlog("knowledge") == 50
     assert [e.open().playbook_id for e in bus.read("knowledge", "late")][0] == "450"

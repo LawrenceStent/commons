@@ -60,6 +60,14 @@ class Hub:
         self._subs.append(fn)
         return lambda: fn in self._subs and self._subs.remove(fn)
 
+    @property
+    def subscribers(self) -> int:
+        return len(self._subs)
+
+    def kept(self) -> dict[str, int]:
+        """How many events each kind's ring holds now."""
+        return {k: len(r) for k, r in self._rings.items()}
+
     def recent(self, kind: str | None = None, n: int = 50) -> list[Event]:
         """The last `n` events of one kind, or of a whole component with `kind="bus."`."""
         if kind in self._rings:
