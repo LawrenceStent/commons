@@ -45,7 +45,8 @@ from sim.goals import Plans
 from sim.operator import Operator
 from sim.ventures import AppraisalError, Appraiser, StubAppraiser, Venture, value as venture_value
 from sim.grader import GradingError
-from sim.market import Grade, Grader, MarketJob, StubGrader
+from sim.market import MarketJob
+from society.grading import Grade, Grader, StubGrader
 from sim.pack import Pack
 from sim.pack import load as load_pack
 from sim.ratings import EVIDENCE, Ratings

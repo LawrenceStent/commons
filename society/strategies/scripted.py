@@ -5,7 +5,7 @@ shows up immediately.
 
 from __future__ import annotations
 
-from sim.market import tagged
+from society.grading import tagged
 from society.observation import ActionsAPI, ContractView, Observation
 from society.strategies.base import Strategy
 

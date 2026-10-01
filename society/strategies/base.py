@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import random
 
-from sim.market import StubGrader, is_tagged, tagged
+from society.grading import StubGrader, is_tagged, tagged
 from society.observation import ActionsAPI, BidView, ContractView, JobView, Observation
 
 _read = StubGrader()

@@ -3,7 +3,8 @@ from doing it alone or cheaply."""
 
 from sim.actions import Actions
 from sim.engine import Params, World
-from sim.market import MarketJob, Part, tagged
+from sim.market import MarketJob, Part
+from society.grading import tagged
 from society.community import Community
 from society.strategies import Strategy
 from substrate.ledger import purse

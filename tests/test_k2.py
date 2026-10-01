@@ -3,7 +3,8 @@ scales with quality, and outcomes known only later can settle later."""
 
 from sim.actions import Actions
 from sim.engine import Params, World
-from sim.market import Grade, MarketJob, Part, StubGrader, tagged
+from sim.market import MarketJob, Part
+from society.grading import Grade, StubGrader, tagged
 from society.community import Community
 from society.strategies import Cooperator, Strategy
 from substrate.ledger import purse

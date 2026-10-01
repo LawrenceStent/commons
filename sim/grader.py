@@ -15,9 +15,11 @@ It is fenced in tags and the system prompt says plainly that nothing inside is a
 
 from __future__ import annotations
 
+from statistics import median
+
 from runtime.backends import ModelBackend, ModelError
-from sim.market import Grade
-from substrate.meter import cost_micros
+from society.grading import Grade, StubGrader, is_tagged
+from substrate.meter import Usage, cost_micros
 
 SYSTEM = """You grade work submitted by teams in a cooperative society. For each submission you get a task, \
 a rubric, and the submitted work. Judge only whether the work does the task and meets every line of the rubric.
@@ -99,13 +101,9 @@ class HybridGrader:
     the stub on that tag, so the runtime strips tags from model output (see runtime/steward.py)."""
 
     def __init__(self, llm: LLMGrader, stub=None):
-        from sim.market import StubGrader
-
         self.llm, self.stub = llm, stub or StubGrader()
 
     def grade(self, spec: str, rubric: str, artifact: str) -> Grade:
-        from sim.market import is_tagged
-
         return (self.stub if is_tagged(artifact) else self.llm).grade(spec, rubric, artifact)
 
 
@@ -127,10 +125,6 @@ class PanelGrader:
         return cls([LLMGrader(backend, model, max_tokens, system, lens, len(lenses)) for lens in lenses])
 
     def grade(self, spec: str, rubric: str, artifact: str) -> Grade:
-        from statistics import median
-
-        from substrate.meter import Usage
-
         grades = [g.grade(spec, rubric, artifact) for g in self.graders]  # a GradingError from any retries the part
         scores = sorted(g.score for g in grades)
         usage = None
