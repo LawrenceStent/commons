@@ -12,6 +12,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from sim.status import JobStatus
 from substrate.meter import Usage
 
 @dataclass
@@ -33,7 +34,7 @@ class MarketJob:
     posted: int
     deadline: int  # claim-by while on the board; submit-by once claimed
     prime: str | None = None
-    status: str = "open"  # open | claimed | graded (awaiting a deferred outcome) | paid | failed | expired
+    status: JobStatus = JobStatus.OPEN
     scores: dict[str, float] = field(default_factory=dict)
     bond: int = 0  # posted by the prime on allocation; returned when paid, forfeited if the job fails
     settle_at: int | None = None  # for deferred outcomes: the cycle the grader settles it

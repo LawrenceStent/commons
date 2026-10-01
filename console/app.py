@@ -26,6 +26,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 
 from console import host
 from sim.engine import Params, World
+from sim.status import LIVE_CONTRACT, ContractStatus, GoalStatus, JobStatus, ProposalStatus, RequestStatus
 from substrate.ledger import purse
 from substrate.meter import KillSwitch
 
@@ -71,7 +72,7 @@ def snapshot(state: dict) -> dict:
     names = list(w.communities)
     trust = {o: {s: (None if o == s else round(w.rep.trust(o, s), 3)) for s in names} for o in names}
 
-    closed = ("accepted", "rejected", "failed", "defaulted", "expired", "withdrawn")
+    closed = tuple(s for s in ContractStatus if s not in LIVE_CONTRACT)
     contracts = [_ev(e) for e in hub.recent("contract.stage", n=hub.ring) if e.fields["stage"] in closed]
     posts = [_ev(e) for e in hub.recent("ledger.post", n=hub.ring)]
     flows: Counter[str] = Counter()
@@ -98,7 +99,7 @@ def snapshot(state: dict) -> dict:
                  "standing": sorted([c, h] for c, h in w.gate.standing),
                  "recent": [{"id": r.id, "coop": r.coop, "tool": r.tool, "target": r.target, "status": r.status,
                              "result": r.result, "cycle": r.cycle} for r in list(w.gate.requests.values())[-20:]
-                            if r.status != "pending"][::-1]},
+                            if r.status != RequestStatus.PENDING][::-1]},
         "society": {"pack": w.pack.title, "economy": w.params.economy, "scorecard": w.scorecard,
                     "grants": w.ledger.balance("grants") if w.params.economy == "grant" else None,
                     "grant_budget": w.params.grant_budget},
@@ -108,12 +109,12 @@ def snapshot(state: dict) -> dict:
                        "attests": [_ev(e) for e in hub.recent("reputation.attest", n=12)][::-1]},
         "market": {"recent": [_ev(e) for e in hub.recent("market.job", n=60) if e.fields["stage"] != "posted"][-15:][::-1],
                    "done": w.jobs_done, "failed": w.jobs_failed, "expired": w.jobs_expired,
-                   "board": sum(j.status == "open" for j in w.jobs.values()),
-                   "in_progress": sum(j.status == "claimed" for j in w.jobs.values()),
+                   "board": sum(j.status == JobStatus.OPEN for j in w.jobs.values()),
+                   "in_progress": sum(j.status == JobStatus.CLAIMED for j in w.jobs.values()),
                    "reward": w.params.job_reward},
         "contracts": {"recent": contracts[-15:][::-1], "stages": Counter(c["stage"] for c in contracts),
                       "window": len(contracts),
-                      "live": Counter(c.status for c in w.contracts.values() if c.status in ("open", "awarded", "delivered"))},
+                      "live": Counter(c.status for c in w.contracts.values() if c.status in (ContractStatus.OPEN, ContractStatus.AWARDED, ContractStatus.DELIVERED))},
         "ledger": {"recent": posts[-15:][::-1], "flows": flows, "window": len(posts),
                    "compute": w.ledger.balance("compute"), "market": w.ledger.balance("market")},
         "bus": {
@@ -125,7 +126,7 @@ def snapshot(state: dict) -> dict:
         "population": {
             "recent": [_ev(e) for e in hub.recent("population.", n=15)][::-1],
             "open": [{"id": x.id, "kind": x.kind, "proposer": x.proposer, "detail": x.role or x.target, "deadline": x.deadline}
-                     for x in w.proposals.values() if x.status == "open"],
+                     for x in w.proposals.values() if x.status == ProposalStatus.OPEN],
             "living": sum(not c.dissolved for c in w.communities.values()),
             "members": sum(c.members for c in w.communities.values()),
             "limits": {"members": w.params.max_members, "communities": w.params.max_communities},
@@ -135,7 +136,7 @@ def snapshot(state: dict) -> dict:
             "goals": [{"community": n, "id": g.id, "title": g.title, "status": g.status, "progress": round(g.progress, 3),
                        "created": g.created, "updated": g.updated, "outcome": g.outcome,
                        "steps": [{"text": s.text, "done": s.done, "note": s.note} for s in g.steps]}
-                      for n, p in w.plans.items() for g in sorted(p.goals.values(), key=lambda g: (g.status != "active", -g.updated))],
+                      for n, p in w.plans.items() for g in sorted(p.goals.values(), key=lambda g: (g.status != GoalStatus.ACTIVE, -g.updated))],
             "ideas": [{"community": n, **asdict(i)} for n, p in w.plans.items() for i in p.ideas][-40:][::-1],
             "ventures": [{"id": v.id, "proposer": v.proposer, "title": v.title, "pitch": v.pitch, "status": v.status,
                           "score": v.score, "reward": v.reward, "reason": v.reason, "job_id": v.job_id, "cycle": v.cycle,
@@ -145,9 +146,9 @@ def snapshot(state: dict) -> dict:
                       "parts": [{"capability": cap, "done": part.artifact is not None,
                                  "state": "done" if part.artifact is not None else next(
                                      (c.status for c in w.contracts.values()
-                                      if c.job_id == j.id and c.capability == cap and c.status in ("open", "awarded", "delivered")), "open")}
+                                      if c.job_id == j.id and c.capability == cap and c.status in (ContractStatus.OPEN, ContractStatus.AWARDED, ContractStatus.DELIVERED)), "open")}
                                 for cap, part in sorted(j.parts.items())]}
-                     for j in w.jobs.values() if j.status == "claimed"],
+                     for j in w.jobs.values() if j.status == JobStatus.CLAIMED],
         },
         "operator": {
             "enabled": w.operator.root is not None, "folder": str(w.operator.root) if w.operator.root else None,

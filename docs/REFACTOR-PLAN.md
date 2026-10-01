@@ -154,7 +154,10 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
 - [x] R1.3 Live economy defaults in the kernel; packs override only what differs (D3)
 - [x] R1.4 `LLMGrader` adds the answer format itself; packs drop their copies (D4)
 - [x] R1.5 One `society_folder(name)` helper (D5)
-- [ ] R1.6 StrEnums for job, contract, venture and request statuses; constants for event kinds (C3)
+- [x] R1.6 StrEnums for job, contract, venture and request statuses (plus proposals, goals and ideas) in
+      `sim/status.py` (C3). Status-string comparisons 63 → 3; the last 3 are in the scripted strategies, which can't
+      import `sim` yet: they convert in R3. Event-kind constants are dropped from this item: R7's typed events replace
+      the kinds, so constants now would be thrown away
 - [ ] R1.7 Delete `protocol.gate` and `protocol.governance` and any other unused code (A6)
 - [ ] **Done when:** these duplicates are gone; golden identical
 

@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from sim.status import GoalStatus, IdeaStatus
+
 MAX_ACTIVE_GOALS = 8
 MAX_STEPS = 12
 KEEP_IDEAS = 30
@@ -30,13 +32,13 @@ class Goal:
     steps: list[Step]
     created: int
     updated: int
-    status: str = "active"  # active | done | dropped
+    status: GoalStatus = GoalStatus.ACTIVE
     idea_id: str | None = None
     outcome: str = ""
 
     @property
     def progress(self) -> float:
-        return sum(s.done for s in self.steps) / len(self.steps) if self.steps else (1.0 if self.status == "done" else 0.0)
+        return sum(s.done for s in self.steps) / len(self.steps) if self.steps else (1.0 if self.status == GoalStatus.DONE else 0.0)
 
 
 @dataclass
@@ -45,7 +47,7 @@ class Idea:
     title: str
     detail: str
     cycle: int
-    status: str = "new"  # new | adopted (became a goal)
+    status: IdeaStatus = IdeaStatus.NEW
     goal_id: str | None = None
 
 
@@ -56,10 +58,10 @@ class Plans:
     goals: dict[str, Goal] = field(default_factory=dict)
 
     def active(self) -> list[Goal]:
-        return [g for g in self.goals.values() if g.status == "active"]
+        return [g for g in self.goals.values() if g.status == GoalStatus.ACTIVE]
 
     def trim(self) -> None:
         del self.ideas[:-KEEP_IDEAS]
-        closed = [g for g in self.goals.values() if g.status != "active"]
+        closed = [g for g in self.goals.values() if g.status != GoalStatus.ACTIVE]
         for g in sorted(closed, key=lambda g: g.updated)[:-KEEP_CLOSED_GOALS]:
             del self.goals[g.id]

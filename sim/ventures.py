@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
 from runtime.backends import ModelBackend, ModelError
+from sim.status import JobStatus, VentureStatus
 from substrate.meter import Usage, cost_micros
 
 if TYPE_CHECKING:
@@ -41,7 +42,7 @@ class Venture:
     pitch: str
     parts: list[tuple[str, str, str]]  # (capability, spec, rubric)
     cycle: int
-    status: str = "pending"  # pending | approved | rejected
+    status: VentureStatus = VentureStatus.PENDING
     score: int | None = None
     reward: int = 0
     reason: str = ""
@@ -85,9 +86,9 @@ def check(w: World, me: Community, title: str, pitch: str, parts: list[tuple[str
     standing = w._standing(me.name)
     if standing < p.bid_floor:
         return f"your standing is {standing:.2f}, below the {p.bid_floor:.2f} line"
-    if any(v.proposer == me.name and v.status == "pending" for v in w.ventures.values()):
+    if any(v.proposer == me.name and v.status == VentureStatus.PENDING for v in w.ventures.values()):
         return "you already have a venture waiting for appraisal"
-    held = sum(j.prime == me.name and j.status == "claimed" for j in w.jobs.values())
+    held = sum(j.prime == me.name and j.status == JobStatus.CLAIMED for j in w.jobs.values())
     if held >= max(2, me.thinking):
         return f"you hold {held} open jobs, the most you may; finish one first"
     if not title.strip() or not pitch.strip():
@@ -105,7 +106,7 @@ def check(w: World, me: Community, title: str, pitch: str, parts: list[tuple[str
             return f"the {c} part needs a real spec and rubric (at least 20 characters each)"
         if len(spec) > MAX_TEXT or len(rubric) > MAX_TEXT:
             return f"the {c} part is too long (spec and rubric at most {MAX_TEXT} characters each)"
-    existing = [v.title for v in w.ventures.values() if v.status != "rejected"] + [j.title for j in w.jobs.values()]
+    existing = [v.title for v in w.ventures.values() if v.status != VentureStatus.REJECTED] + [j.title for j in w.jobs.values()]
     twin = next((t for t in existing if similar(title, t) >= 0.7), None)
     if twin:
         return f"too close to existing work: {twin!r}"

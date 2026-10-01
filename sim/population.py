@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from protocol.population import Fork, Merge, Retire, Spawn
+from sim.status import ContractStatus, JobStatus, ProposalStatus
 from society.community import Community
 from society.observation import Outcome
 from substrate.ledger import InsufficientFunds, purse
@@ -46,14 +47,14 @@ class Proposal:
     deadline: int
     role: str = ""
     target: str = ""  # merge: who is asked to absorb the proposer
-    status: str = "open"  # open | done | expired | failed
+    status: ProposalStatus = ProposalStatus.OPEN
 
 
 def _live(w: World, name: str) -> bool:
     """Anything in flight that `name` owes or is owed."""
-    if any(j.prime == name and j.status == "claimed" for j in w.jobs.values()):
+    if any(j.prime == name and j.status == JobStatus.CLAIMED for j in w.jobs.values()):
         return True
-    return any(name in (c.prime, c.winner) and c.status in ("open", "awarded", "delivered") for c in w.contracts.values())
+    return any(name in (c.prime, c.winner) and c.status in (ContractStatus.OPEN, ContractStatus.AWARDED, ContractStatus.DELIVERED) for c in w.contracts.values())
 
 
 def _new_id(w: World, kind: str) -> str:
@@ -66,7 +67,7 @@ def propose_spawn(w: World, me: Community, role: str) -> Outcome:
     p = w.params
     if me.members >= p.max_members:
         return Outcome(False, f"you already have {me.members} members, the most a community can have; fork instead")
-    if any(x.proposer == me.name and x.kind == "spawn" and x.status == "open" for x in w.proposals.values()):
+    if any(x.proposer == me.name and x.kind == "spawn" and x.status == ProposalStatus.OPEN for x in w.proposals.values()):
         return Outcome(False, "you already have a spawn waiting for a second")
     if w.ledger.balance(purse(me.name)) < p.spawn_fee:
         return Outcome(False, f"a spawn costs {p.spawn_fee}; you can't afford it")
@@ -81,22 +82,22 @@ def propose_spawn(w: World, me: Community, role: str) -> Outcome:
 
 def second_spawn(w: World, me: Community, pid: str) -> Outcome:
     x = w.proposals.get(pid)
-    if x is None or x.kind != "spawn" or x.status != "open":
+    if x is None or x.kind != "spawn" or x.status != ProposalStatus.OPEN:
         return Outcome(False, f"no open spawn proposal {pid}")
     if x.proposer == me.name:
         return Outcome(False, "a spawn needs a second from a different community")
     prop = w.communities[x.proposer]
     if prop.members >= w.params.max_members:
-        x.status = "failed"
+        x.status = ProposalStatus.FAILED
         return Outcome(False, f"{prop.name} is already at the member limit")
     try:
         w.ledger.transfer(purse(prop.name), "treasury", w.params.spawn_fee, cycle=w.cycle, kind="spawn", memo=pid)
     except InsufficientFunds:
-        x.status = "failed"
+        x.status = ProposalStatus.FAILED
         w._tell(prop.name, "spawn_failed", f"{pid} was seconded but you couldn't pay the fee", pid)
         return Outcome(False, f"{prop.name} can no longer pay the spawn fee")
     prop.members += 1
-    x.status = "done"
+    x.status = ProposalStatus.DONE
     agent = f"{prop.name}#{prop.members}"
     w._send(prop, Spawn(agent=agent, role=x.role, seconded_by=me.name))
     w._tell(prop.name, "spawned", f"{me.name} seconded {pid}: {agent} joined as {x.role}", pid)
@@ -129,7 +130,7 @@ def fork(w: World, me: Community, name: str, members: int, capabilities: tuple[s
     caps = tuple(sorted(set(capabilities)))
     if not caps or not set(caps) <= me.capabilities:
         return Outcome(False, "a fork takes a non-empty subset of your capabilities")
-    owed = sum(c.price - c.advance for c in w.contracts.values() if c.prime == me.name and c.status in ("awarded", "delivered"))
+    owed = sum(c.price - c.advance for c in w.contracts.values() if c.prime == me.name and c.status in (ContractStatus.AWARDED, ContractStatus.DELIVERED))
     share = max(0, w.ledger.balance(purse(me.name)) - owed) * members // me.members
 
     child = Community(name, members, set(caps), copy.deepcopy(me.strategy), charter=charter[:200] or me.charter,
@@ -160,11 +161,11 @@ def propose_merge(w: World, me: Community, target: str) -> Outcome:
 
 def accept_merge(w: World, me: Community, pid: str) -> Outcome:
     x = w.proposals.get(pid)
-    if x is None or x.kind != "merge" or x.status != "open" or x.target != me.name:
+    if x is None or x.kind != "merge" or x.status != ProposalStatus.OPEN or x.target != me.name:
         return Outcome(False, f"no open merge offer {pid} addressed to you")
     joiner = w.communities[x.proposer]
     if joiner.dissolved:
-        x.status = "failed"
+        x.status = ProposalStatus.FAILED
         return Outcome(False, f"{joiner.name} no longer exists")
     if _live(w, joiner.name):
         return Outcome(False, f"{joiner.name} still has jobs or contracts in flight; it can join once they close")
@@ -181,7 +182,7 @@ def accept_merge(w: World, me: Community, pid: str) -> Outcome:
     w._send(joiner, Merge(target=me.name))
     joiner.members, joiner.dissolved, joiner.active = 0, True, False
     w.registry.register(me.name, me.identity.public, sorted(me.capabilities), me.charter)
-    x.status = "done"
+    x.status = ProposalStatus.DONE
     w._tell(me.name, "merged", f"{joiner.name} joined you with {moved}", pid)
     w.hub.emit("population.merge", w.cycle, joiner=joiner.name, target=me.name, purse=moved, members=me.members)
     return Outcome(True, f"{joiner.name} merged into you; you now have {me.members} members")
@@ -218,10 +219,10 @@ def learn(w: World, me: Community, capability: str, playbook_id: str | None = No
 
 def expire_proposals(w: World) -> None:
     for x in w.proposals.values():
-        if x.status == "open" and w.cycle > x.deadline:
-            x.status = "expired"
+        if x.status == ProposalStatus.OPEN and w.cycle > x.deadline:
+            x.status = ProposalStatus.EXPIRED
             w._tell(x.proposer, f"{x.kind}_expired", f"{x.id} expired without {'a second' if x.kind == 'spawn' else 'an answer'}", x.id)
-    for k in [k for k, x in w.proposals.items() if x.status != "open" and x.deadline < w.cycle - w.params.retain]:
+    for k in [k for k, x in w.proposals.items() if x.status != ProposalStatus.OPEN and x.deadline < w.cycle - w.params.retain]:
         del w.proposals[k]
 
 

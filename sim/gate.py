@@ -35,6 +35,7 @@ from collections import Counter
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from sim.status import RequestStatus
 from substrate.jsonl import JsonlLog
 
 RISKS = ("read", "contact", "publish", "spend")
@@ -102,7 +103,7 @@ class Request:
     target: str  # the url, or the search query
     host: str
     cycle: int
-    status: str = "pending"  # pending | approved | denied | expired | done | failed
+    status: RequestStatus = RequestStatus.PENDING
     always: bool = False
     reason: str = ""
     result: str = ""
@@ -141,7 +142,7 @@ class Gate:
             return "deny", f"{host or 'that address'} is not on the operator's allowlist (allowed: {hosts})"
         if self.used[coop] >= self.policy.per_cycle:
             return "deny", f"you've used your {self.policy.per_cycle} web calls this cycle"
-        waiting = next((r for r in self.requests.values() if r.status in ("pending", "approved") and r.coop == coop
+        waiting = next((r for r in self.requests.values() if r.status in (RequestStatus.PENDING, RequestStatus.APPROVED) and r.coop == coop
                         and r.tool == tool and r.target == target), None)
         if waiting:
             return "pending", waiting
@@ -150,7 +151,7 @@ class Gate:
         r = Request(f"G{self._seq}", coop, actor, tool, risk, target, host, cycle)
         self.requests[r.id] = r
         if policy == "allow" or (coop, host) in self.standing:
-            r.status, r.reason = "approved", "allowed by policy" if policy == "allow" else "standing approval"
+            r.status, r.reason = RequestStatus.APPROVED, "allowed by policy" if policy == "allow" else "standing approval"
             return "allow", r
         self._write(r)
         return "pending", r
@@ -161,9 +162,9 @@ class Gate:
         done = []
         for rid in ids:
             r = self.requests.get(rid)
-            if r is None or r.status != "pending":
+            if r is None or r.status != RequestStatus.PENDING:
                 continue
-            r.status, r.reason, r.always = ("approved" if approve else "denied"), reason, bool(approve and always)
+            r.status, r.reason, r.always = (RequestStatus.APPROVED if approve else RequestStatus.DENIED), reason, bool(approve and always)
             if r.always:
                 self.standing.add((r.coop, r.host))
             done.append(r)
@@ -178,16 +179,16 @@ class Gate:
     def expire(self, cycle: int) -> list[Request]:
         out = []
         for r in self.requests.values():
-            if r.status == "pending" and cycle - r.cycle >= self.policy.ttl:
-                r.status, r.reason = "expired", f"no decision within {self.policy.ttl} cycles"
+            if r.status == RequestStatus.PENDING and cycle - r.cycle >= self.policy.ttl:
+                r.status, r.reason = RequestStatus.EXPIRED, f"no decision within {self.policy.ttl} cycles"
                 out.append(r)
         return out
 
     def pending(self) -> list[Request]:
-        return [r for r in self.requests.values() if r.status == "pending"]
+        return [r for r in self.requests.values() if r.status == RequestStatus.PENDING]
 
     def approved(self) -> list[Request]:
-        return [r for r in self.requests.values() if r.status == "approved"]
+        return [r for r in self.requests.values() if r.status == RequestStatus.APPROVED]
 
     def groups(self) -> list[dict]:
         """Pending requests batched by (co-op, tool, host), for approving together."""

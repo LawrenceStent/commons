@@ -20,6 +20,7 @@ from protocol.reputation import Attest, Dispute
 from sim import population
 from sim.activity import logged
 from sim.goals import MAX_ACTIVE_GOALS, MAX_STEPS, Goal, Idea, Step
+from sim.status import LIVE_CONTRACT, ContractStatus, IdeaStatus, JobStatus
 from sim import ventures as ventures_mod
 from society.observation import Outcome
 from substrate.bus import RateLimited
@@ -65,7 +66,7 @@ class Actions:
     # ── market ─────────────────────────────────────────────────
     def claim(self, job_id: str) -> Outcome:
         job = self.w.jobs.get(job_id)
-        if job is None or job.status != "open":
+        if job is None or job.status != JobStatus.OPEN:
             return Outcome(False, f"job {job_id} is not on the board")
         # at most two open jobs (or one per awake member), counting claims waiting for allocation
         w, p = self.w, self.w.params
@@ -85,13 +86,13 @@ class Actions:
             w.claims.setdefault(job_id, {})[self.me.name] = w.cycle
             return Outcome(True, f"claim on {job_id} registered; jobs are allocated at the end of the cycle to the most "
                                  f"trusted, best-fitting claimant (bond {bond} if you win)", job_id)
-        job.prime, job.status = self.me.name, "claimed"
+        job.prime, job.status = self.me.name, JobStatus.CLAIMED
         job.deadline = w.cycle + p.job_ttl
         return Outcome(True, f"claimed {job_id}; submit all parts by cycle {job.deadline}", job_id)
 
     def do_part(self, job_id: str, capability: str, artifact: str, cites: tuple[str, ...] = ()) -> Outcome:
         job = self.w.jobs.get(job_id)
-        if job is None or job.prime != self.me.name or job.status != "claimed":
+        if job is None or job.prime != self.me.name or job.status != JobStatus.CLAIMED:
             return Outcome(False, f"you are not working on job {job_id}")
         part = job.parts.get(capability)
         if part is None:
@@ -104,8 +105,8 @@ class Actions:
             return err
         if err := self._use_capacity():
             return err
-        for c in self.w.contracts_for(job_id, capability, ("open",)):
-            c.status = "withdrawn"
+        for c in self.w.contracts_for(job_id, capability, (ContractStatus.OPEN,)):
+            c.status = ContractStatus.WITHDRAWN
         part.artifact, part.source, part.cites = artifact[:MAX_ARTIFACT], "self", tuple(cites)
         self.w.maybe_submit(job)
         return Outcome(True, f"{capability} part of {job_id} done")
@@ -113,12 +114,12 @@ class Actions:
     # ── contract-net ───────────────────────────────────────────
     def announce(self, job_id: str, capability: str, max_price: int, advance_frac: float) -> Outcome:
         job = self.w.jobs.get(job_id)
-        if job is None or job.prime != self.me.name or job.status != "claimed":
+        if job is None or job.prime != self.me.name or job.status != JobStatus.CLAIMED:
             return Outcome(False, f"you are not working on job {job_id}")
         part = job.parts.get(capability)
         if part is None or part.artifact is not None:
             return Outcome(False, f"job {job_id} has no open {capability} part")
-        if self.w.contracts_for(job_id, capability, ("open", "awarded", "delivered")):
+        if self.w.contracts_for(job_id, capability, LIVE_CONTRACT):
             return Outcome(False, f"a contract for that part is already in progress")
         if max_price <= 0 or not 0 <= advance_frac <= 1:
             return Outcome(False, "max_price must be positive and advance_frac within 0..1")
@@ -132,7 +133,7 @@ class Actions:
 
     def bid(self, contract_id: str, price: int) -> Outcome:
         c = self._contract(contract_id)
-        if c is None or c.status != "open":
+        if c is None or c.status != ContractStatus.OPEN:
             return Outcome(False, f"contract {contract_id} is not open")
         if c.prime == self.me.name:
             return Outcome(False, "you can't bid on your own contract")
@@ -153,7 +154,7 @@ class Actions:
 
     def award(self, contract_id: str, bidder: str) -> Outcome:
         c = self._contract(contract_id)
-        if c is None or c.prime != self.me.name or c.status != "open":
+        if c is None or c.prime != self.me.name or c.status != ContractStatus.OPEN:
             return Outcome(False, f"you have no open contract {contract_id}")
         if bidder not in c.bids:
             return Outcome(False, f"{bidder} did not bid on {contract_id}")
@@ -175,7 +176,7 @@ class Actions:
 
     def deliver(self, contract_id: str, artifact: str, cites: tuple[str, ...] = ()) -> Outcome:
         c = self._contract(contract_id)
-        if c is None or c.winner != self.me.name or c.status != "awarded":
+        if c is None or c.winner != self.me.name or c.status != ContractStatus.AWARDED:
             return Outcome(False, f"you have no awarded contract {contract_id} to deliver")
         if err := self._cites_ok(tuple(cites)):
             return err
@@ -191,7 +192,7 @@ class Actions:
         if self.w.params.grader_reviews:
             return Outcome(False, "the grader judges deliveries; there is nothing for you to review")
         c = self._contract(contract_id)
-        if c is None or c.prime != self.me.name or c.status != "delivered":
+        if c is None or c.prime != self.me.name or c.status != ContractStatus.DELIVERED:
             return Outcome(False, f"you have no delivery {contract_id} to review")
         if accept and not self.w.pay_remainder(c):
             return Outcome(False, f"you can't pay the {c.price - c.advance} remainder; "
@@ -202,7 +203,7 @@ class Actions:
 
     def attest(self, contract_id: str, outcome: float) -> Outcome:
         c = self._contract(contract_id)
-        if c is None or c.winner != self.me.name or c.status not in ("accepted", "rejected", "failed"):
+        if c is None or c.winner != self.me.name or c.status not in (ContractStatus.ACCEPTED, ContractStatus.REJECTED, ContractStatus.FAILED):
             return Outcome(False, f"no closed contract {contract_id} where you were the contractor")
         if c.winner_attested:
             return Outcome(False, "you already rated this prime")
@@ -222,7 +223,7 @@ class Actions:
         c = self._contract(contract_id)
         if c is not None and c.winner == self.me.name and c.disputed:
             return Outcome(False, f"{contract_id} has already been audited")
-        if c is None or c.winner != self.me.name or c.status != "rejected":
+        if c is None or c.winner != self.me.name or c.status != ContractStatus.REJECTED:
             return Outcome(False, f"you have no rejected delivery {contract_id} to dispute")
         if w.cycle > c.closed + p.dispute_window:
             return Outcome(False, f"too late: disputes must be filed within {p.dispute_window} cycles of the rejection")
@@ -321,7 +322,7 @@ class Actions:
         return self.w.operator.view(self.me.name)
 
     def operator_refusal(self, action: str, args: dict) -> str | None:
-        held = sum(j.prime == self.me.name and j.status == "claimed" for j in self.w.jobs.values())
+        held = sum(j.prime == self.me.name and j.status == JobStatus.CLAIMED for j in self.w.jobs.values())
         return self.w.operator.check(self.me.name, action, args, held)
 
     def record_member_work(self, args: dict, out: Outcome) -> None:
@@ -386,7 +387,7 @@ class Actions:
         self.w.ventures[v.id] = v
         for i in self.w.plans[self.me.name].ideas:
             if i.id == idea_id:
-                i.status = "adopted"
+                i.status = IdeaStatus.ADOPTED
         self.w.hub.emit("venture.proposed", self.w.cycle, id=v.id, proposer=self.me.name, title=title, parts=[c for c, _, _ in norm])
         return Outcome(True, f"venture {v.id} proposed (fee {fee}); it will be appraised at the start of next cycle", v.id)
 
