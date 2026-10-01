@@ -9,6 +9,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sim.grader import GradingError
+from sim.ventures import AppraisalError, Venture
+
 @dataclass(frozen=True)
 class Case:
     name: str
@@ -34,8 +37,6 @@ class Result:
 
 
 def run(grader, cases) -> list[Result]:
-    from sim.grader import GradingError
-
     out = []
     for case in cases:
         try:
@@ -82,8 +83,6 @@ class VentureResult:
 
 
 def run_appraiser(appraiser, cases) -> list[VentureResult]:
-    from sim.ventures import AppraisalError, Venture
-
     out = []
     for c in cases:
         v = Venture(f"cal-{c.name}", "calibration", c.title, c.pitch, list(c.parts), 0)

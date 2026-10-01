@@ -45,14 +45,14 @@ from sim.goals import Plans
 from sim.operator import Operator
 from sim.ventures import AppraisalError, Appraiser, StubAppraiser, Venture, value as venture_value
 from sim.grader import GradingError
-from sim.market import MarketJob
+from sim.market import MarketJob, Part
 from society.grading import Grade, Grader, StubGrader
 from sim.pack import Pack
 from sim.ports import WebError, WebPort, host_of
 from sim.pack import load as load_pack
 from sim.ratings import EVIDENCE, Ratings
 from sim.status import LIVE_CONTRACT, ContractStatus, JobStatus, ProposalStatus, RequestStatus, VentureStatus
-from sim.scorecard import GENERAL, evaluate as evaluate_scorecard
+from sim.scorecard import GENERAL, evaluate as evaluate_scorecard, report as scorecard_report
 from sim.population import Proposal, expire_proposals
 from society.community import Community
 from society.observation import (
@@ -897,8 +897,6 @@ class World:
             self.hub.emit("venture.decided", self.cycle, id=v.id, proposer=v.proposer, title=v.title, status=VentureStatus.REJECTED,
                           score=v.score, reward=0, reason=v.reason)
             return
-        from sim.market import MarketJob, Part
-
         self._venture_seq += 1
         job = MarketJob(f"V{self._venture_seq}", v.title, v.reward,
                         {c: Part(c, spec, rubric) for c, spec, rubric in v.parts}, posted=self.cycle,
@@ -1247,7 +1245,5 @@ def summary(world: World, window: int = 50) -> str:
                 f"royalties {sum(world.royalties_paid.values()) / 1e6:.3f} cr"
                 + (f", grants left {world.ledger.balance('grants') / 1e6:.3f} cr" if world.params.economy == "grant" else ""))
     if world.scorecard:
-        from sim.scorecard import report
-
-        rows += ["", "scorecard", report(world.scorecard)]
+        rows += ["", "scorecard", scorecard_report(world.scorecard)]
     return "\n".join(rows)

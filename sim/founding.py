@@ -34,6 +34,8 @@ from typing import Any
 
 from sim.ports import ModelBackend, ModelError
 from sim.pack import Pack, TemplateWorkSource
+from society.community import Community
+from society.strategies import Cooperator, Defector, FreeRider
 from sim.pack import load as load_pack
 
 ROOT = Path("societies")
@@ -232,9 +234,6 @@ class Society:
 
     def population(self, llm):
         """The co-ops, given a factory `llm(name, capabilities, charter, members, doctrine)` for LLM ones."""
-        from society.community import Community
-        from society.strategies import Cooperator, Defector, FreeRider
-
         scripted = {"cooperator": Cooperator, "defector": Defector, "free-rider": FreeRider}
         out = []
         for b in self.blueprints:

@@ -23,11 +23,7 @@ OUTWARD = {
 }
 
 # imports of our own modules inside functions (A2): each one hides a dependency
-IN_FUNCTIONS = {
-    ("sim/calibration.py", "sim.grader"), ("sim/calibration.py", "sim.ventures"), ("sim/engine.py", "sim.scorecard"),
-    ("sim/engine.py", "sim.market"), ("sim/founding.py", "society.community"),
-    ("sim/founding.py", "society.strategies"), 
-}
+IN_FUNCTIONS: set[tuple[str, str]] = set()
 
 
 def _imports():

@@ -173,8 +173,10 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
 - [x] R2.3 The world receives its ledger, bus, hub, activity log and web; a factory builds the defaults
       (`_default_ledger`, `_default_bus`, `_default_activity`). The web is a port (`sim.ports.WebPort`, with `Page`,
       `SearchResult`, `WebError`, `host_of`); `runtime.web.WebAccess` implements it
-- [ ] R2.4 No function-level imports of our own modules
-- [ ] **Done when:** no import cycles; the layer test's exceptions shrink; golden identical
+- [x] R2.4 No function-level imports of our own modules (11 → 0)
+- [x] **Done when:** no import cycles; the layer test's exceptions shrink; golden identical. 1 Oct: the cycles left
+      (console↔sim, runtime↔sim) come only from the command-line scripts that still live in `sim/` (`live`, `found`,
+      `calibrate`); they are 7 of the layer test's exceptions (13 → 7) and go when R3 moves the scripts to `interfaces`
 
 ### R3. The new layout (L, mechanical) — A3
 - [ ] R3.1 Create `commons/` with `domain`, `application`, `adapters`, `agents`, `interfaces`, `protocol`
