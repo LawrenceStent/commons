@@ -28,6 +28,7 @@ from collections import Counter, defaultdict, deque
 
 from commons.application.actions import Actions
 from commons.application.cycle import run_cycle
+from commons.application.events import Events
 from commons.application.gate import Gate
 from commons.application.observation import (
     Event,
@@ -145,6 +146,7 @@ class Society:
 
     def _start_services(self) -> None:
         """The world's work, one responsibility each (commons/application/services/)."""
+        self.events = Events(self)  # domain events, and what co-ops are told and telemetry records of them
         self.observer = ObservationBuilder(self)
         self.recorder = Recorder(self)
         self.gossip = GossipService(self)

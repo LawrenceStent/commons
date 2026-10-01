@@ -9,6 +9,7 @@ from __future__ import annotations
 import random
 from typing import TYPE_CHECKING
 
+from commons.domain import events as ev
 from commons.domain.community import Community
 from commons.domain.market import MarketJob
 from commons.domain.status import (
@@ -121,7 +122,7 @@ class JobBoard:
         for c in self.w.contracts.values():
             if c.job_id == job.id and c.status == ContractStatus.OPEN:
                 c.withdraw(at=self.w.cycle)
-                self.w.contract_net.stage(c, c.status)
+                self.w.events.publish(ev.ContractWithdrawn(c))
         self.w.tell(job.prime, "job_failed", f"{job.id} failed: {why}", job.id)
         self.w.hub.emit("market.job", self.w.cycle, id=job.id, stage="failed", prime=job.prime, caps=sorted(job.parts),
                       reward=job.reward, why=why)

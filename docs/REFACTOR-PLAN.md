@@ -220,7 +220,9 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
       `chat` methods (46 and 43 lines) for R12
 
 ### R7. Domain events (M) — D7
-- [ ] R7.1 Typed events and a dispatcher; subscribers for inbox, telemetry and activity
+- [x] R7.1 Typed events (`domain/events.py`) and a dispatcher (`application/events.py`); subscribers for what co-ops
+      are told (`notices`) and telemetry (`telemetry`), one function per event type. The activity log already derives its
+      change entries from telemetry, so it needs no subscriber of its own
 - [ ] R7.2 Contract and job events moved onto it (one family per commit)
 - [ ] R7.3 Venture, population, grant, rating and gate events moved onto it
 - [ ] **Done when:** no direct `_tell`, `hub.emit` or `activity.add` in services; golden identical

@@ -31,8 +31,8 @@ from commons.application.graders import HybridGrader, LLMGrader, PanelGrader
 from commons.application.operator import Operator
 from commons.application.ratings import Ratings
 from commons.application.services.recorder import summary
-from commons.application.ventures import LLMAppraiser
 from commons.application.society import Params, World
+from commons.application.ventures import LLMAppraiser
 from commons.domain.community import Community
 from commons.domain.pack import load as load_pack
 from commons.substrate.meter import KillSwitch
