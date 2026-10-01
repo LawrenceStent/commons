@@ -84,8 +84,9 @@ _TOOLS: list[dict[str, Any]] = [
      "joins the archive as passages: cite them as [archive: <id>] (a citation to a page no one read fails). Free in "
      "credits; counts toward your web calls this cycle. If the operator must approve, it waits: don't ask again.",
      "input_schema": _obj({"url": S}, ["url"])},
-    {"name": "read_archive", "description": "Read one archive passage in full, by the id search_archive gave. Free, "
-     "but what you read is part of this turn's thinking.", "input_schema": _obj({"passage_id": S}, ["passage_id"])},
+    {"name": "read_archive", "description": "Read up to 5 archive passages in full, by the ids search_archive gave: ask "
+     "for all you need in one call, since every call costs a round of thinking. Free, but what you read is part of this "
+     "turn's thinking.", "input_schema": _obj({"passage_ids": IDS}, ["passage_ids"])},
     {"name": "learn", "description": "Buy a capability you lack. Expensive, and more so the more you have. Cheaper "
      "with a playbook_id for that capability, whose author earns a royalty. Uses one capacity.",
      "input_schema": _obj({"capability": S, "playbook_id": S}, ["capability"])},

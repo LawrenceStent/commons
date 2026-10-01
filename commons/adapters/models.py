@@ -11,10 +11,12 @@ They implement the model port (commons/application/ports.py), which describes th
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 import urllib.error
 import urllib.request
+from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -175,6 +177,8 @@ class LMStudioBackend:
         self.base_url, self.price_as, self.timeout = base_url.rstrip("/"), price_as, timeout
         self._post = self._within_deadline(post or self._http_post)
         self._tool_capable: dict[str, bool] = dict(tool_capable or {})
+        self._recent: deque[str] = deque(maxlen=4)  # the last prompts, one per server slot (LM Studio's default 4)
+        self._recent_lock = threading.Lock()
 
     def supports_tools(self, model: str) -> bool:
         """LM Studio silently drops `tools` for models it doesn't mark tool-capable; the model then
@@ -198,6 +202,7 @@ class LMStudioBackend:
             "temperature": 0,
         }
         r, ms = self._post(body)
+        usage = self._usage(r, body)
         try:
             choice = r["choices"][0]
             text = choice["message"]["content"] or ""
@@ -206,8 +211,6 @@ class LMStudioBackend:
             data = json.loads(text)
         except (KeyError, IndexError, ValueError) as e:
             raise ModelError(f"unusable answer from LM Studio: {str(r)[:200]}") from e
-        u = r.get("usage") or {}
-        usage = Usage(input_tokens=u.get("prompt_tokens", 0), output_tokens=u.get("completion_tokens", 0))
         return Completion(_check(data, schema), usage, r.get("model", model), self.price_as, False, ms, text)
 
     def chat(self, *, model, system, messages, tools=None, max_tokens=4096, reasoning=True) -> Turn:
@@ -224,9 +227,24 @@ class LMStudioBackend:
             body["tools"] = [{"type": "function", "function": {"name": t["name"], "description": t["description"],
                                                                "parameters": t["input_schema"]}} for t in tools]
         r, ms = self._post(body)
-        return self._turn(r, model, ms)
+        return self._turn(r, model, ms, self._usage(r, body))
 
-    def _turn(self, r: dict[str, Any], model: str, ms: int) -> Turn:
+    def _usage(self, r: dict[str, Any], body: dict[str, Any]) -> Usage:
+        """Tokens used, with the prompt's cached share priced as a cache read. llama.cpp keeps each slot's last prompt
+        and reuses the longest common prefix (LM Studio's log: "selected slot by LCP similarity"), but doesn't report it,
+        so the share is estimated the same way: the longest prefix this prompt shares with one of the last few. Without
+        it, a local run charged every round of a turn in full for the conversation so far, which a cached API wouldn't."""
+        u = r.get("usage") or {}
+        total, out = u.get("prompt_tokens", 0), u.get("completion_tokens", 0)
+        prompt = json.dumps([body.get("tools"), body.get("response_format"), body["messages"]], sort_keys=True)
+        with self._recent_lock:
+            shared = max((len(os.path.commonprefix([prompt, p])) for p in self._recent), default=0)
+            self._recent.append(prompt)
+        reported = (u.get("prompt_tokens_details") or {}).get("cached_tokens")
+        cached = min(total, reported if reported is not None else total * shared // max(1, len(prompt)))
+        return Usage(input_tokens=total - cached, output_tokens=out, cache_read_input_tokens=cached)
+
+    def _turn(self, r: dict[str, Any], model: str, ms: int, usage: Usage) -> Turn:
         try:
             choice = r["choices"][0]
             msg = choice["message"]
@@ -244,8 +262,6 @@ class LMStudioBackend:
             stop = "max_tokens"  # it spent the whole allowance reasoning and never answered
         if calls:
             stop = "tool_use"
-        u = r.get("usage") or {}
-        usage = Usage(input_tokens=u.get("prompt_tokens", 0), output_tokens=u.get("completion_tokens", 0))
         return Turn(msg.get("content") or "", tuple(calls), stop, usage, r.get("model", model), self.price_as, False, ms)
 
     def _within_deadline(self, post: Callable[[dict[str, Any]], tuple[dict[str, Any], int]]):

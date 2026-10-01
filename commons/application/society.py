@@ -135,6 +135,7 @@ class Society:
         self.royalties_paid: dict[str, int] = {}
         self.proposals: dict[str, Proposal] = {}
         self.thinking_spend: Counter[str] = Counter()  # µcr of model calls, per co-op
+        self.cheapest_call: dict[str, int] = {}  # µcr of each co-op's cheapest steward call so far
         self.transcripts: defaultdict[str, deque] = defaultdict(lambda: deque(maxlen=2))  # LLM turns, newest last
         self.plans: defaultdict[str, Plans] = defaultdict(Plans)  # ideas and goals per community
         self.known_capabilities = set(self.pack.capabilities).union(*(c.capabilities for c in self.communities.values()))

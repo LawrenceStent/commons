@@ -166,6 +166,9 @@ class StewardLoop:
         if self.budget is not None and self.cost >= self.budget:
             log.append({"kind": "error", "text": f"the operator's thinking budget ({self.budget} µcr a turn) is spent; turn over"})
             return False
+        if why := act.thinking_refusal():
+            log.append({"kind": "error", "text": why})
+            return False
         try:
             t = a.backend.chat(model=self.model, system=self.system, messages=self.messages,
                                tools=steward_tools(bool(self.obs.web)), max_tokens=self.max_tokens)

@@ -11,7 +11,7 @@ from commons.application.commands.pipeline import command
 from commons.application.observation import Outcome
 from commons.domain.money import Micros
 from commons.domain.status import JobStatus
-from commons.substrate.ledger import InsufficientFunds
+from commons.substrate.ledger import InsufficientFunds, purse
 
 if TYPE_CHECKING:
     pass
@@ -25,10 +25,23 @@ class RuntimeHooks(CommandBase):
         Raises InsufficientFunds when the purse can't pay, and KillSwitch at a ceiling."""
         cost = self.w.meter.charge_usage(self.me.name, price_as, usage, cycle=self.w.cycle, real=real)
         self.w.thinking_spend[self.me.name] += cost
+        if role == "steward":
+            self.w.cheapest_call[self.me.name] = min(cost, self.w.cheapest_call.get(self.me.name, cost))
         self.w.hub.emit("llm.call", self.w.cycle, community=self.me.name, role=role, model=model,
                         input_tokens=usage.input_tokens, output_tokens=usage.output_tokens,
                         cache_read=usage.cache_read_input_tokens, cache_hit=cache_hit, cost=cost, ms=ms, real=real)
         return cost
+
+    @command(log=False)
+    def thinking_refusal(self) -> str | None:
+        """A rule: no model call the purse can't pay for. The estimate is this co-op's cheapest steward call so far;
+        before its first there is nothing to go on, so the call goes ahead (and is refused payment if it can't pay)."""
+        cheapest = self.w.cheapest_call.get(self.me.name)
+        balance = self.w.ledger.balance(purse(self.me.name))
+        if cheapest is not None and balance < cheapest:
+            return (f"the purse ({balance} µcr) can't pay for a model call (the cheapest so far cost {cheapest} µcr); "
+                    "turn over without thinking")
+        return None
 
     @command(log=False)
     def observe(self):

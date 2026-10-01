@@ -108,3 +108,7 @@ def test_the_archive_is_searched_on_demand():
     assert read and "Reference material" in read.message
     assert "ARCHIVE:" in render(w.observe(w.communities["coop-a"]))
     assert "no archive passage" in act.read_archive("nope#9").message
+    ids = list(arc.passages)[:2]
+    both = act.read_archive(ids + ["nope#9"])  # several in one call; an unknown id is named, not fatal
+    assert both and both.message.count("Reference material") == 2 and "no archive passage nope#9" in both.message
+    assert len(act.read_archive([pid] * 9).message.split("Reference material")) - 1 <= 5

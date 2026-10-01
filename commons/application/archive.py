@@ -3,7 +3,7 @@
 Anything too big for a steward's prompt (reports, datasets written up as text, prior research, notes) goes in a
 society's `archive/` folder as .md or .txt files. It is split into passages of about 800 characters; stewards
 search it with `search_archive(query)` (keyword ranking, no model call) and read one passage in full with
-`read_archive(passage_id)`. Both tools are free: the only cost is the tokens of what the steward chooses to read.
+`read_archive(passage_ids)` (up to 5 at once). Both tools are free: the only cost is the tokens of what the steward chooses to read.
 
 The archive is written by you, so its text is trusted reference material, but it is still shown as reference,
 never as instructions.

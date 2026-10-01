@@ -79,8 +79,8 @@ def test_an_empty_purse_ends_the_turn_before_more_thinking():
     # after the floor top-up, just enough to wake one member and nothing left to think with
     w.ledger.transfer(purse("llm-a"), "compute", bal - 1_000, cycle=w.cycle, kind="test")
     w.step()
-    assert len(backend.chats) - before <= 1
-    assert any("couldn't pay" in e.get("text", "") for e in w.transcripts["llm-a"][-1]["entries"])
+    assert len(backend.chats) == before  # a rule, before the call: no model call the purse can't pay for
+    assert any("can't pay for a model call" in e.get("text", "") for e in w.transcripts["llm-a"][-1]["entries"])
 
 
 def test_the_prompt_prefix_is_stable_and_the_observation_goes_last():
@@ -442,3 +442,16 @@ def test_a_stuck_engine_fails_the_call_at_the_deadline():
     with pytest.raises(ModelError, match="no answer"):
         b.chat(model="m", system=["s"], messages=[{"role": "user", "text": "x"}])
     assert time.perf_counter() - t < 1
+
+
+def test_lmstudio_counts_a_repeated_prompt_prefix_as_cached():
+    sent = []
+    reply = {"choices": [{"finish_reason": "stop", "message": {"content": "ok"}}],
+             "usage": {"prompt_tokens": 1000, "completion_tokens": 5}}
+    b = LMStudioBackend(post=lambda body: (sent.append(body) or reply, 1))
+    first = [{"role": "user", "text": "observation " * 200}]
+    t1 = b.chat(model="m", system=["the rules " * 200], messages=first)
+    t2 = b.chat(model="m", system=["the rules " * 200], messages=first + [
+        {"role": "assistant", "text": "thinking"}, {"role": "user", "text": "more"}])
+    assert t1.usage.cache_read_input_tokens == 0 and t1.usage.input_tokens == 1000
+    assert t2.usage.cache_read_input_tokens > 900 and t2.usage.input_tokens + t2.usage.cache_read_input_tokens == 1000

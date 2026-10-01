@@ -15,6 +15,8 @@ from commons.substrate.ledger import InsufficientFunds
 if TYPE_CHECKING:
     pass
 
+MAX_READ = 5  # passages per read_archive call
+
 
 class KnowledgeCommands(CommandBase):
     @command()
@@ -50,15 +52,21 @@ class KnowledgeCommands(CommandBase):
         if not hits:
             return Outcome(True, f"nothing in the archive matches {query!r}")
         lines = [f"{p.id} ({p.source}): {' '.join(p.text.split())[:160]}…" for p, _ in hits]
-        return Outcome(True, "Archive passages (read one in full with read_archive):\n" + "\n".join(lines))
+        return Outcome(True, "Archive passages (read the ones you need in full with one read_archive call):\n" + "\n".join(lines))
 
     @command()
-    def read_archive(self, passage_id: PassageId) -> Outcome:
-        """Free: one archive passage in full, as reference material."""
-        p = self.w.archive.get(str(passage_id))
-        if p is None:
-            return Outcome(False, f"no archive passage {passage_id}; search_archive gives valid ids")
-        return Outcome(True, f"Reference material from {p.source} ({p.id}):\n{p.text}", p.id)
+    def read_archive(self, passage_ids: PassageId | list[PassageId]) -> Outcome:
+        """Free: up to `MAX_READ` archive passages in full, as reference material. Reading several in one call saves a
+        round of thinking each (in a live run, stewards read one at a time and every read re-sent the conversation).
+        An unknown id is named in the answer; the call fails only if none was found."""
+        ids = list(dict.fromkeys([passage_ids] if isinstance(passage_ids, str) else map(str, passage_ids)))[:MAX_READ]
+        found = [p for pid in ids if (p := self.w.archive.get(pid)) is not None]
+        missing = [f"no archive passage {pid}; search_archive gives valid ids" for pid in ids
+                   if pid not in {p.id for p in found}]
+        if not found:
+            return Outcome(False, "; ".join(missing) or "name at least one passage id")
+        text = "\n\n".join(f"Reference material from {p.source} ({p.id}):\n{p.text}" for p in found)
+        return Outcome(True, "\n\n".join([text, *missing]), ",".join(p.id for p in found))
 
     @command(lock=False)
     def web_search(self, query: str) -> Outcome:
