@@ -175,9 +175,22 @@ def _contract(c: ContractView, *, bids: bool = False, work: bool = False) -> str
 
 
 def render(obs: Observation) -> str:
+    """The observation as the steward reads it: who it is, its notes, its obligations, the market, the society."""
+    s = _header(obs) + _notes(obs) + _obligations(obs) + _market(obs) + _society(obs)
+    s += ["", "This is your situation, not a question. Nobody will answer you. Act now by calling tools, "
+              "using the exact ids shown above; call end_turn when you are done."]
+    return "\n".join(s)
+
+
+def _section(title: str, items: list[str], empty: str | None = None) -> list[str]:
+    if items:
+        return ["", title, *items]
+    return ["", title, f"  {empty}"] if empty else []
+
+
+def _header(obs: Observation) -> list[str]:
     p = obs.params
-    mine = set(obs.capabilities)
-    s: list[str] = [
+    return [
         f"CYCLE {obs.cycle}",
         f"Purse {obs.purse} µcr · owed on contracts {obs.owed} µcr · standing {obs.standing:.2f}",
         f"Members {obs.members}, awake {obs.funded}, capacity left {obs.capacity}",
@@ -187,6 +200,11 @@ def render(obs: Observation) -> str:
         f"Costs: upkeep {p.get('upkeep')} µcr per awake member per cycle · publish {p.get('publish_cost')} · "
         f"spawn fee {p.get('spawn_fee')} · learn from {p.get('learn_cost')} · audit {p.get('audit_cost')}",
     ]
+
+
+def _notes(obs: Observation) -> list[str]:
+    """Its ventures, what the world offers (web, grants, archive), its goals, ideas, journal and news."""
+    s: list[str] = []
     if obs.ventures:
         s += ["", "YOUR VENTURES"] + [
             f"  {v.id} {v.title!r}: {v.status}" + (f", score {v.score}" if v.score is not None else "")
@@ -213,47 +231,51 @@ def render(obs: Observation) -> str:
         s += ["", "YOUR JOURNAL (your own notes)"] + [f"  {n}" for n in obs.journal]
     if obs.events:
         s += ["", "SINCE YOUR LAST TURN"] + [f"  [{e.cycle}] {e.kind}: {e.text}" for e in obs.events]
+    return s
 
-    def section(title: str, items: list[str], empty: str | None = None) -> None:
-        if items:
-            s.extend(["", title, *items])
-        elif empty:
-            s.extend(["", title, f"  {empty}"])
 
-    section("OBLIGATIONS: deliveries waiting for your review", [_contract(c, bids=False, work=True) for c in obs.to_review])
-    section("OBLIGATIONS: work you won and must deliver", [_contract(c) for c in obs.to_deliver])
-    section("RECENT REJECTIONS you could dispute", [_contract(c, work=True) for c in obs.to_dispute])
-    section("CLOSED CONTRACTS where you may rate the prime", [_contract(c) for c in obs.to_attest])
-    section("YOU CAN COMMISSION WORK FOR (and only these)",
-            [f"  commission(ref={ref}, capability={cap}) then {how}" for ref, cap, _, _, how in commissionable(obs)])
-    section("YOUR ANNOUNCEMENTS (awaiting award)", [_contract(c, bids=True) for c in obs.my_announcements])
-    section("YOUR JOBS (you are prime; the next step for each part is worked out for you)",
-            [_job(j, mine, prime=True) for j in obs.my_jobs])
+def _obligations(obs: Observation) -> list[str]:
+    return (_section("OBLIGATIONS: deliveries waiting for your review", [_contract(c, bids=False, work=True) for c in obs.to_review])
+            + _section("OBLIGATIONS: work you won and must deliver", [_contract(c) for c in obs.to_deliver])
+            + _section("RECENT REJECTIONS you could dispute", [_contract(c, work=True) for c in obs.to_dispute])
+            + _section("CLOSED CONTRACTS where you may rate the prime", [_contract(c) for c in obs.to_attest]))
+
+
+def _market(obs: Observation) -> list[str]:
+    """What it can commission, its announcements and jobs, its claims, the board and open contracts."""
+    mine = set(obs.capabilities)
+    s = _section("YOU CAN COMMISSION WORK FOR (and only these)",
+                 [f"  commission(ref={ref}, capability={cap}) then {how}" for ref, cap, _, _, how in commissionable(obs)])
+    s += _section("YOUR ANNOUNCEMENTS (awaiting award)", [_contract(c, bids=True) for c in obs.my_announcements])
+    s += _section("YOUR JOBS (you are prime; the next step for each part is worked out for you)",
+                  [_job(j, mine, prime=True) for j in obs.my_jobs])
     if obs.pending_claims:
         s += ["", f"YOUR CLAIMS (allocated at the end of this cycle): {', '.join(obs.pending_claims)}"]
-    if len(obs.my_jobs) + len(obs.pending_claims) >= obs.claim_limit:
+    held = len(obs.my_jobs) + len(obs.pending_claims)
+    if held >= obs.claim_limit:
         # a world rule: a job you may not claim isn't offered
         s += ["", f"THE BOARD: {len(obs.board)} unclaimed jobs, hidden. You hold or have claimed "
-                  f"{len(obs.my_jobs) + len(obs.pending_claims)} jobs, the most you may; finish one before claiming another."]
+                  f"{held} jobs, the most you may; finish one before claiming another."]
     else:
-        section(f"THE BOARD (unclaimed jobs; you may claim {obs.claim_limit - len(obs.my_jobs) - len(obs.pending_claims)} more)",
-                [_job(j, mine) for j in obs.board], "empty")
-    mine_open = [c for c in obs.open_contracts if c.capability in mine]
-    section("OPEN CONTRACTS you could bid on",
-            [_contract(c) + ("\n    you have bid: wait for the award before doing any work" if c.my_bid is not None else "")
-             for c in mine_open], "none for your capabilities")
+        s += _section(f"THE BOARD (unclaimed jobs; you may claim {obs.claim_limit - held} more)",
+                      [_job(j, mine) for j in obs.board], "empty")
+    s += _section("OPEN CONTRACTS you could bid on",
+                  [_contract(c) + ("\n    you have bid: wait for the award before doing any work" if c.my_bid is not None else "")
+                   for c in obs.open_contracts if c.capability in mine], "none for your capabilities")
     if obs.refused_contracts:
         s.append(f"  ({obs.refused_contracts} more hidden: the commons would refuse your bid on them)")
-    section("SPAWN REQUESTS you could second",
-            [f"  {r.id} from {r.proposer} (standing {r.standing:.2f}), role {_u(r.detail, 60)}, until cycle {r.deadline}"
-             for r in obs.spawn_requests])
-    section("MERGE OFFERS to you", [f"  {m.id} from {m.proposer} (standing {m.standing:.2f}), until cycle {m.deadline}"
-                                    for m in obs.merge_offers])
-    section("YOUR OPEN PROPOSALS", [f"  {x.id} {x.kind} {x.detail}, until cycle {x.deadline}" for x in obs.my_proposals])
-    section("PEERS", [f"  {q.name}: members {q.members}, standing {q.standing:.2f}, "
-                      + ", ".join(f"{c} (your trust {t:.2f})" for c, t in q.trust.items()) for q in obs.peers])
-    section("LIBRARY (playbooks)", [f"  {b.id} {b.capability} by {b.author}, used {b.uses}×: {_u(b.title, 120)}"
-                                    for b in obs.library], "empty")
-    s += ["", "This is your situation, not a question. Nobody will answer you. Act now by calling tools, "
-              "using the exact ids shown above; call end_turn when you are done."]
-    return "\n".join(s)
+    return s
+
+
+def _society(obs: Observation) -> list[str]:
+    """Other co-ops: spawn requests, merge offers, its own proposals, peers, the library."""
+    return (_section("SPAWN REQUESTS you could second",
+                     [f"  {r.id} from {r.proposer} (standing {r.standing:.2f}), role {_u(r.detail, 60)}, until cycle {r.deadline}"
+                      for r in obs.spawn_requests])
+            + _section("MERGE OFFERS to you", [f"  {m.id} from {m.proposer} (standing {m.standing:.2f}), until cycle {m.deadline}"
+                                               for m in obs.merge_offers])
+            + _section("YOUR OPEN PROPOSALS", [f"  {x.id} {x.kind} {x.detail}, until cycle {x.deadline}" for x in obs.my_proposals])
+            + _section("PEERS", [f"  {q.name}: members {q.members}, standing {q.standing:.2f}, "
+                                 + ", ".join(f"{c} (your trust {t:.2f})" for c, t in q.trust.items()) for q in obs.peers])
+            + _section("LIBRARY (playbooks)", [f"  {b.id} {b.capability} by {b.author}, used {b.uses}×: {_u(b.title, 120)}"
+                                               for b in obs.library], "empty"))
