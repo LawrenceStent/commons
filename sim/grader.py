@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from statistics import median
 
-from runtime.backends import ModelBackend, ModelError
+from sim.ports import ModelBackend, ModelError
 from society.grading import Grade, StubGrader, is_tagged
 from substrate.meter import Usage, cost_micros
 

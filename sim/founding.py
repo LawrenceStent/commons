@@ -32,7 +32,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from runtime.backends import ModelBackend, ModelError
+from sim.ports import ModelBackend, ModelError
 from sim.pack import Pack, TemplateWorkSource
 from sim.pack import load as load_pack
 

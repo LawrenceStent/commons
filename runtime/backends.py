@@ -5,21 +5,7 @@
                        the society is still charged notionally, priced as `price_as`.
     FakeBackend        scripted answers for tests. Spends nothing.
 
-Every completion reports token usage and whether it was real, so the meter can charge the
-society (always) and book the real bill (only when there is one). Failures raise ModelError
-with a readable reason; callers decide whether to retry.
-
-Two kinds of call:
-    structured(...)  one answer matching a JSON schema (the grader)
-    chat(...)        a tool-calling turn (stewards) or plain text (members)
-
-`chat` takes a backend-neutral conversation:
-    {"role": "user", "text": str}
-    {"role": "assistant", "text": str, "tool_calls": [ToolCall], "raw": <backend-native content>}
-    {"role": "tool", "results": [ToolResult]}
-and tools as {"name", "description", "input_schema"}. Each backend translates. An assistant
-message keeps its native `raw` content so a backend can replay it exactly; models that think
-require their own blocks back unchanged.
+They implement the model port (sim/ports.py), which describes the calls and the conversation format.
 """
 
 from __future__ import annotations
@@ -30,78 +16,10 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any
 
+from sim.ports import Completion, ModelBackend, ModelError, ToolCall, ToolResult, Turn  # the port, re-exported
 from substrate.meter import Usage
-
-
-class ModelError(Exception):
-    """The backend couldn't produce a usable answer: unreachable, refused, truncated or malformed."""
-
-
-@dataclass(frozen=True)
-class Completion:
-    data: dict[str, Any]  # the parsed structured output
-    usage: Usage
-    model: str  # what actually answered
-    price_as: str  # the price-table entry this call is charged at
-    real: bool  # True when someone is billed for it
-    ms: int
-    text: str = ""
-
-    @property
-    def cache_hit(self) -> float | None:
-        read = self.usage.cache_read_input_tokens
-        total = read + self.usage.input_tokens + self.usage.cache_creation_input_tokens
-        return read / total if total else None
-
-
-@dataclass(frozen=True)
-class ToolCall:
-    id: str
-    name: str
-    input: dict[str, Any]
-
-
-@dataclass(frozen=True)
-class ToolResult:
-    call_id: str
-    content: str
-    is_error: bool = False
-
-
-@dataclass(frozen=True)
-class Turn:
-    text: str
-    tool_calls: tuple[ToolCall, ...]
-    stop: str  # tool_use | end_turn | max_tokens | refusal
-    usage: Usage
-    model: str
-    price_as: str
-    real: bool
-    ms: int
-    raw: Any = None  # backend-native assistant content, replayed as is
-
-    @property
-    def cache_hit(self) -> float | None:
-        read = self.usage.cache_read_input_tokens
-        total = read + self.usage.input_tokens + self.usage.cache_creation_input_tokens
-        return read / total if total else None
-
-    def as_message(self) -> dict[str, Any]:
-        return {"role": "assistant", "text": self.text, "tool_calls": list(self.tool_calls), "raw": self.raw}
-
-
-class ModelBackend(Protocol):
-    name: str
-    real: bool
-
-    def structured(self, *, model: str, system: str, prompt: str, schema: dict[str, Any],
-                   max_tokens: int = 1024) -> Completion: ...
-
-    def chat(self, *, model: str, system: list[str], messages: list[dict[str, Any]],
-             tools: list[dict[str, Any]] | None = None, max_tokens: int = 4096, reasoning: bool = True) -> Turn: ...
-    # reasoning=False asks the model to answer without thinking first (members write; they don't plan)
 
 
 def _check(data: Any, schema: dict[str, Any]) -> dict[str, Any]:
@@ -386,3 +304,7 @@ def choose_backend(kind: str, model: str | None, yes_spend: bool, *, default_mod
             raise BackendChoiceError("Pass --model with the id of the model loaded in LM Studio (see `lms ps`).")
         return LMStudioBackend(), model
     return fake(), "fake"
+
+
+__all__ = ["AnthropicBackend", "LMStudioBackend", "FakeBackend", "BACKENDS", "BackendChoiceError", "add_backend_args",
+           "choose_backend", "Completion", "ModelBackend", "ModelError", "ToolCall", "ToolResult", "Turn"]

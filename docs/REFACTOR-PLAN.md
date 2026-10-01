@@ -168,7 +168,8 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
 ### R2. Break the cycles, in place (M) — A1, A2, S8
 - [x] R2.1 Grading types (`Grade`, `Grader`, `StubGrader`, quality tags) in a module that imports nothing of `sim`
       (`society/grading.py` for now; R3 moves it to `domain/market/grading.py`). The sim↔society cycle is gone
-- [ ] R2.2 The model port (`ModelBackend`, `Completion`, `Turn`, `ToolCall`, `ToolResult`, `Usage`) in a neutral module
+- [x] R2.2 The model port (`ModelBackend`, `Completion`, `Turn`, `ToolCall`, `ToolResult`, `Usage`) in a neutral module
+      (`sim/ports.py`; `Usage` stays in `substrate/meter.py`, below both). `sim` no longer imports the runtime's backends
 - [ ] R2.3 The world receives its ledger, bus, hub, activity log and web; a factory builds the defaults
 - [ ] R2.4 No function-level imports of our own modules
 - [ ] **Done when:** no import cycles; the layer test's exceptions shrink; golden identical

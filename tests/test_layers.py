@@ -13,9 +13,6 @@ RANK = {"protocol": 0, "substrate": 1, "society": 2, "sim": 3, "runtime": 4, "co
 
 # (file, imported module): why it's allowed for now
 OUTWARD = {
-    ("sim/grader.py", "runtime.backends"): "A1/S8: R2.2 moves the model port inward",
-    ("sim/ventures.py", "runtime.backends"): "A1/S8: R2.2",
-    ("sim/founding.py", "runtime.backends"): "A1/S8: R2.2",
     ("sim/engine.py", "runtime.web"): "S8: R2.3 injects the web",
     ("sim/calibrate.py", "runtime.backends"): "A5: R3 moves CLIs to interfaces",
     ("sim/found.py", "runtime.backends"): "A5: R3",

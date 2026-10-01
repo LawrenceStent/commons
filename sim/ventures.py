@@ -22,7 +22,7 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
-from runtime.backends import ModelBackend, ModelError
+from sim.ports import ModelBackend, ModelError
 from sim.status import JobStatus, VentureStatus
 from substrate.meter import Usage, cost_micros
 
