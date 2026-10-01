@@ -652,6 +652,10 @@ checklists in the plan (R0 to R12), on branch `refactor/architecture`; no featur
       pages were read, and marked their claims (unverified). The grant pool went unused (1.8 cr left)
     - Proposed next (your call): skip the model call when the purse can't pay for one (a rule); let `read_archive`
       take several passage ids; price local calls with the prefix cache LM Studio actually reuses; then rerun
+    - Done (92aca8d). Run 3 (`runs/t4g-live-3.log`) got 2 cycles in before LM Studio was stopped (you needed the
+      laptop): 76% of input tokens now cached, 0.09 cr of thinking in 2 cycles against 0.72 cr in 5 before, 8 archive
+      reads instead of dozens; no job finished yet. The stop rule halted the run at once. A full 10-cycle rerun is
+      still to do, at a time the laptop is free
 - [ ] K6 Trading pack: paper broker, forward-only, deterministic risk-adjusted evaluator, doctrine per co-op
 - [ ] K7 OSINT pack: sourcing-first evaluator, separate verify co-op, forbidden-target policy enforced in tools
 - [ ] K8 Many societies: registry, CLI, dashboard picker, per-society and total spend caps, slow-cadence scheduler
