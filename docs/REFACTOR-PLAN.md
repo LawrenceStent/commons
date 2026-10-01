@@ -228,7 +228,7 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
 - [x] R7.3 Venture, population, grant, rating and gate events moved onto it, and the records (gossip, scorecard
       breaches, the cycle summary, playbooks published, the operator's folder reloaded). The gate decision's activity
       entry goes through a third subscriber, `activity`. `Proposal` moved into the domain
-- [x] **Done when:** no direct `_tell`, `hub.emit` or `activity.add` in services; golden identical. 56 event types;
+- [x] **Done when:** no direct `_tell`, `hub.emit` or `activity.add` in services; golden identical. 50 event types;
       a test holds both: every event defines its notices and telemetry, and no service reports directly
 
 ### R8. Commands (M) — C6, S2, S7 (part)
