@@ -33,6 +33,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 from commons.application.actions import Actions
+from commons.application.cycle import run_cycle
 from commons.application.gate import Gate
 from commons.application.graders import GradingError
 from commons.application.observation import (
@@ -51,7 +52,7 @@ from commons.application.observation import (
     VentureView,
 )
 from commons.application.operator import Operator
-from commons.application.population import Proposal, expire_proposals
+from commons.application.population import Proposal
 from commons.application.ports import WebError, WebPort, host_of
 from commons.application.ratings import Ratings
 from commons.domain.archive import ArchiveIndex
@@ -278,6 +279,7 @@ class World:
         self.known_capabilities = set(self.pack.capabilities).union(*(c.capabilities for c in self.communities.values()))
         self._job_seq = self._proposal_seq = 0
         self._stats: dict[str, Counter] = {n: Counter() for n in self.communities}
+        self.turn_order: list[Community] = []  # this cycle's, shuffled (see cycle.py)
 
         self.ledger.transfer("genesis", "treasury", p.treasury_seed, cycle=0, kind="genesis")
         for c in self.communities.values():
@@ -339,48 +341,8 @@ class World:
 
     # ── the cycle ──────────────────────────────────────────────
     def step(self) -> None:
-        with self.lock:
-            self.cycle += 1
-            self.rep.cycle = self.cycle
-            if self.operator.reload():  # your directives, context and limits, re-read every cycle
-                self.hub.emit("operator.update", self.cycle, coops=sorted(self.operator.views), errors=self.operator.errors)
-                self.gate.policy = self.operator.gate
-                if self.web:
-                    self.web.set_hosts(self.gate.policy.allow_hosts)
-            self._gate_cycle()
-            self.bus.begin_cycle(self.cycle)
-            self._stats = {n: Counter() for n in self.communities}
-            self._fund_payment_pool()
-            self._apply_ratings()
-            self._floor()
-            self._upkeep()
-            self._deadlines()
-            expire_proposals(self)
-            self._post_jobs()
-            order = self._active()
-            self.rng.shuffle(order)  # turn order must not decide who wins
-        self._appraise_ventures()
-        self._run_approved_web()
-        if self.params.parallel_turns and len(order) > 1:
-            # the lock is released here: each action takes it, model calls don't
-            with ThreadPoolExecutor(max_workers=self.params.parallel_workers) as pool:
-                for f in [pool.submit(self._turn, c) for c in order]:
-                    f.result()  # re-raise anything a turn raised (a kill-switch, say)
-        else:
-            with self.lock:
-                for c in order:
-                    self._turn(c)
-        with self.lock:
-            self._allocate_claims()
-        self.settle_grading()
-        with self.lock:
-            self._settle_payment_queue()
-            if self.cycle % self.params.gossip_every == 0:
-                self._gossip()
-            self.rep.tick()
-            self.bus.compact()
-            self._prune()
-            self._record()
+        """One cycle, phase by phase (commons/application/cycle.py)."""
+        run_cycle(self)
 
     def run(self, cycles: int) -> World:
         for _ in range(cycles):
