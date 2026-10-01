@@ -19,7 +19,6 @@ from sim.pack import load
 from sim.ratings import Ratings, add
 from sim.scorecard import GENERAL, Metric, evaluate
 from society.community import Community
-from substrate.ledger import purse
 
 EXAMPLE = Path(__file__).parent.parent / "society.example"
 SEEDS = range(3)

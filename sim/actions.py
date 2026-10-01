@@ -120,7 +120,7 @@ class Actions:
         if part is None or part.artifact is not None:
             return Outcome(False, f"job {job_id} has no open {capability} part")
         if self.w.contracts_for(job_id, capability, LIVE_CONTRACT):
-            return Outcome(False, f"a contract for that part is already in progress")
+            return Outcome(False, "a contract for that part is already in progress")
         if max_price <= 0 or not 0 <= advance_frac <= 1:
             return Outcome(False, "max_price must be positive and advance_frac within 0..1")
         n = sum(1 for c in self.w.contracts.values() if c.job_id == job_id and c.capability == capability)
@@ -269,7 +269,7 @@ class Actions:
     # ── knowledge ──────────────────────────────────────────────
     def publish(self, capability: str, title: str, text: str) -> Outcome:
         if not self.me.can(capability):
-            return Outcome(False, f"you can only publish methods for capabilities you have")
+            return Outcome(False, "you can only publish methods for capabilities you have")
         if any(p.author == self.me.name and p.capability == capability for p in self.w.library.values()):
             return Outcome(False, f"you already have a {capability} playbook in the library")
         cost = self.w.params.publish_cost

@@ -1,4 +1,4 @@
-"""Knowledge: publish · cite · royalty."""
+"""Knowledge: publish · cite. (Royalties are paid by the ledger, in-process.)"""
 
 from protocol.envelope import Message, message
 
@@ -15,10 +15,3 @@ class Publish(Message):
 class Cite(Message):
     playbook_id: str
     job_id: str
-
-
-@message("knowledge", "royalty")
-class Royalty(Message):
-    playbook_id: str
-    job_id: str
-    amount: int

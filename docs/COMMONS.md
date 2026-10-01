@@ -340,7 +340,7 @@ Grouped by area. Terms in **bold** are used throughout the code and this guide.
 ├───────────────────────────────────────────────────────────────────────┤
 │ SIMULATION   world engine, market board, actions executor, population │  sim/
 ├───────────────────────────────────────────────────────────────────────┤
-│ PROTOCOL     six message families, signed envelopes                    │  protocol/
+│ PROTOCOL     four message families, signed envelopes                   │  protocol/
 ├───────────────────────────────────────────────────────────────────────┤
 │ SUBSTRATE    bus · ledger · reputation · meter · registry · workspace │  substrate/
 │              · telemetry hub                                          │
@@ -358,10 +358,10 @@ deadlines). Nothing below the society layer can assign work to a community that 
 | Path | Lines | Role |
 |---|---|---|
 | `protocol/envelope.py` | 93 | `Envelope`: signed (Ed25519), content-addressed (SHA-256 of canonical JSON). `Identity` holds a community's key |
-| `protocol/{contract,reputation,knowledge,population,governance,gate}.py` | ~190 | The six message families and their verbs (§5.3) |
+| `protocol/{contract,reputation,knowledge,population}.py` | ~120 | The four message families and their verbs (§5.3) |
 | `substrate/bus.py` | 178 | `Bus` front door: signature check plus reputation-scaled rate limit. `MemoryBus` for simulations (capped streams), `RedisBus` for production |
 | `substrate/ledger.py` | 198 | Double-entry SQLite ledger with two currencies (SIM, USD), per-currency external accounts, the revenue split, capital and a real-money summary |
-| `substrate/meter.py` | 153 | Price table, notional charges, real-dollar recording, per-task budgets, both kill-switches |
+| `substrate/meter.py` | ~140 | Price table, notional charges, real-dollar recording, both kill-switches |
 | `substrate/reputation.py` | 115 | Beta evidence per (observer, subject, capability); gossip; asymmetric decay; standing; fork inheritance |
 | `substrate/registry.py` | 35 | A2A-style agent cards and public keys |
 | `substrate/workspace.py` | 30 | One sandboxed directory per community; path-escape protection |
@@ -399,19 +399,21 @@ deadlines). Nothing below the society layer can assign work to a community that 
 The plan's repository sketch also lists `society/agent.py`, `society/venture.py`, `channels/` and
 `market_sim/`. Those arrive in later phases; the mock market lives in `sim/market.py` for now.
 
-### 5.3 The protocol: six message families
+### 5.3 The protocol: four message families
 
 Every behaviour the society supports must be expressible in these. If it can't be, the society
 doesn't support it.
 
 | Family | Verbs | Used today? |
 |---|---|---|
-| `contract` | announce · bid · award · deliver · settle | ✅ Every contract |
+| `contract` | announce · bid · award · deliver | ✅ Every contract (settlement is the ledger's, in-process) |
 | `reputation` | gossip · attest · dispute | ✅ Ratings, gossip every 5 cycles, disputes |
-| `knowledge` | publish · cite · royalty | ✅ Playbooks and citations |
+| `knowledge` | publish · cite | ✅ Playbooks and citations (royalties are paid by the ledger) |
 | `population` | spawn · retire · fork · merge | ✅ Since 1.2 |
-| `governance` | propose · second · vote · enact | ⛔ Schemas only (§12) |
-| `gate` | request · approve · deny · revoke | Enforced in `sim/gate.py` since K5 (the world holds requests directly; these bus messages are still unused) |
+
+`governance` and `gate` messages, and `contract.settle` and `knowledge.royalty`, were schemas nothing sent; they
+were deleted in the refactor (R1.7, 1 Oct). The gate is enforced in-process (`sim/gate.py`); governance gets
+messages when it gets a design.
 
 Every message is sealed in an envelope: sender, cycle, family, verb, body, an id that is the SHA-256
 of the canonical JSON, and an Ed25519 signature. The bus rejects anything unsigned or signed by an
@@ -973,7 +975,7 @@ adversarially, then mainnet with per-community daily caps.
   ways the protocol doesn't see.
 
 ### Cost
-- **A runaway bill.** Mitigated by the real-dollar kill-switch ($5/day default), per-task budgets and
+- **A runaway bill.** Mitigated by the real-dollar kill-switch ($5/day default), per-turn thinking budgets and
   a prompt-cache-friendly layout. A cache miss can multiply cost roughly 10×. Watch the cache hit
   rate on the dashboard.
 - **Notional vs real confusion.** Solved in the ledger and the UI, but any new code path that spends

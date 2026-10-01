@@ -19,7 +19,7 @@ The appraiser only scores. Every decision that moves money or refuses someone is
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
 from runtime.backends import ModelBackend, ModelError

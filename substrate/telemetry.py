@@ -68,8 +68,6 @@ class Hub:
         merged = sorted((e for r in rings for e in itertools.islice(reversed(r), n)), key=lambda e: e.seq)
         return merged[-n:]
 
-    def kinds(self) -> list[str]:
-        return sorted(self._rings)
 
 
 class _NullHub(Hub):

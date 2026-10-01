@@ -12,7 +12,7 @@ from sim.grader import SCHEMA, GradingError, LLMGrader
 from sim.market import MarketJob, Part
 from society.community import Community
 from society.strategies import Strategy
-from substrate.ledger import USD, purse
+from substrate.ledger import USD
 
 
 def answer(score, reason="because", met=None, manipulation=False):

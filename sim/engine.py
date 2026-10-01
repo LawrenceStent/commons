@@ -1153,7 +1153,7 @@ class World:
                     "spawn_fee": p.spawn_fee, "venture_fee": p.venture_fee, "learn_cost": p.learn_cost, "audit_cost": p.audit_cost,
                     "max_members": p.max_members, "pass_score": p.pass_score, "max_communities": p.max_communities,
                     "communities": len(self._living()),
-                    "upkeep": p.upkeep, "actions_per_member": p.actions_per_member, "job_ttl": p.job_ttl, "pass_score": p.pass_score},
+                    "upkeep": p.upkeep, "actions_per_member": p.actions_per_member, "job_ttl": p.job_ttl},
             track=dict(me.deliveries),
             owed=sum(c.price - c.advance for c in cs if c.prime == name and c.status in (ContractStatus.AWARDED, ContractStatus.DELIVERED)),
             ventures=tuple(VentureView(v.id, v.title, v.status, v.score, v.reward, v.reason, v.job_id, v.cycle)

@@ -24,7 +24,7 @@ from typing import Any
 
 from runtime.backends import ModelBackend, ModelError, ToolCall, ToolResult
 from runtime.render import PREAMBLE, commissionable, community_block, operator_block, render
-from runtime.tools import MEMBER, NAMES, TOOLS, member_tools, steward_tools
+from runtime.tools import MEMBER, NAMES, member_tools, steward_tools
 from sim.market import strip_tags
 from society.observation import ActionsAPI, Observation, Outcome
 from society.strategies.base import Strategy

@@ -1,6 +1,5 @@
 """The turn-based engine: the contract-net across cycles, its deadlines, and what each side sees."""
 
-import pytest
 
 from sim.actions import Actions
 from sim.engine import Params, World

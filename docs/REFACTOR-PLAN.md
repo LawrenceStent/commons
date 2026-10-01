@@ -158,8 +158,12 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
       `sim/status.py` (C3). Status-string comparisons 63 → 3; the last 3 are in the scripted strategies, which can't
       import `sim` yet: they convert in R3. Event-kind constants are dropped from this item: R7's typed events replace
       the kinds, so constants now would be thrown away
-- [ ] R1.7 Delete `protocol.gate` and `protocol.governance` and any other unused code (A6)
-- [ ] **Done when:** these duplicates are gone; golden identical
+- [x] R1.7 Delete `protocol.gate` and `protocol.governance` and any other unused code (A6). Also deleted:
+      `contract.settle` and `knowledge.royalty` messages, the meter's per-task budgets (the operator's per-turn
+      thinking budget replaced them), `Meter.can_afford`, `Hub.kinds`, `MemoryBus.headroom`, unused imports and
+      variables (pyflakes is clean). Kept, though unused today, because the roadmap needs them: the workspace sandbox
+      (Phase 2's product files), `RedisBus` (several processes), `Ledger.add_capital` (real money in)
+- [x] **Done when:** these duplicates are gone; golden identical
 
 ### R2. Break the cycles, in place (M) — A1, A2, S8
 - [ ] R2.1 Grading types (`Grade`, `Grader`, `StubGrader`, quality tags) in a module that imports nothing of `sim`

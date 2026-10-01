@@ -5,7 +5,7 @@ from protocol.contract import Announce, Bid, Deliver
 from protocol.reputation import Attest, Gossip
 from substrate.bus import BadSignature, MemoryBus, RateLimited, allowance_for
 from substrate.ledger import InsufficientFunds, Ledger, purse
-from substrate.meter import BudgetExhausted, KillSwitch, Meter, Usage, cost_micros
+from substrate.meter import KillSwitch, Meter, Usage, cost_micros
 from substrate.registry import Registry
 from substrate.reputation import Reputation
 from substrate.workspace import Workspace, WorkspaceEscape
@@ -72,15 +72,11 @@ def test_cost_micros_uses_list_prices():
     assert cost_micros("claude-haiku-4-5", u) == 4000 + 7500 + 800
 
 
-def test_meter_budget_and_kill_switch():
+def test_meter_charges_and_the_kill_switch():
     led = Ledger()
     led.transfer("genesis", purse("a"), 1000, cycle=0, kind="genesis")
     m = Meter(led, daily_ceiling=10_000)
-    m.open_task("t", budget=100)
-    m.charge("a", 80, cycle=1, task_id="t")
-    assert m.remaining("t") == 20
-    with pytest.raises(BudgetExhausted):
-        m.charge("a", 30, cycle=1, task_id="t")
+    m.charge("a", 80, cycle=1)
     with pytest.raises(InsufficientFunds):
         m.charge("a", 2000, cycle=2)
     m2 = Meter(led, daily_ceiling=100)

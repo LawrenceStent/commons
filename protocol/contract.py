@@ -1,4 +1,4 @@
-"""Contract-net: announce · bid · award · deliver · settle.
+"""Contract-net: announce · bid · award · deliver. (Settlement is the ledger's, in-process.)
 
 The only way to get help. There is no escalation path.
 Amounts are integer micro-dollars throughout.
@@ -39,10 +39,3 @@ class Deliver(Message):
     job_id: str
     artifact: dict[str, Any]
     cites: list[str] = []
-
-
-@message("contract", "settle")
-class Settle(Message):
-    job_id: str
-    accepted: bool
-    paid: int

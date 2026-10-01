@@ -1,12 +1,11 @@
 """Ventures: rules refuse deterministically, the appraiser only scores, the market allocates by score."""
 
-from runtime.backends import FakeBackend, ModelError
+from runtime.backends import FakeBackend
 from sim.actions import Actions
 from sim.engine import Params, World
 from sim.ventures import LLMAppraiser, StubAppraiser, Venture, similar, value
 from society.community import Community
 from society.strategies import Strategy
-from substrate.ledger import purse
 
 
 class Puppet(Strategy):

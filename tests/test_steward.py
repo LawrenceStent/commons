@@ -392,8 +392,6 @@ def test_contracts_the_commons_would_refuse_are_not_offered():
 
 
 def test_a_call_refused_once_is_not_sent_again_in_the_same_turn():
-    calls = []
-
     def stubborn(system, messages, tools):
         if tools is None:
             return {"text": "work"}
@@ -423,7 +421,7 @@ def test_the_world_lists_what_can_be_commissioned_and_refuses_the_rest():
     obs = w.observe(me)
     text = render(obs)
     assert f"commission(ref={job.id}, capability=research) then do_part" in text
-    assert f"capability=build" not in text.split("YOU CAN COMMISSION")[1].split("\n\n")[0]
+    assert "capability=build" not in text.split("YOU CAN COMMISSION")[1].split("\n\n")[0]
     s = me.strategy
     s._commissions = 0
     out = s.commission(obs, act, job.id, "research", "go", None)

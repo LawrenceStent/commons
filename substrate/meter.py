@@ -63,10 +63,6 @@ class KillSwitch(Exception):
     """The society's daily ceiling was hit. Everything halts until a human resets it."""
 
 
-class BudgetExhausted(Exception):
-    pass
-
-
 class Meter:
     def __init__(self, ledger: Ledger, daily_ceiling: int, cycles_per_day: int = 1, hub: Hub = NULL,
                  real_ceiling: int = 5_000_000):
@@ -80,19 +76,10 @@ class Meter:
         self.halted = False
         self._day = 0
         self._spent_today = 0
-        self._task_spend: dict[str, int] = {}
-        self._task_budget: dict[str, int] = {}
         self.by_community: dict[str, int] = {}
 
-    def open_task(self, task_id: str, budget: int) -> None:
-        self._task_budget[task_id] = budget
-        self._task_spend.setdefault(task_id, 0)
-
-    def remaining(self, task_id: str) -> int:
-        return self._task_budget[task_id] - self._task_spend.get(task_id, 0)
-
-    def charge(self, community: str, amount: int, *, cycle: int, task_id: str | None = None, memo: str = "") -> None:
-        """Debit compute. Raises InsufficientFunds (silence), BudgetExhausted, or KillSwitch."""
+    def charge(self, community: str, amount: int, *, cycle: int, memo: str = "") -> None:
+        """Debit compute. Raises InsufficientFunds (silence) or KillSwitch."""
         if self.halted:
             raise KillSwitch("society halted")
         day = cycle // self.cycles_per_day
@@ -101,13 +88,9 @@ class Meter:
             self.halted = True
             self.hub.emit("meter.kill_switch", cycle, reason="daily ceiling", spent=self._spent_today, ceiling=self.daily_ceiling)
             raise KillSwitch(f"daily ceiling {self.daily_ceiling} reached on day {day}")
-        if task_id is not None and task_id in self._task_budget and self.remaining(task_id) < amount:
-            raise BudgetExhausted(task_id)
         self.ledger.transfer(purse(community), self.sink, amount, cycle=cycle, kind="compute", memo=memo)
         self._spent_today += amount
         self.by_community[community] = self.by_community.get(community, 0) + amount
-        if task_id is not None:
-            self._task_spend[task_id] = self._task_spend.get(task_id, 0) + amount
         self.hub.emit("meter.charge", cycle, community=community, amount=amount, memo=memo, spent_today=self._spent_today)
 
     def _roll(self, day: int) -> None:
@@ -150,9 +133,6 @@ class Meter:
     def real_spent_total(self) -> int:
         return self.ledger.balance("ext:anthropic", USD)
 
-    def can_afford(self, community: str, amount: int) -> bool:
-        return self.ledger.balance(purse(community)) >= amount and not self.halted
-
     def halt(self, reason: str, cycle: int | None = None) -> None:
         self.halted = True
         self.hub.emit("meter.kill_switch", cycle, reason=reason, spent=self._spent_today, ceiling=self.daily_ceiling)
@@ -164,4 +144,4 @@ class Meter:
         self._spent_today = 0
 
 
-__all__ = ["PRICES", "Usage", "cost_micros", "Meter", "KillSwitch", "BudgetExhausted", "InsufficientFunds"]
+__all__ = ["PRICES", "Usage", "cost_micros", "Meter", "KillSwitch", "InsufficientFunds"]

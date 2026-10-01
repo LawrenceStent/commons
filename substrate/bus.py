@@ -70,9 +70,6 @@ class Bus:
     def allowance(self, sender: str) -> int:
         return allowance_for(self.standing(sender), self.base_allowance)
 
-    def headroom(self, sender: str) -> int:
-        return self.allowance(sender) - self._used[sender]
-
     # ── publishing ─────────────────────────────────────────────
     def publish(self, env: Envelope) -> str:
         if self.verify:

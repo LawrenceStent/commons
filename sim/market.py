@@ -7,7 +7,6 @@ A job has parts, one per capability, each with a spec and a rubric. Where jobs c
 
 from __future__ import annotations
 
-import random
 import re
 from dataclasses import dataclass, field
 from typing import Protocol
