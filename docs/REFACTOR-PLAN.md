@@ -136,8 +136,12 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
 ### R0. Safety net (S)
 - [x] R0.1 Golden-master harness and fixtures in `tests/golden/` (§2), run alone with `pytest -m golden`
 - [x] R0.2 Recording wrapper that captures what each co-op is told (tests only)
-- [ ] R0.3 Mutation check: changing one posting fails the golden master (proved, then reverted)
-- [ ] R0.4 `tests/test_layers.py`: the dependency rule from the AST, with today's violations as named exceptions
+- [x] R0.3 Mutation check: changing one posting fails the golden master (proved, then reverted). 1 Oct: the earner's
+      share minus 1 µcr failed `postings`; one changed word in a message to a co-op failed `told`.
+      Lesson: after reverting a mutation, delete `__pycache__`: a revert in the same second with the same file size
+      leaves stale bytecode that Python still trusts
+- [x] R0.4 `tests/test_layers.py`: the dependency rule from the AST, with today's violations as named exceptions
+      (13 outward imports, 9 imports inside functions; both lists may only shrink)
 - [ ] R0.5 `tools/arch_metrics.py`: the audit's measurements, with a baseline recorded here
 - [ ] **Done when:** the golden master passes twice on an untouched tree and catches a one-character change
 
