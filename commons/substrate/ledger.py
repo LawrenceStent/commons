@@ -27,6 +27,7 @@ import sqlite3
 from collections.abc import Iterable
 
 from commons.domain.money import Micros
+from commons.domain.treasury import RevenueSplit, revenue_split
 from commons.substrate.telemetry import NULL, Hub
 
 SIM, USD = "SIM", "USD"
@@ -144,9 +145,9 @@ class Ledger:
         memo: str = "",
         source: str | None = None,
         tax: bool = True,
-    ) -> dict[str, int]:
-        """Revenue: 70% to the earner, 20% to the treasury, 10% to cited authors. With
-        `tax=False` the treasury's 20% goes to the earner instead (90/0/10).
+    ) -> RevenueSplit:
+        """Revenue, split by the treasury's rule (commons.domain.treasury.revenue_split): 70% to the earner, 20% to the
+        treasury, 10% to cited authors; with `tax=False` the treasury's 20% goes to the earner instead (90/0/10).
 
         `source` is where the money comes from: the mock `market` in a SIM ledger, a real
         payment processor such as `ext:stripe` in a USD one. `royalties` maps author
@@ -155,20 +156,10 @@ class Ledger:
         source = source or ("market" if self.currency == SIM else None)
         if source is None:
             raise WrongCurrency("real revenue needs a real source, e.g. source='ext:stripe'")
-        to_earner = amount * (70 if tax else 90) // 100
-        pool = amount * 10 // 100
-        to_treasury = amount - to_earner - pool
-        legs = [(source, -amount), (purse(earner), to_earner)]
-        split: dict[str, int] = {}
-        weight = sum((royalties or {}).values())
-        if weight:
-            for author, w in sorted(royalties.items()):
-                split[author] = pool * w // weight
-            to_treasury += pool - sum(split.values())
-            legs += [(purse(a), n) for a, n in split.items()]
-        else:
-            to_treasury += pool
-        legs.append(("treasury", to_treasury))
+        split = revenue_split(amount, royalties, tax=tax)
+        legs = [(source, -amount), (purse(earner), split.earner)]
+        legs += [(purse(a), n) for a, n in split.royalties.items()]
+        legs.append(("treasury", split.treasury))
         self.post(legs, cycle=cycle, kind="revenue", memo=memo)
         return split
 

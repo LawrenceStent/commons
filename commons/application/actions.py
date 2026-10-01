@@ -20,6 +20,7 @@ from commons.domain.goals import MAX_ACTIVE_GOALS, MAX_STEPS, Goal, Idea, Step
 from commons.domain.ids import ContractId, GoalId, IdeaId, JobId, PassageId, PlaybookId, ProposalId
 from commons.domain.money import Micros
 from commons.domain.status import LIVE_CONTRACT, ContractStatus, IdeaStatus, JobStatus
+from commons.domain.treasury import bond_for
 from commons.protocol import Envelope, Message
 from commons.protocol.contract import Announce, Award, Bid, Deliver
 from commons.protocol.knowledge import Cite, Publish
@@ -78,7 +79,7 @@ class Actions:
         if held >= limit:
             return Outcome(False, f"you already hold or have claimed {held} jobs, the most you can (two, or one per "
                                   f"awake member); finish one first")
-        bond = round(job.reward * p.claim_bond)
+        bond = bond_for(job.reward, p.claim_bond)
         if bond and w.ledger.balance(purse(self.me.name)) < bond:
             return Outcome(False, f"claiming {job_id} needs a {bond} bond if you win it; you can't afford it")
         if p.claim_allocation and self.me.name in w.claims.get(job_id, {}):

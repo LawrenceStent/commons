@@ -81,6 +81,7 @@ from commons.domain.status import (
     RequestStatus,
     VentureStatus,
 )
+from commons.domain.treasury import bond_for, floor_top_up, members_to_wake
 from commons.domain.ventures import AppraisalError, Appraiser, StubAppraiser, Venture
 from commons.domain.ventures import value as venture_value
 from commons.protocol import Envelope, Message
@@ -390,11 +391,12 @@ class World:
         A community that never wakes can't bank handouts, and a rich one doesn't need them."""
         p = self.params
         for c in self._living():
-            if self.ledger.balance(purse(c.name)) >= p.floor_cap:
-                continue
-            if self.ledger.balance("treasury") < p.basic_budget:
+            top_up = floor_top_up(purse=self.ledger.balance(purse(c.name)), cap=p.floor_cap,
+                                  treasury=self.ledger.balance("treasury"), budget=p.basic_budget)
+            if top_up is None:
                 return
-            self.ledger.transfer("treasury", purse(c.name), p.basic_budget, cycle=self.cycle, kind="floor")
+            if top_up:
+                self.ledger.transfer("treasury", purse(c.name), top_up, cycle=self.cycle, kind="floor")
 
     def _upkeep(self) -> None:
         """Each community decides how many members to wake, and pays for them. Thinking is the
@@ -406,7 +408,8 @@ class World:
                 c.thinking, c.active = 0, False
                 continue
             want = c.strategy.wake(self.observe(c))
-            c.thinking = max(0, min(c.members, int(want), self.ledger.balance(purse(c.name)) // p.upkeep))
+            c.thinking = members_to_wake(wanted=want, members=c.members, purse=self.ledger.balance(purse(c.name)),
+                                         upkeep=p.upkeep)
             if c.thinking:
                 try:
                     self.meter.charge(c.name, c.thinking * p.upkeep, cycle=self.cycle, memo="upkeep")
@@ -970,7 +973,7 @@ class World:
         grant = self.params.economy == "grant"
         split = self.ledger.settle_revenue(prime, payout, cycle=self.cycle, royalties=dict(weights), memo=job.id, tax=tax,
                                            source="grants" if grant else None)
-        share = payout * (70 if tax else 90) // 100
+        share = split.earner
         self._settle_bond(job, returned=True)
         job.pay()
         self.jobs_done += 1
@@ -989,12 +992,12 @@ class World:
         self.outputs.append(record)
         if self.ratings:
             self.ratings.sample(record)
-        for author, amount in split.items():
+        for author, amount in split.royalties.items():
             self._stat(author, "earned", amount)
             self.royalties_paid[author] = self.royalties_paid.get(author, 0) + amount
             self._tell(author, "royalty", f"your playbook was used in {job.id}: {amount}", job.id)
         self.hub.emit("market.job", self.cycle, id=job.id, stage="paid", prime=prime, caps=sorted(job.parts),
-                      reward=job.reward, payout=payout, scores=job.scores, royalties=split, taxed=tax)
+                      reward=job.reward, payout=payout, scores=job.scores, royalties=split.royalties, taxed=tax)
 
     def _done_by(self, job: MarketJob, part) -> str:
         if part.source in (None, "self"):
@@ -1033,7 +1036,7 @@ class World:
                 fit = sum(cap in c.capabilities for cap in job.parts) / len(job.parts)
                 return (-round(self._standing(name), 3), -fit, self.held_jobs(name), draw.random())
 
-            bond = round(job.reward * p.claim_bond)
+            bond = bond_for(job.reward, p.claim_bond)
             for name in sorted(sorted(claimants), key=key):
                 c = self.communities[name]
                 if self.held_jobs(name) >= self.claim_limit(c):

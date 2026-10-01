@@ -187,7 +187,9 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
 ### R5. The economy as a policy, test-first (M) — S4
 - [x] R5.1 `PaymentPolicy` with `MarketPayment` and `GrantPayment` (tests first: `tests/domain/test_economy.py`);
       `policy_for` is the one place the economy setting is read
-- [ ] R5.2 `Treasury` rules: floor, upkeep, revenue split, bonds (tests first)
+- [x] R5.2 `Treasury` rules: floor, upkeep, revenue split, bonds (tests first: `tests/domain/test_treasury.py`), as pure
+      functions in `domain/treasury.py`; the ledger, the world and the executor apply them (the bond was computed twice,
+      the earner's share recomputed after the split)
 - [ ] R5.3 The world uses the policy; `economy ==` checks removed everywhere, dashboard included
 - [ ] **Done when:** adding an economy means adding one class; golden identical
 
