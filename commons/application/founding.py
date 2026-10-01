@@ -6,19 +6,19 @@ A society lives in one folder, `societies/<name>/` (git-ignored: briefs are your
     brief.md          what this society is for, in your words (added to the pack's brief in every steward's prompt)
     questions.md      optional: the subjects its work is about, one per line (replace the pack's defaults)
     blueprints.toml   the co-ops: name, kind, members, capabilities, charter, doctrine; `approved = true` to run
-    archive/          reference material (.md, .txt), searched on demand (see sim/archive.py)
+    archive/          reference material (.md, .txt), searched on demand (see commons/application/archive.py)
     playbooks/        methods you already trust, seeded into the library (<capability>--<title>.md)
-    operator/         optional: your directives, context and limits (see sim/operator.py)
-    samples.jsonl     work set aside for you to rate; ratings.jsonl holds your ratings (see sim/ratings.py)
+    operator/         optional: your directives, context and limits (see commons/application/operator.py)
+    samples.jsonl     work set aside for you to rate; ratings.jsonl holds your ratings (see commons/application/ratings.py)
     runs/             every run's ledger, activity log and turn log
 
 Founding happens once:
-    1. `python -m sim.found NAME --pack P --brief brief.md [--context DIR] [--coops N]` makes one model call that
+    1. `commons found NAME --pack P --brief brief.md [--context DIR] [--coops N]` makes one model call that
        drafts blueprints from your brief, the pack and your context files, and writes the folder. If your brief
        names doctrines (strategies, methods), they are used verbatim.
     2. You read and edit blueprints.toml.
-    3. `python -m sim.found NAME --approve` checks them against the rules and marks them approved.
-    4. `python -m sim.live --society NAME` runs it. From then on no one is in charge: new co-ops appear only
+    3. `commons found NAME --approve` checks them against the rules and marks them approved.
+    4. `commons run --society NAME` runs it. From then on no one is in charge: new co-ops appear only
        through spawn, fork and merge, never by founding again.
 """
 
@@ -99,7 +99,7 @@ def _q(text: str) -> str:
 
 
 def write_blueprints(path: Path, blueprints: list[Blueprint], note: str) -> None:
-    out = [f"# {note}", "# Edit anything below, then approve:  uv run python -m sim.found <name> --approve",
+    out = [f"# {note}", "# Edit anything below, then approve:  uv run commons found <name> --approve",
            f"# kind: {' | '.join(KINDS)} (the scripted kinds are for testing a society)", "approved = false", ""]
     for b in blueprints:
         out += ["[[coop]]", f'name = "{b.name}"', f'kind = "{b.kind}"', f"members = {b.members}",
@@ -168,7 +168,7 @@ def society_folder(name: str, root: Path = ROOT) -> Path:
     """The folder of an existing society, or FoundingError."""
     folder = root / name
     if not (folder / "society.toml").exists():
-        raise FoundingError(f"no society at {folder} (found one with python -m sim.found)")
+        raise FoundingError(f"no society at {folder} (found one with commons found)")
     return folder
 
 
@@ -219,7 +219,7 @@ def load(name: str, root: Path = ROOT, require_approved: bool = True) -> Society
     blueprints, approved = read_blueprints(folder / "blueprints.toml")
     if require_approved and not approved:
         raise FoundingError(f"{name}'s blueprints aren't approved yet: read {folder / 'blueprints.toml'}, then "
-                            f"python -m sim.found {name} --approve")
+                            f"commons found {name} --approve")
     errors, _ = check(blueprints, pack)
     if errors:
         raise FoundingError(f"{name}'s blueprints break the rules: {errors[0]}")

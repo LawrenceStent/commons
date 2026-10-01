@@ -1,7 +1,7 @@
 """Grading: what a judgement of one part of a job looks like, and the stub that reads scripted quality.
 
 Scripted policies write artifacts that carry their quality in a tag, `<q=0.83>`, which `StubGrader` reads back;
-live runs use an LLM grader (sim/grader.py). Here, below `sim`, so scripted strategies and the LLM runtime can use the
+live runs use an LLM grader (commons/application/graders.py). Here, below `sim`, so scripted strategies and the LLM runtime can use the
 tags without importing the world.
 """
 

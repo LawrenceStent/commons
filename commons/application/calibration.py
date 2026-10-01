@@ -1,7 +1,7 @@
 """Calibration: checking a grader or an appraiser against hand-labelled cases before trusting it.
 
 The cases belong to a pack (`pack.grader_cases`, `pack.venture_cases`); this module holds the case types,
-the runners and the reports. `python -m sim.calibrate --pack NAME` runs a backend over a pack's cases.
+the runners and the reports. `commons calibrate --pack NAME` runs a backend over a pack's cases.
 A grader or appraiser that falls for the manipulation case is not safe to use.
 """
 

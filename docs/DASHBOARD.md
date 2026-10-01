@@ -1,6 +1,6 @@
 # Dashboard redesign: ideas
 
-*Written 26 Sep 2026. Nothing here is built. The current dashboard (`console/dashboard.html`) is a plain,
+*Written 26 Sep 2026. Nothing here is built. The current dashboard (`commons/interfaces/console/dashboard.html`) is a plain,
 functional page; this is a direction to take it in over time. The rules at the end matter as much as
 the look.*
 

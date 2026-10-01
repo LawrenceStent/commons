@@ -1,8 +1,8 @@
 """Run a society with LLM communities.
 
-    uv run python -m sim.live --backend fake                          # free dry run of the whole pipeline
-    uv run python -m sim.live --backend lmstudio --model <id> --cycles 10 --serve
-    uv run python -m sim.live --backend anthropic --yes-spend --real-ceiling 1.00 --cycles 10
+    uv run commons run --backend fake                          # free dry run of the whole pipeline
+    uv run commons run --backend lmstudio --model <id> --cycles 10 --serve
+    uv run commons run --backend anthropic --yes-spend --real-ceiling 1.00 --cycles 10
 
 The population and the live economy come from the pack (`--pack`, default earn_online).
 
@@ -51,7 +51,7 @@ ap.add_argument("--operator", help="folder of directives, context and limits for
 ap.add_argument("--panel", action="store_true",
                 help="grade every part with the pack's panel of graders (median of its lenses; costs one call per lens)")
 ap.add_argument("--rate-every", type=int, default=3,
-                help="with --society: set every Nth paid job aside for you to rate (python -m sim.rate NAME)")
+                help="with --society: set every Nth paid job aside for you to rate (commons rate NAME)")
 ap.add_argument("--no-web", action="store_true", help="no web access, whatever the operator's [gate] allows")
 ap.add_argument("--reasoning", action="store_true",
                 help="the local model reasons before answering: give every call more room (thinking counts against max_tokens)")
@@ -148,7 +148,7 @@ if society:
     print(f"society {society.name}: {len(population)} co-ops, {len(world.archive)} archive passages, {seeded} seeded playbooks")
 if world.web and world.gate.policy.allow_hosts:
     print(f"web: {world.gate.policy.read} reads from {', '.join(world.gate.policy.allow_hosts)}"
-          + (f" · decide requests on the dashboard or with: uv run python -m sim.approve {society.name}" if society else
+          + (f" · decide requests on the dashboard or with: uv run commons approve {society.name}" if society else
              " · decide requests on the dashboard (--serve)" if world.gate.policy.read == "ask" else ""))
 if world.operator.errors:
     sys.exit(f"the operator folder has a problem: {world.operator.errors[0]}")
@@ -210,4 +210,4 @@ if turns:
           f"most used {Counter(n for e in turns for n in e.fields['names']).most_common(6)}")
 print(f"ledger: {ledger} · turns: {turns_path} · activity: {ledger.replace('.sqlite', '.activity.jsonl')}")
 if society and world.ratings and world.ratings.samples:
-    print(f"{len(world.ratings.samples)} pieces of work set aside for you to rate: uv run python -m sim.rate {society.name}")
+    print(f"{len(world.ratings.samples)} pieces of work set aside for you to rate: uv run commons rate {society.name}")

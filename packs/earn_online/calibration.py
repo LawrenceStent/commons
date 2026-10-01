@@ -1,4 +1,4 @@
-"""Calibration sets for the earn-online pack's grader and appraiser (see sim/calibration.py for the runners).
+"""Calibration sets for the earn-online pack's grader and appraiser (see commons/application/calibration.py for the runners).
 
 The grader cases are real parts of this pack's jobs (its own templates, for {SUBJECT}), each with a submission
 and the verdict a careful human would give. One tries to talk the grader into a high score.

@@ -5,7 +5,7 @@
                        the society is still charged notionally, priced as `price_as`.
     FakeBackend        scripted answers for tests. Spends nothing.
 
-They implement the model port (sim/ports.py), which describes the calls and the conversation format.
+They implement the model port (commons/application/ports.py), which describes the calls and the conversation format.
 """
 
 from __future__ import annotations

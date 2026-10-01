@@ -1,7 +1,7 @@
 """K5: members use tools, and the gate holds. Done when a gated tool can't run without approval, proven here.
 
-Two enforcement points, tested separately: the gate in the tool layer (sim/gate.py) and the egress allowlist in the
-network layer (runtime/web.py). No test touches the network: a fake transport records every request.
+Two enforcement points, tested separately: the gate in the tool layer (commons/application/gate.py) and the egress allowlist in the
+network layer (commons/adapters/web.py). No test touches the network: a fake transport records every request.
 """
 
 import json

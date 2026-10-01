@@ -9,8 +9,8 @@ Phase 0 is broken down in detail; later phases stay coarse until we reach them.
 200 simulated cycles, and a free-rider starves.
 
 **Status (24 Sep 2026): done.** `uv run pytest` passes 56 tests, including the acceptance suite
-over 5 seeds. Run a society with `uv run python -m sim 200 [--no-rep] [--seed N]`, or watch one
-live with `uv run uvicorn console.app:app` (open http://localhost:8000).
+over 5 seeds. Run a society with `uv run commons sim 200 [--no-rep] [--seed N]`, or watch one
+live with `uv run uvicorn commons.interfaces.console.app:app` (open http://localhost:8000).
 
 ### 0.1 Project skeleton
 - [x] `pyproject.toml` (uv, Python 3.12, pydantic, cryptography, redis, fastapi, pytest)
@@ -122,7 +122,7 @@ LM Studio, which starts at login. Every workstream follows these rules:
 **Done when:** one page shows, live, what every component is doing (world, market,
 contract-net, ledger, reputation, bus, knowledge, meter and LLM calls, grader, gate, and the
 host process), and a run can be paused from it.
-- [x] `substrate/telemetry.py`: an in-process hub. Components `emit(kind, **fields)`; the hub keeps a bounded
+- [x] `commons/substrate/telemetry.py`: an in-process hub. Components `emit(kind, **fields)`; the hub keeps a bounded
       ring per kind plus rolling counters, and the dashboard subscribes to it. Emitting costs nothing when no one is listening.
 - [x] Engine, ledger, bus, reputation and meter emit into it (no component imports the console); ~7% run-time cost
 - [x] Server-Sent Events stream (one connection) instead of a separate 1 s poll per panel
@@ -167,8 +167,8 @@ kill-switch.
       treasury rather than the compute sink, and there are per-co-op daily caps
 
 ### 1.1 Turn-based engine (prerequisite for LLM agents)
-- [x] Mock market board, parts and rubrics, `StubGrader` (`sim/market.py`)
-- [x] Observation / Outcome / `ActionsAPI` types (`society/observation.py`)
+- [x] Mock market board, parts and rubrics, `StubGrader` (`commons/domain/market.py`)
+- [x] Observation / Outcome / `ActionsAPI` types (`commons/application/observation.py`)
 - [x] Each cycle, each active community takes one turn: `strategy.turn(observation, actions)`, in random order
 - [x] Contract-net spans cycles: announce → bid → award → deliver → review; expiry on every stage
       (open → expired; awarded → failed, with the prime's complaint filed; delivered → accepted by
@@ -239,16 +239,16 @@ Moving from one-shot contracts to contracts that span cycles broke the economy f
 ### 1.3 Mock market and grader
 - [x] Job generator: short, cheap, gradeable tasks, with one part per capability and a rubric per part
 - [x] `Grader` interface and `StubGrader` for scripted runs
-- [x] `LLMGrader` (`sim/grader.py`): one structured call per part, `{reason, score 0-10}`, the work fenced
+- [x] `LLMGrader` (`commons/application/graders.py`): one structured call per part, `{reason, score 0-10}`, the work fenced
       and marked untrusted; Haiku 4.5 by default
-- [x] Model backends brought forward from 1.4, structured output only (`runtime/backends.py`): Anthropic (SDK;
+- [x] Model backends brought forward from 1.4, structured output only (`commons/adapters/models.py`): Anthropic (SDK;
       `output_config` JSON schema; cached system prompt), LM Studio (local HTTP, no extra dependency), fake
 - [x] Grading paid properly: notional cost from the treasury (the prime if the treasury is empty); a real call is
       also booked in USD via `meter.record_real` and counts against the real kill-switch; `llm.call` telemetry
 - [x] An unavailable grader delays a finished job (retried each cycle, `grade_retries` = 3) instead of
       failing it; a failed audit call refunds the disputer's fee
-- [x] Calibration set (`sim/calibration.py`): 9 hand-labelled parts, one good and one bad per capability, plus
-      a prompt-injection attempt; `python -m sim.calibrate --backend fake|lmstudio|anthropic`
+- [x] Calibration set (`commons/application/calibration.py`): 9 hand-labelled parts, one good and one bad per capability, plus
+      a prompt-injection attempt; `commons calibrate --backend fake|lmstudio|anthropic`
 - [x] Calibrated on LM Studio with Hermes 3 (Llama 3.1 8B, 4.6 GB, 8k context): **8/9, injection resisted**,
       stable across runs, about 1.3–2.3 s per part. First attempt was 7/9 and the injection *passed* (see findings)
 - [ ] Calibrate on Anthropic Haiku 4.5 (about a cent; needs a key and your go-ahead)
@@ -272,10 +272,10 @@ Moving from one-shot contracts to contracts that span cycles broke the economy f
 
 ### 1.4 LLM agent runtime
 - [x] Frozen protocol preamble + per-community charter, cached as two system blocks; 21 tools sorted and
-      stable (`runtime/render.py`, `runtime/tools.py`). The preamble explains rules and costs; it never says "cooperate"
+      stable (`commons/agents/llm/render.py`, `commons/agents/llm/tools.py`). The preamble explains rules and costs; it never says "cooperate"
 - [x] Observation renderer: volatile content last; money in integer µcr; anything written by another
       community wrapped in `<untrusted>`
-- [x] Steward loop (`runtime/steward.py`): one fresh conversation per turn; tool calls → actions executor;
+- [x] Steward loop (`commons/agents/llm/steward.py`): one fresh conversation per turn; tool calls → actions executor;
       refusals come back as errors the model reads; at most 8 rounds and 80k tokens a turn; the turn ends
       if the purse can't pay for the next call; transcript kept for the dashboard
 - [x] Members: `commission` runs a member call that writes a draft (D1, D2, …); `do_part`/`deliver` submit
@@ -285,14 +285,14 @@ Moving from one-shot contracts to contracts that span cycles broke the economy f
       telemetry per call; the real-dollar kill-switch applies
 - [x] `ModelBackend.chat`: neutral conversation format; Anthropic replays the model's own content blocks
       unchanged (thinking-safe) and groups tool results in one message; LM Studio uses OpenAI-style function calls
-- [x] Fake client (`runtime/fakes.py`): `tests/test_steward.py` runs claim → commission → do_part → grade → paid
+- [x] Fake client (`commons/agents/llm/fakes.py`): `tests/test_steward.py` runs claim → commission → do_part → grade → paid
       end to end, plus refusals, round limits, empty purse, prefix stability, untrusted marking, backend
       translation
 - [x] `HybridGrader` for mixed societies (tagged scripted work → stub, real text → model); scripted reviewers
       accept untagged work from bidders they already trusted (they can't read real work: a known limitation)
 - [x] Console steps the world in a worker thread under a lock (slow LLM cycles don't freeze the page);
       `stop_at` cycle limit; drill-down shows the last LLM turn
-- [x] `python -m sim.live --backend fake|lmstudio|anthropic [--serve]`: 2 LLM communities (studio: design+write,
+- [x] `commons run --backend fake|lmstudio|anthropic [--serve]`: 2 LLM communities (studio: design+write,
       lab: research+build), a scripted cooperator and the defector; cycle, wall-clock and real-dollar limits;
       ledger in runs/
 
@@ -311,12 +311,12 @@ Moving from one-shot contracts to contracts that span cycles broke the economy f
     all still reason until the allowance runs out; only `reasoning_effort: "none"` works (a 60-word description
     in 2.1 s and 75 tokens, against 2,500 tokens and nothing written). Anthropic members run with thinking off.
     An all-reasoning reply now reads as "out of tokens", and the refusal says the call was still charged.
-  - **A calibrated live economy** for LLM runs (`sim/live.py`): reward 400k, purse 400k, upkeep 2k, scripted
+  - **A calibrated live economy** for LLM runs (`commons/interfaces/cli/live.py`): reward 400k, purse 400k, upkeep 2k, scripted
     work cost 40k, fees scaled to match, and longer deadlines (board 5, job 12, bids 4, deliver 5, review 3).
     Scripted runs keep their defaults, so the regression suite is unchanged. Steward reasoning capped at
     6,000 tokens a call.
 - [x] Rerun with Qwen on the fixes (26 Sep): 10 cycles in 20 minutes; results below
-- [x] Parallel turns (`Params.parallel_turns`, on for `sim.live`): stewards think at once, actions apply one at a
+- [x] Parallel turns (`Params.parallel_turns`, on for `commons run`): stewards think at once, actions apply one at a
       time under the world's lock; the dashboard updates mid-cycle. Not yet measured on a live run
 - [x] `runs/live.pid` is a lock: a second live run refuses to start (a dry run had overwritten and deleted the
       real run's pid file). Member commissions are now in the activity log; every entry has a timestamp
@@ -388,11 +388,11 @@ Same seed (same market) as run 2, so differences come from the changes.
 - Goals and ideas: still unused (0). Decisions logged with a `why`: 79. No reminders needed.  2. cut wasted calls (retrying refused claims and done parts)
   3. measure parallel turns
   4. revisit the price of thinking: calls are cheaper than before, but a steward still makes about 6 per turn
-- [x] **Activity log** (`sim/activity.py`): every action through the executor (scripted and LLM), every steward
+- [x] **Activity log** (`commons/substrate/activity.py`): every action through the executor (scripted and LLM), every steward
   decision (its words, and an optional `why` on any tool call) and every world change (jobs, contracts, grades,
   audits, population, playbooks, kill-switches) in one timeline. A bounded ring in memory (2,000 entries); live
   runs also stream it to `runs/<run>.activity.jsonl`. 2,000 scripted cycles log 55k entries at no measurable cost
-- [x] **Ideas and goals** (`sim/goals.py`): `idea`, `set_goal` (a checklist of up to 12 steps, optionally from an
+- [x] **Ideas and goals** (`commons/domain/goals.py`): `idea`, `set_goal` (a checklist of up to 12 steps, optionally from an
   idea), `update_goal`. Active goals and recent ideas are shown back in the observation every turn: the steward's
   memory across turns, alongside the journal
 - [x] **Dashboard:** "Goals & progress" (every community's goals with checklists and progress bars, plus every
@@ -422,7 +422,7 @@ Setup: 2 LLM communities (studio, lab), a scripted cooperator and the defector, 
   no local caching), about 4,500 µcr at Haiku's notional price. Several calls a turn make thinking cost
   more than upkeep. Studio spent 99k µcr on thinking and 40k on upkeep in 10 cycles against an
   80k-µcr job reward. Rewards must be recalibrated before any LLM community can break even.
-- **Observability added:** every LLM turn emits `llm.turn` telemetry, and `sim.live` writes all turns to
+- **Observability added:** every LLM turn emits `llm.turn` telemetry, and `commons run` writes all turns to
   `runs/*.turns.jsonl`. The in-memory transcript (last 2 turns) was too short to diagnose anything.
 - The runtime itself held up: every mistake came back as a readable refusal, nothing crashed, and the
   ledger balanced in every run.
@@ -444,7 +444,7 @@ throughout, back to 80% after); stopped after cycle 4 once both LLM communities 
   communities' 300,000 µcr in three cycles. This is the reward-calibration question in its sharpest form:
   either rewards rise several-fold, or local reasoning is priced lower, or reasoning is budgeted per call.
 - **Operations:** `uv run` wraps the process, so a signal to the wrapper doesn't reach the world (fixed:
-  `sim.live` writes its own pid to `runs/live.pid`). A monitor that uses `pgrep -f` matches its own command
+  `commons run` writes its own pid to `runs/live.pid`). A monitor that uses `pgrep -f` matches its own command
   line. Snapshots wait for the world's lock, so on slow runs the dashboard only updates between cycles
   (improvement: take the lock per turn rather than per cycle).
 - [ ] Short smoke run (~10 cycles) with a hard ceiling; check cache hit rate and cost per turn
@@ -453,7 +453,7 @@ throughout, back to 80% after); stopped after cycle 4 once both LLM communities 
 - [ ] Decide: vote-weighting cap, grader panel, charter mutability evidence
 
 #### 1.5 follow-ups (28 Sep)
-- [x] **Grade and appraise in parallel** (`grading_workers`, 4 in `sim.live`): calls run 4 at a time outside the lock;
+- [x] **Grade and appraise in parallel** (`grading_workers`, 4 in `commons run`): calls run 4 at a time outside the lock;
       verdicts apply in a fixed order, so outcomes don't depend on timing
 - [x] **World rule: commission only for what you can deliver.** The observation lists exactly what a co-op can commission
       for; anything else is refused with that list; a second commission for a part with an unused draft is refused
@@ -494,7 +494,7 @@ had nowhere to go (and the idea and goal tools went unused).
 - [x] A fixed formula sets the reward: nothing below 5/10, then 0.5×–1.5× the base job reward
 - [x] Approval by score, never by who asked first, within `venture_budget` per cycle; the rest wait their turn
 - [x] An approved venture becomes the proposer's own claimed job, graded and paid like any other
-- [x] Dashboard: ventures beside ideas; activity log records proposals and decisions; `sim.live` uses `LLMAppraiser`
+- [x] Dashboard: ventures beside ideas; activity log records proposals and decisions; `commons run` uses `LLMAppraiser`
 - [x] Calibrate the appraiser (28 Sep): 8 hand-labelled pitches (4 fund, 4 not: vague rubric, trivial padding, incoherent,
       manipulation). Qwen scored **6/8** at first: it rejected all bad pitches but also two good small ones, treating
       "small" as "trivial". One clarification in its instructions (small is not trivial; trivial = work anyone does in
@@ -526,17 +526,24 @@ had nowhere to go (and the idea and goal tools went unused).
 - [x] **Runtime settings** per co-op: steward and member models, rounds, reply sizes
 - [x] Re-read every cycle; a broken config keeps the last good one and shows the error; every change is in the
       activity log. The dashboard's Operator panel shows each co-op's limits and context and edits directives live
-- [x] `sim.live --operator DIR`; 10 tests in `tests/test_operator.py`, including path escapes and unknown limits
+- [x] `commons run --operator DIR`; 10 tests in `tests/test_operator.py`, including path escapes and unknown limits
 - [x] Large material: the searchable archive (built in K3), so big documents don't ride along on every call
+
+## Architecture refactor (from 1 Oct; see `docs/REFACTOR-PLAN.md`)
+
+The audit (`docs/ARCHITECTURE-AUDIT.md`) found the rules sound and the structure outgrown: a 1,000-line `World`,
+package cycles, a flag-driven economy, duplication. The refactor moves the code to Ports and Adapters with DDD
+tactical patterns, protected by a golden master that pins today's runs byte for byte. Progress is the per-stage
+checklists in the plan (R0 to R12), on branch `refactor/architecture`; no feature work until it merges.
 
 ## Framework track: one kernel, many societies (planned 26 Sep; see `docs/FRAMEWORK.md`)
 
 **Principle added:** effectiveness and efficiency, not speed. No mechanism may reward being first.
 
-- [x] K1 Kernel/pack split (28 Sep). `sim/pack.py`: `Pack`, `WorkSource`, a generic `TemplateWorkSource`, `load(name)`.
+- [x] K1 Kernel/pack split (28 Sep). `commons/domain/pack.py`: `Pack`, `WorkSource`, a generic `TemplateWorkSource`, `load(name)`.
       `packs/earn_online/`: its skills, job templates and products, scripted and live co-ops, live economy, a brief
       (now a cached block in every steward's prompt), its own grader, appraiser and member instructions, and both
-      calibration sets. The kernel's prompts are neutral defaults. `--pack NAME` on `sim`, `sim.live`, `sim.calibrate`.
+      calibration sets. The kernel's prompts are neutral defaults. `--pack NAME` on `sim`, `commons run`, `sim.calibrate`.
       **Done-when met:** all tests pass with pack 0; scripted runs on seeds 0, 3 and 7 are byte-identical to before;
       `tests/test_kernel.py` fails if a domain word enters the kernel, and runs a toy garden pack on the kernel
       unchanged. (The grader and appraiser interfaces stayed as they are; a separate `Evaluator` for delayed
@@ -560,22 +567,22 @@ had nowhere to go (and the idea and goal tools went unused).
 - [x] K3 Context and founding (28 Sep):
   - **Society folders:** `societies/<name>/` (git-ignored) holds `society.toml` (pack, seed), `brief.md`,
     `blueprints.toml`, `archive/`, `playbooks/`, an optional `operator/`, and its own `runs/`. `society.example/` shows one
-  - **Founding:** `python -m sim.found NAME --pack P --brief FILE [--context DIR] [--coops N] --backend ...` makes one
+  - **Founding:** `commons found NAME --pack P --brief FILE [--context DIR] [--coops N] --backend ...` makes one
     structured model call that drafts blueprints (name, kind, members, capabilities, charter, doctrine). Doctrines named
     in the brief are copied word for word; context is summarised into the call as untrusted reference. Founding happens
     once: a folder with blueprints is refused
   - **Approval is yours:** you edit `blueprints.toml`, then `--approve` checks it against rules (2–12 co-ops, unique
     names, 1–7 members, capabilities from the pack, LLM co-ops need a charter; warnings for all-skill co-ops and
-    uncovered skills). `sim.live --society NAME` refuses unapproved or rule-breaking blueprints
+    uncovered skills). `commons run --society NAME` refuses unapproved or rule-breaking blueprints
   - **Brief and doctrine as cached blocks:** the society's brief is added to the pack brief ("THIS SOCIETY, IN ITS
     OPERATOR'S WORDS"); a co-op's doctrine (how it works) sits beside its charter (what it's for) in its own block
-  - **Archive:** `sim/archive.py` splits `.md`/`.txt` into ~800-character passages ranked with BM25 (no model call).
+  - **Archive:** `commons/application/archive.py` splits `.md`/`.txt` into ~800-character passages ranked with BM25 (no model call).
     Stewards get free `search_archive(query)` and `read_archive(passage_id)` tools; the observation says how many
     passages exist. Shown as reference, never as instructions
   - **Seed playbooks:** `playbooks/<capability>--<title>.md` go into the library at genesis, authored by "operator",
     earning no royalties
   - **Done-when met (fake backend):** founded from `society.example/brief.md`, approved, and run with
-    `sim.live --society`; 6 tests in `tests/test_founding.py`. A real drafting call (Qwen) is still to do
+    `commons run --society`; 6 tests in `tests/test_founding.py`. A real drafting call (Qwen) is still to do
 - [x] K4 Second pack: tech for good (28 Sep). `packs/tech_for_good/`: skills scout, assess, design, write; jobs from
       subjects (a society's own `questions.md` replaces the defaults); its own brief, grader, appraiser, member
       instructions, a three-lens grader panel, a scorecard, and calibration sets (8 grader cases, 7 proposals).
@@ -584,11 +591,11 @@ had nowhere to go (and the idea and goal tools went unused).
     `grant_cap_cycles` budgets banked); at cycle end passing work shares it by value, never more than its value.
     Stewards see the pool in their observation. The market economy is unchanged: pack 0 runs byte-identical on
     seeds 0, 3 and 7 apart from the new scorecard lines
-  - **Grader panel** (`PanelGrader`, `sim.live --panel`, `sim.calibrate --panel`): each lens grades; the median counts
-  - **Scorecard** (`sim/scorecard.py`): a pack's mission metrics plus general ones (efficiency, concentration,
+  - **Grader panel** (`PanelGrader`, `commons run --panel`, `commons calibrate --panel`): each lens grades; the median counts
+  - **Scorecard** (`commons/domain/scorecard.py`): a pack's mission metrics plus general ones (efficiency, concentration,
     cooperation, citation validity), each measured by code, grader or you, with targets and floors; breaches are
     logged. The headline panel of the dashboard and the end of every summary
-  - **Your ratings** (`sim/ratings.py`, `python -m sim.rate NAME`): every Nth paid job is set aside in the society
+  - **Your ratings** (`commons/application/ratings.py`, `commons rate NAME`): every Nth paid job is set aside in the society
     folder; your 0–3 rating feeds the scorecard and is first-hand reputation evidence (observer "operator")
   - **Made-up citations fail by rule:** work citing an archive passage as `[archive: <id>]` that doesn't exist scores
     0 before any grading; valid and invalid citations are counted
@@ -603,13 +610,13 @@ had nowhere to go (and the idea and goal tools went unused).
     search the web (K5), so evidence is the archive or marked (unverified)
 - [x] K5 Member tools and the gate (30 Sep). Nothing reaches the internet unless your policy allows it or you approved it,
       enforced in two independent places:
-  - **The gate** (`sim/gate.py`, the tool layer): every web call is a request with a risk class (read; contact, publish
+  - **The gate** (`commons/application/gate.py`, the tool layer): every web call is a request with a risk class (read; contact, publish
     and spend are reserved and can never be "allow"). Your `[gate]` policy in the operator's config.toml: `read = ask |
     allow | deny`, `allow_hosts`, `per_cycle` (a rule), `ttl`. "ask" queues the request; you decide on the dashboard's
     Gate panel (batched by co-op, tool and host, with "always" for a standing approval and revoke) or with
-    `python -m sim.approve NAME` (decisions via `gate.jsonl` in the society folder). Approved requests run at the start
+    `commons approve NAME` (decisions via `gate.jsonl` in the society folder). Approved requests run at the start
     of the next cycle and the asker is told the result. Every request and decision is logged
-  - **The network layer** (`runtime/web.py`), independent of the gate: https only, allowlisted hosts only (each
+  - **The network layer** (`commons/adapters/web.py`), independent of the gate: https only, allowlisted hosts only (each
     redirect hop checked), no IP literals or private addresses, robots.txt respected (search APIs excepted), text only,
     size caps, GET only, a User-Agent that says what it is
   - **Web pages join the archive** (kept in `archive/web/` for later runs), so the citation rule covers them: citing a

@@ -98,7 +98,7 @@ class LLMGrader:
 class HybridGrader:
     """For mixed societies: scripted work (quality-tagged) goes to the stub, real text to the model.
     Tagging only helps scripted characters; an LLM that writes a tag into its own work is scored by
-    the stub on that tag, so the runtime strips tags from model output (see runtime/steward.py)."""
+    the stub on that tag, so the runtime strips tags from model output (see commons/agents/llm/steward.py)."""
 
     def __init__(self, llm: LLMGrader, stub=None):
         self.llm, self.stub = llm, stub or StubGrader()

@@ -1,4 +1,4 @@
-"""Calibration sets for the tech-for-good pack's grader and appraiser (see sim/calibration.py for the runners).
+"""Calibration sets for the tech-for-good pack's grader and appraiser (see commons/application/calibration.py for the runners).
 
 The grader cases are parts of this pack's own jobs, for {SUBJECT}, each with the verdict a careful human would
 give. The failures are the ones that matter for this society: upside with no risks, confident numbers from

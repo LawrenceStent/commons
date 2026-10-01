@@ -12,7 +12,7 @@ A pack supplies:
     grader_system / appraiser_system / member_system   how this society judges and does its work
     grader_cases / venture_cases   hand-labelled calibration sets for its grader and appraiser
     grader_panel     optional lenses (what each grader of a panel looks hardest at); the part gets the median
-    scorecard        mission metrics (sim/scorecard.py): what success means for this society, beyond money
+    scorecard        mission metrics (commons/domain/scorecard.py): what success means for this society, beyond money
 
 Packs are found by name: `load("earn_online")` imports `packs.earn_online` and returns its `PACK`. The
 kernel refers to no pack except through `DEFAULT`, the one used when a world is built without saying.

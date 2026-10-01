@@ -1,4 +1,4 @@
-"""Compute: token usage, the price table and what a call costs. Charging it is the meter's job (substrate/meter.py)."""
+"""Compute: token usage, the price table and what a call costs. Charging it is the meter's job (commons/substrate/meter.py)."""
 
 from __future__ import annotations
 

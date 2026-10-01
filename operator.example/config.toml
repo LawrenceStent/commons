@@ -14,9 +14,9 @@ thinking_budget = 80000      # µcr of model calls per turn
 [coops.lab.runtime]
 max_rounds = 6
 
-# Web access, behind the gate (sim/gate.py). Without allow_hosts, nothing reaches the web.
+# Web access, behind the gate (commons/application/gate.py). Without allow_hosts, nothing reaches the web.
 [gate]
-read = "ask"                 # ask: each web read waits for you (dashboard, or python -m sim.approve NAME);
+read = "ask"                 # ask: each web read waits for you (dashboard, or commons approve NAME);
                              # allow: reads on these hosts run at once; deny: no web
 allow_hosts = ["en.wikipedia.org"]
 per_cycle = 6                # web calls per co-op per cycle

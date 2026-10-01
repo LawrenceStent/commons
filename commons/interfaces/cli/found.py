@@ -1,9 +1,9 @@
 """Found a society from your brief, then approve it.
 
-    uv run python -m sim.found NAME --pack earn_online --brief brief.md [--questions FILE] [--context DIR] [--coops 4] \
+    uv run commons found NAME --pack earn_online --brief brief.md [--questions FILE] [--context DIR] [--coops 4] \
         --backend lmstudio --model <id>        # drafts societies/NAME/ (one model call)
-    uv run python -m sim.found NAME --approve  # checks the blueprints you've read and edited, and approves them
-    uv run python -m sim.live --society NAME   # runs it
+    uv run commons found NAME --approve  # checks the blueprints you've read and edited, and approves them
+    uv run commons run --society NAME   # runs it
 
 --backend fake drafts deterministic placeholder co-ops (for trying the flow without a model).
 """
@@ -44,7 +44,7 @@ if a.approve:
         sys.exit(str(e))
     show(errors, warnings)
     sys.exit(f"not approved: fix {founding.ROOT / a.name / 'blueprints.toml'} first" if errors
-             else print(f"approved. Run it:  uv run python -m sim.live --society {a.name} --backend lmstudio --model <id>"))
+             else print(f"approved. Run it:  uv run commons run --society {a.name} --backend lmstudio --model <id>"))
 
 if not a.brief:
     sys.exit("--brief FILE is required to found a society")
@@ -77,4 +77,4 @@ print(f"drafted {len(blueprints)} co-ops in {folder}/blueprints.toml:")
 for b in blueprints:
     print(f"  {b.name} ({', '.join(b.capabilities)}, {b.members} members): {b.charter}\n      doctrine: {b.doctrine}")
 show(errors, warnings)
-print(f"\nRead and edit {folder}/blueprints.toml, then:  uv run python -m sim.found {a.name} --approve")
+print(f"\nRead and edit {folder}/blueprints.toml, then:  uv run commons found {a.name} --approve")

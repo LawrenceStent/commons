@@ -1,4 +1,4 @@
-"""python -m sim [cycles] [--no-rep] [--seed N] [--pack NAME]"""
+"""commons sim [cycles] [--no-rep] [--seed N] [--pack NAME]"""
 
 import argparse
 import time

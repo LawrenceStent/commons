@@ -162,8 +162,11 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
       that print the new command and run it
 - [x] R3.5 Tests updated to the new imports, unchanged in logic (regrouping them by layer is R12.1). The layer test
       is rewritten for the new layers and passes with no exceptions; the last 3 status strings converted
-- [ ] R3.6 Docs: every path in `COMMONS.md`, `CHECKLIST.md`, `FRAMEWORK.md`, READMEs and examples updated
-- [ ] **Done when:** golden identical; every documented command works; layer exceptions are only those R4 to R10 remove
+- [x] R3.6 Docs: every path in `COMMONS.md`, `CHECKLIST.md`, `FRAMEWORK.md`, READMEs and examples updated; code
+      docstrings and messages too. `COMMONS.md`'s layers and module map rewritten for the new layout; the README
+      rewritten; `docs/COMMANDS.md` written now (every command, every option), so the shims have somewhere to point
+- [x] **Done when:** golden identical; every documented command works; layer exceptions are only those R4 to R10 remove
+      (there are none: the layer test passes with an empty exception list)
 
 ### R4. Aggregates, test-first (L) — C2, C3, C4 (part)
 - [ ] R4.1 `Contract` aggregate: transition table, a method per move, `DomainError` on illegal moves (tests first)

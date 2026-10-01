@@ -1,4 +1,4 @@
-"""The bus on Redis Streams, for societies that run across processes. The in-memory bus is substrate/bus.py."""
+"""The bus on Redis Streams, for societies that run across processes. The in-memory bus is commons/substrate/bus.py."""
 
 from __future__ import annotations
 

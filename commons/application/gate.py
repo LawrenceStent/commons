@@ -1,6 +1,6 @@
 """The gate: nothing an agent does reaches the outside world unless your policy allows it or you approved it.
 
-This is the first enforcement point, in the tool layer. The second is the network layer (runtime/web.py), which
+This is the first enforcement point, in the tool layer. The second is the network layer (commons/adapters/web.py), which
 refuses any host not on the allowlist whatever the gate says, so a mistake in one is caught by the other.
 
 Every outside-world tool has a risk class:
@@ -20,7 +20,7 @@ Your policy, in the operator folder's config.toml:
     ttl = 10                     # cycles a request waits for you before it expires
 
 With "ask", a call becomes a request and the agent is told it's waiting. You approve or deny requests from the
-dashboard, in batches grouped by co-op, tool and host, or from the command line (`python -m sim.approve NAME`).
+dashboard, in batches grouped by co-op, tool and host, or from the command line (`commons approve NAME`).
 "Always" makes a standing approval for that co-op and host. Approved requests run at the start of the next cycle,
 and the agent that asked is told the result. Every request and decision is in the activity log.
 

@@ -1,7 +1,7 @@
 """Jobs: the shape every society's work takes, whatever the pack.
 
 A job has parts, one per capability, each with a spec and a rubric. Where jobs come from is a pack's
-`WorkSource` (sim/pack.py); how parts are judged is in society/grading.py.
+`WorkSource` (commons/domain/pack.py); how parts are judged is in commons/domain/grading.py.
 """
 
 from __future__ import annotations

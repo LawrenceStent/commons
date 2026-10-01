@@ -1,6 +1,6 @@
 """Compute metering: every model call is debited from the caller's purse at list price.
 
-Two kinds of spend, kept apart (see substrate/ledger.py):
+Two kinds of spend, kept apart (see commons/substrate/ledger.py):
 
     notional  what the society charges itself, in the ledger's own currency. In a SIM world this
               is created money: flat upkeep, and model calls priced at list even when they ran

@@ -84,7 +84,7 @@ the doctrine is the strategy you hand it. For OSINT it might be a method or a be
 
 | Concern | Today (hard-coded for "earn online") | Becomes |
 |---|---|---|
-| Capabilities | `research, build, design, write` in `sim/market.py` | **Pack**: e.g. trading `research, signal, risk, execution` |
+| Capabilities | `research, build, design, write` in `commons/domain/market.py` | **Pack**: e.g. trading `research, signal, risk, execution` |
 | Where jobs come from | `generate_job` + `PART_TEMPLATES` + `PRODUCTS` | **Pack `WorkSource`** |
 | How work is judged | `StubGrader` / `LLMGrader` with market rubrics | **Pack `Evaluator`** (LLM grader, deterministic scorer, human review, or a mix) |
 | What value is | Market pays a fixed reward on pass | **Pack**: reward scaled by quality, P&L, impact score, verified findings |
@@ -95,7 +95,7 @@ the doctrine is the strategy you hand it. For OSINT it might be a method or a be
 | Seed co-ops | `default_population()` | **Blueprints** from founding (§5) |
 | Settings | `Params` defaults | **Kernel defaults + pack overrides** |
 | Dashboard | Generic panels | Generic panels + **pack KPIs panel** |
-| Calibration | `sim/calibration.py` (product-kit cases) | **Pack calibration set** (every evaluator must pass its own) |
+| Calibration | `commons/application/calibration.py` (product-kit cases) | **Pack calibration set** (every evaluator must pass its own) |
 
 Everything else stays in the kernel unchanged: ledger, currencies, bus, signatures, rate limits,
 reputation, contract-net and deadlines, spawn/fork/merge/learn, playbooks and royalties, disputes,
@@ -223,10 +223,10 @@ Stuffing documents into the prompt makes every call of every turn pay for them.
 ### 5.2 Founding: from a brief to co-ops (built in K3)
 
 ```
-uv run python -m sim.found tech-for-good --pack earn_online --brief brief.md --context ./material/ --coops 4 \
+uv run commons found tech-for-good --pack earn_online --brief brief.md --context ./material/ --coops 4 \
     --backend lmstudio --model <id>
-uv run python -m sim.found tech-for-good --approve
-uv run python -m sim.live --society tech-for-good --backend lmstudio --model <id>
+uv run commons found tech-for-good --approve
+uv run commons run --society tech-for-good --backend lmstudio --model <id>
 ```
 
 As built: blueprints are TOML (`blueprints.toml`, `approved = false` until you approve), there is no starting purse per

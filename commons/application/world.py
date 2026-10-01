@@ -24,7 +24,7 @@ Two economies (`Params.economy`):
             end of the cycle, passing work shares the pool by value (reward scaled by quality), never more than
             its value. What earns is what the grader values, and the budget is fixed however much work is done.
 
-Money in this world is created money (SIM credits); see substrate/ledger.py.
+Money in this world is created money (SIM credits); see commons/substrate/ledger.py.
 """
 
 from __future__ import annotations
@@ -160,12 +160,12 @@ class Params:
     parallel_turns: bool = False
     parallel_workers: int = 4
     # model calls for grading and appraisal at once (outside the lock). Verdicts are applied in a fixed order,
-    # so results don't depend on which call finishes first. 1 for scripted runs; sim.live uses 4.
+    # so results don't depend on which call finishes first. 1 for scripted runs; `commons run` uses 4.
     grading_workers: int = 1
     activity_keep: int = 2000  # entries of the activity log kept in memory
     activity_path: str | None = None  # also append every entry to this JSONL file
     retain: int = 20  # cycles a closed job or contract stays visible before it's dropped
-    # population and capabilities (sim/population.py)
+    # population and capabilities (commons/application/population.py)
     max_members: int = 7
     max_communities: int = 12
     spawn_fee: int = 300_000
@@ -258,8 +258,8 @@ class World:
         self.appraiser = appraiser or StubAppraiser()
         self.operator = operator or Operator(None)
         self.archive = archive or ArchiveIndex()  # the society's reference material, searched on demand
-        self.ratings = ratings  # your ratings of a sample of the paid work (sim/ratings.py)
-        # the web (a WebPort; None = no web at all), behind the gate (sim/gate.py), whose policy is
+        self.ratings = ratings  # your ratings of a sample of the paid work (commons/application/ratings.py)
+        # the web (a WebPort; None = no web at all), behind the gate (commons/application/gate.py), whose policy is
         # the operator's [gate] section
         self.web = web
         self.gate = gate or Gate()
@@ -978,7 +978,7 @@ class World:
         self.hub.emit("grants.award", self.cycle, pool=pool, asked=total, paid=min(pool, total), jobs=len(queue))
 
     def _apply_ratings(self) -> None:
-        """Your new ratings (sim/ratings.py): first-hand evidence about whoever did each part. Under the lock."""
+        """Your new ratings (commons/application/ratings.py): first-hand evidence about whoever did each part. Under the lock."""
         if not self.ratings:
             return
         for r in self.ratings.reload():

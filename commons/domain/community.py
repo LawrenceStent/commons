@@ -23,7 +23,7 @@ class Community:
     strategy: Agent
     charter: str = ""
     identity: Identity = field(init=False)
-    workspace: Any = None  # a substrate.workspace.Workspace, for a co-op that keeps files
+    workspace: Any = None  # a commons.substrate.workspace.Workspace, for a co-op that keeps files
     active: bool = True
     thinking: int = 0  # members funded this cycle
     capacity: int = 0  # actions (bids, prime jobs) left this cycle

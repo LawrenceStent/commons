@@ -37,7 +37,7 @@ config.toml:
     steward_model = "claude-sonnet-5"
     max_rounds = 6
 
-    [gate]                       # web access and anything else outside (see sim/gate.py)
+    [gate]                       # web access and anything else outside (see commons/application/gate.py)
     read = "ask"
     allow_hosts = ["en.wikipedia.org"]
 

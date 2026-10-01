@@ -5,7 +5,7 @@ everything, so the world sets aside a sample of the paid work for you:
 
     samples.jsonl   written by the world: every `every`-th paid job, with its parts in full, under an id that
                     names the run ("live-lmstudio-20260928-1200/J12"), since every run numbers its jobs from 1
-    ratings.jsonl   written by you (with `python -m sim.rate SOCIETY`, or by hand): one line per rating,
+    ratings.jsonl   written by you (with `commons rate SOCIETY`, or by hand): one line per rating,
                     {"id": "<run>/J12", "rating": 2, "note": "..."}
 
 Ratings: 0 wrong or harmful · 1 not useful · 2 useful · 3 very useful.

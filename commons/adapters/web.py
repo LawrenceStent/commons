@@ -1,6 +1,6 @@
 """The web, for agents: the only way anything in a society reaches the internet (model calls aside).
 
-This is the gate's second enforcement point, independent of the first (sim/gate.py, in the tool layer). Even if
+This is the gate's second enforcement point, independent of the first (commons/application/gate.py, in the tool layer). Even if
 the gate approved something by mistake, this layer refuses:
 
     - any host not on the egress allowlist (exact, or a subdomain of an entry written "*.example.org")
@@ -221,7 +221,7 @@ class WikipediaSearch:
 
 
 class WebAccess:
-    """The web port (sim.ports.WebPort): a fetcher behind the allowlist, and an optional search provider. The
+    """The web port (commons.application.ports.WebPort): a fetcher behind the allowlist, and an optional search provider. The
     allowlist follows the operator's [gate] policy, re-read every cycle."""
 
     def __init__(self, fetcher: Fetcher, searcher=None):

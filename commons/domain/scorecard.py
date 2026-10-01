@@ -5,7 +5,7 @@ nothing about whether it is succeeding, so each pack declares a scorecard of mis
 of the society's dashboard and summary; credits sit below it, as operations.
 
 Each metric says who measures it: `code` (computed from the world's records, deterministic), `grader` (from
-grades) or `you` (from the ratings you give a sample of the work, see sim/ratings.py). A metric may have a
+grades) or `you` (from the ratings you give a sample of the work, see commons/application/ratings.py). A metric may have a
 target (something to reach) and a floor (a line it must never cross; crossing it is a breach, logged).
 
 Every society also gets the general metrics below: efficiency, concentration, cooperation and citations.

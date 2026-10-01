@@ -1,5 +1,5 @@
 """Ports: what the society needs from the outside world, as interfaces it owns. Adapters implement them
-(runtime/backends.py for models, runtime/web.py for the web); the society never imports an adapter.
+(commons/adapters/models.py for models, commons/adapters/web.py for the web); the society never imports an adapter.
 
 The model port: one interface, two kinds of call.
     structured(...)  one answer matching a JSON schema (graders, appraisers, founding)

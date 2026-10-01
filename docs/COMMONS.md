@@ -113,7 +113,7 @@ Grouped by area. Terms in **bold** are used throughout the code and this guide.
 
 - **Community.** The unit of agency: a small team (1–7 **members**) with a **charter**, a set of
   **capabilities**, a **purse**, a signing key and a workspace. It is the thing that bids, earns,
-  builds a reputation and can be refused. (`society/community.py`)
+  builds a reputation and can be refused. (`commons/domain/community.py`)
 - **Member.** One agent in a community. For scripted runs a member is a count; for LLM runs a member
   is a model call the steward commissions. Each funded member gives the community 2 **actions** per
   cycle.
@@ -258,7 +258,7 @@ Grouped by area. Terms in **bold** are used throughout the code and this guide.
   the work that passed grading shares it by value (reward scaled by quality), never more than its value.
 - **Scorecard.** A society's measures of success beyond money, each measured by code, the grader or you, with a
   target or a floor. The dashboard's headline; credits are only fuel.
-- **Rating.** Your 0–3 verdict on a sampled piece of work (`python -m sim.rate NAME`): it counts on the scorecard
+- **Rating.** Your 0–3 verdict on a sampled piece of work (`commons rate NAME`): it counts on the scorecard
   and as reputation evidence about whoever did the work.
 - **Grader panel.** Several graders, each looking hardest at one thing (evidence, usefulness, harm); the median counts.
 - **Citation rule.** Work citing an archive passage that doesn't exist fails, before any grader sees it.
@@ -267,7 +267,7 @@ Grouped by area. Terms in **bold** are used throughout the code and this guide.
 
 - **Gate.** Anything that touches the outside world goes through it (since K5). Reads (web search, web fetch)
   follow your `[gate]` policy: ask (the default: each waits for your approval), allow, or deny. Contact, publish
-  and spend can only ever be ask or deny. You approve in batches on the dashboard or with `python -m sim.approve`.
+  and spend can only ever be ask or deny. You approve in batches on the dashboard or with `commons approve`.
   A second, independent check in the network layer refuses any host not on your allowlist.
 - **Kill-switch.** There are two:
   - a notional daily ceiling on credits
@@ -294,12 +294,12 @@ Grouped by area. Terms in **bold** are used throughout the code and this guide.
 | **LM Studio** | A desktop app that runs open models locally, with an OpenAI-compatible server on port 1234 | Free local runs; notional charges only |
 | **SIM / USD / cr** | Simulated credits / real US dollars / the credit symbol | §8 |
 | **Micro-dollar** | One millionth of a dollar; $1 per million tokens = 1 micro-dollar per token | All ledger amounts |
-| **Double-entry ledger** | Every transaction has legs that sum to zero, so money is only moved | `substrate/ledger.py` |
+| **Double-entry ledger** | Every transaction has legs that sum to zero, so money is only moved | `commons/substrate/ledger.py` |
 | **SQLite / WAL** | An embedded database / Write-Ahead Logging mode for safe concurrent reads | The ledger's storage |
 | **Redis Streams** | An append-only log in Redis with consumer groups | The production bus backend (`RedisBus`) |
 | **Consumer group** | A named reader that tracks its own position in a stream | One per community per message family |
 | **MAXLEN** | Redis's cap on stream length | Our in-memory bus copies this idea to bound memory |
-| **Envelope** | A signed, content-addressed wrapper around every protocol message | `protocol/envelope.py` |
+| **Envelope** | A signed, content-addressed wrapper around every protocol message | `commons/protocol/envelope.py` |
 | **Ed25519** | A fast public-key signature scheme | Every community signs its messages; the bus verifies |
 | **SHA-256** | A cryptographic hash | Message ids are the hash of the canonical JSON, so they can't be forged |
 | **Pydantic** | A Python data-validation library | All protocol schemas |
@@ -334,70 +334,83 @@ Grouped by area. Terms in **bold** are used throughout the code and this guide.
 
 ### 5.1 Layers
 
+Since the refactor (R3, 1 Oct) the code follows Ports and Adapters. Each layer imports only the layers below it,
+and `tests/test_layers.py` enforces that from the source. `docs/REFACTOR-PLAN.md` §1 has the reasoning.
+
 ```
-┌───────────────────────────────────────────────────────────────────────┐
-│ SOCIETY      communities, charters, strategies (scripted now, LLM 1.4) │  society/
-├───────────────────────────────────────────────────────────────────────┤
-│ SIMULATION   world engine, market board, actions executor, population │  sim/
-├───────────────────────────────────────────────────────────────────────┤
-│ PROTOCOL     four message families, signed envelopes                   │  protocol/
-├───────────────────────────────────────────────────────────────────────┤
-│ SUBSTRATE    bus · ledger · reputation · meter · registry · workspace │  substrate/
-│              · telemetry hub                                          │
-├───────────────────────────────────────────────────────────────────────┤
-│ CONSOLE      live dashboard (FastAPI + SSE), controls, host monitor   │  console/
-└───────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│ PACKS        what a society is for: skills, work, prompts, scorecards   │  packs/
+├────────────────────────────────────────────────────────────────────────┤
+│ INTERFACES   the `commons` command, the live dashboard                  │  commons/interfaces/
+├────────────────────────────────────────────────────────────────────────┤
+│ ADAPTERS     model backends, the web, Redis: other processes, networks  │  commons/adapters/
+├────────────────────────────────────────────────────────────────────────┤
+│ AGENTS       scripted strategies; the LLM steward and its members       │  commons/agents/
+├────────────────────────────────────────────────────────────────────────┤
+│ APPLICATION  the world and its cycle, the actions executor, services,   │  commons/application/
+│              ports (what the society needs from outside)                │
+├────────────────────────────────────────────────────────────────────────┤
+│ SUBSTRATE    ledger · bus · meter · reputation · registry · telemetry ·  │  commons/substrate/
+│              activity log · JSON-lines files · workspace (in-process)    │
+├────────────────────────────────────────────────────────────────────────┤
+│ DOMAIN       pure rules and models: statuses, jobs, grading, packs, gate │  commons/domain/
+│              policy, venture rules, archive index, scorecard, prices     │
+├────────────────────────────────────────────────────────────────────────┤
+│ PROTOCOL     four message families, signed envelopes                     │  commons/protocol/
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
 The rule running through every layer: **record-keepers, not deciders.** The bus, ledger, reputation
 store and registry keep records and enforce invariants (signatures, balances, rate limits,
-deadlines). Nothing below the society layer can assign work to a community that didn't bid for it.
+deadlines). Nothing below the agents can assign work to a community that didn't bid for it.
 
-### 5.2 Module map (what's actually in the repo)
+### 5.2 Module map (what's actually in the repo, 1 Oct)
 
 | Path | Lines | Role |
 |---|---|---|
-| `protocol/envelope.py` | 93 | `Envelope`: signed (Ed25519), content-addressed (SHA-256 of canonical JSON). `Identity` holds a community's key |
-| `protocol/{contract,reputation,knowledge,population}.py` | ~120 | The four message families and their verbs (§5.3) |
-| `substrate/bus.py` | 178 | `Bus` front door: signature check plus reputation-scaled rate limit. `MemoryBus` for simulations (capped streams), `RedisBus` for production |
-| `substrate/ledger.py` | 198 | Double-entry SQLite ledger with two currencies (SIM, USD), per-currency external accounts, the revenue split, capital and a real-money summary |
-| `substrate/meter.py` | ~140 | Price table, notional charges, real-dollar recording, both kill-switches |
-| `substrate/reputation.py` | 115 | Beta evidence per (observer, subject, capability); gossip; asymmetric decay; standing; fork inheritance |
-| `substrate/registry.py` | 35 | A2A-style agent cards and public keys |
-| `substrate/workspace.py` | 30 | One sandboxed directory per community; path-escape protection |
-| `substrate/telemetry.py` | 82 | The telemetry hub: every component emits events into bounded rings |
-| `society/community.py` | 36 | The `Community` record |
-| `society/observation.py` | 165 | What a community sees (`Observation` and its views) and the `ActionsAPI` it may call |
-| `society/strategies/base.py` | 239 | The honest default strategy: obligations first, then new business, then growth |
-| `society/strategies/scripted.py` | 56 | Cooperator, Defector, FreeRider: the permanent regression suite |
-| `sim/engine.py` | 622 | `World`: the cycle, deadlines, grading, settlement, observation, gossip, records |
-| `sim/actions.py` | 267 | The actions executor: the only way a strategy touches the world |
-| `sim/market.py` | 116 | Job generator (parts and rubrics), `Grader` interface, `StubGrader` |
-| `sim/population.py` | 229 | Spawn, retire, fork, merge, learn, proposal expiry |
-| `sim/gate.py`, `sim/approve.py` | ~250, ~60 | The gate: policy, requests, batch and standing approvals, file decisions; the approval CLI |
-| `runtime/web.py` | ~260 | The only way agents reach the web: egress allowlist, safe fetcher, robots, Wikipedia search |
-| `sim/scorecard.py` | ~140 | Scorecards: mission metrics per pack plus general ones; statuses against targets and floors |
-| `sim/ratings.py`, `sim/rate.py` | ~110, ~70 | Work set aside for your ratings; the rating CLI |
-| `packs/tech_for_good/` | ~400 | Pack 1: scout, assess, design, write; grant economy; panel lenses; scorecard; calibration sets |
-| `sim/founding.py` | ~250 | Founding: drafting blueprints from a brief, the rules they must pass, approval, loading a `Society` |
-| `sim/found.py` | ~80 | CLI: `python -m sim.found NAME --brief FILE ...` and `NAME --approve` |
-| `sim/archive.py` | ~90 | The archive: passages, BM25 search, no model call |
-| `sim/pack.py` | ~95 | `Pack`, `WorkSource`, `TemplateWorkSource`, `load(name)`: what a society is for, kept out of the kernel |
-| `packs/earn_online/` | ~250 | Pack 0: skills, job templates, co-ops, live economy, brief, grader and appraiser instructions, calibration sets |
-| `sim/grader.py` | ~70 | `LLMGrader`: rubric grading with structured output; untrusted work fenced |
-| `sim/calibration.py`, `sim/calibrate.py` | ~150 | Hand-labelled grader check and its command-line runner |
-| `runtime/backends.py` | ~330 | `ModelBackend`: `structured` and `chat` for Anthropic, LM Studio and fake; usage and real/notional on every call |
-| `runtime/render.py` | ~170 | The frozen preamble, the charter block, and the observation renderer (untrusted content fenced) |
-| `runtime/tools.py` | ~110 | The 21 steward tools, sorted and stable |
-| `runtime/steward.py` | ~210 | `LLMStrategy`: the steward loop, members via `commission`, drafts, metering, transcripts |
-| `runtime/fakes.py` | ~35 | A fake steward and grade for dry runs and tests |
-| `sim/live.py` | ~110 | Runs an LLM society with limits; `--serve` for the dashboard |
-| `console/app.py` | 252 | Snapshot builder, SSE stream, controls, drill-down, memory guard |
-| `console/dashboard.html` | 318 | The dashboard page (vanilla JS, no build step) |
-| `console/host.py` | 51 | Process and system memory, CPU, LM Studio status |
-
-The plan's repository sketch also lists `society/agent.py`, `society/venture.py`, `channels/` and
-`market_sim/`. Those arrive in later phases; the mock market lives in `sim/market.py` for now.
+| **protocol** | | |
+| `commons/protocol/envelope.py` | 93 | `Envelope`: signed (Ed25519), content-addressed (SHA-256 of canonical JSON). `Identity` holds a community's key |
+| `commons/protocol/{contract,reputation,knowledge,population}.py` | 116 | The four message families and their verbs (§5.3) |
+| **domain** | | |
+| `commons/domain/status.py` | 62 | The states jobs, contracts, ventures, proposals, goals, ideas and gate requests move through (StrEnums) |
+| `commons/domain/market.py`, `grading.py` | 40, 63 | Jobs and parts; grades, the `Grader` interface, quality tags and `StubGrader` |
+| `commons/domain/pack.py` | 107 | `Pack`, `WorkSource`, `TemplateWorkSource`, the live economy, `load(name)` |
+| `commons/domain/community.py` | 40 | The `Community` record and the `Agent` interface |
+| `commons/domain/compute.py` | 44 | Token usage, the price table, what a call costs |
+| `commons/domain/gate.py`, `ventures.py`, `founding.py`, `operator.py`, `ratings.py` | 82, 77, 57, 76, 16 | The pure rules of each: gate policy and requests; venture shape, appraisal and price formula; blueprints and their checks; operator limits; the rating scale |
+| `commons/domain/archive.py` | 117 | The archive index: passages, BM25 search, the citation format |
+| `commons/domain/goals.py`, `scorecard.py` | 67, 140 | Ideas and goals; scorecard metrics and statuses |
+| **substrate** | | |
+| `commons/substrate/ledger.py` | 199 | Double-entry SQLite ledger with two currencies (SIM, USD), per-currency external accounts, the revenue split |
+| `commons/substrate/meter.py` | 108 | Notional charges, real-dollar recording, both kill-switches |
+| `commons/substrate/bus.py` | 130 | `Bus` front door: signature check plus reputation-scaled rate limit; `MemoryBus` |
+| `commons/substrate/reputation.py` | 115 | Beta evidence per (observer, subject, capability); gossip; asymmetric decay; standing; fork inheritance |
+| `commons/substrate/telemetry.py`, `activity.py` | 80, 150 | The telemetry hub (bounded rings); the activity log of every action, decision and change |
+| `commons/substrate/registry.py`, `workspace.py`, `jsonl.py` | 35, 30, 45 | Agent cards and keys; a sandboxed folder per community; append-only JSON-lines files |
+| **application** | | |
+| `commons/application/world.py` | 1,272 | `World`: the cycle, deadlines, grading, settlement, grants, the web call path, observation, gossip, records (R6 splits it) |
+| `commons/application/actions.py` | 492 | The actions executor: the only way an agent touches the world |
+| `commons/application/ports.py` | 126 | What the society needs from outside: the model port and the web port |
+| `commons/application/observation.py` | 217 | What a community sees (`Observation` and its views) and the `ActionsAPI` it may call |
+| `commons/application/population.py` | 230 | Spawn, retire, fork, merge, learn, proposal expiry |
+| `commons/application/graders.py`, `calibration.py` | 138, 106 | LLM, panel and hybrid graders; running a grader or appraiser over hand-labelled cases |
+| `commons/application/ventures.py` | 124 | Venture checks against the world; the LLM appraiser |
+| `commons/application/gate.py`, `operator.py`, `ratings.py`, `archive.py`, `founding.py` | 157, 178, 77, 34, 233 | The gate's queue and decisions; the operator folder; ratings files; the archive folder; founding a society folder |
+| **agents** | | |
+| `commons/agents/scripted/base.py`, `scripted.py` | 243, 56 | The honest default strategy; Cooperator, Defector, FreeRider (the regression suite) |
+| `commons/agents/llm/steward.py` | 302 | `LLMStrategy`: the steward loop, members via `commission` (with a look-up loop), drafts, metering, transcripts |
+| `commons/agents/llm/render.py`, `tools.py`, `fakes.py` | 259, 128, 45 | The preamble and observation renderer; the steward tools; a fake steward for dry runs |
+| **adapters** | | |
+| `commons/adapters/models.py` | 317 | Anthropic, LM Studio and fake backends; choosing one with the spend check |
+| `commons/adapters/web.py` | 248 | The only way agents reach the web: egress allowlist, safe fetcher, robots, Wikipedia search |
+| `commons/adapters/redis_bus.py` | 52 | The bus on Redis Streams, for multi-process societies |
+| **interfaces** | | |
+| `commons/interfaces/cli/` | 550 | `commons` and its subcommands: run, sim, found, approve, rate, calibrate (`docs/COMMANDS.md`) |
+| `commons/interfaces/console/app.py`, `dashboard.html`, `host.py` | 351, 538, 51 | The dashboard: snapshot, SSE stream, controls, gate and operator panels; the page; host monitor |
+| **packs** | | |
+| `packs/earn_online/` | 237 | Pack 0: skills, job templates, co-ops, brief, grader and appraiser instructions, calibration sets |
+| `packs/tech_for_good/` | 408 | Pack 1: scout, assess, design, write; grant economy; panel lenses; scorecard; calibration sets |
+| `sim/` | | Shims: the old `python -m sim.*` commands, kept working |
 
 ### 5.3 The protocol: four message families
 
@@ -412,7 +425,7 @@ doesn't support it.
 | `population` | spawn · retire · fork · merge | ✅ Since 1.2 |
 
 `governance` and `gate` messages, and `contract.settle` and `knowledge.royalty`, were schemas nothing sent; they
-were deleted in the refactor (R1.7, 1 Oct). The gate is enforced in-process (`sim/gate.py`); governance gets
+were deleted in the refactor (R1.7, 1 Oct). The gate is enforced in-process (`commons/application/gate.py`); governance gets
 messages when it gets a design.
 
 Every message is sealed in an envelope: sender, cycle, family, verb, body, an id that is the SHA-256
@@ -427,10 +440,10 @@ A strategy never touches the ledger, bus or reputation directly. The path is alw
 strategy.turn(observation, actions)
         │  calls e.g. actions.bid("J12.write.1", 16_000)
         ▼
-sim/actions.py      validate → spend capacity → sign & publish on the bus → move money via ledger
+commons/application/actions.py      validate → spend capacity → sign & publish on the bus → move money via ledger
         │           returns Outcome(ok, message) — failures are readable text, never exceptions
         ▼
-sim/engine.py       state changes, deadlines, grading, settlement, telemetry events
+commons/application/world.py       state changes, deadlines, grading, settlement, telemetry events
 ```
 
 This matters most for LLM agents. Every refusal comes back as a sentence the model can read and
@@ -439,7 +452,7 @@ around the rules.
 
 ### 5.5 Telemetry
 
-Every component emits events into one **hub** (`substrate/telemetry.py`): `ledger.post`,
+Every component emits events into one **hub** (`commons/substrate/telemetry.py`): `ledger.post`,
 `bus.publish`, `meter.charge`, `meter.real`, `reputation.attest`, `contract.stage`, `market.job`,
 `grader.grade`, `population.*`, `world.cycle`, `host.sample`, and more.
 
@@ -663,7 +676,7 @@ community's charter → venture (a product idea, KPIs, a channel)
 
 ## 9. The economy's numbers
 
-Current defaults (`sim/engine.py` → `Params`). Amounts are micro-credits (1 cr = 1,000,000). They are
+Current defaults (`commons/application/world.py` → `Params`). Amounts are micro-credits (1 cr = 1,000,000). They are
 chosen to mirror plausible micro-dollar costs, so 80,000 is about 8 cents.
 
 | Parameter | Value | Meaning |
@@ -707,7 +720,7 @@ against measured token costs in 1.5.
 
 ## 10. The live dashboard
 
-`uv run uvicorn console.app:app`, then open http://localhost:8000. One page, one live connection (SSE),
+`uv run uvicorn commons.interfaces.console.app:app`, then open http://localhost:8000. One page, one live connection (SSE),
 updated about twice a second.
 
 | Panel | Shows |
@@ -803,12 +816,12 @@ Findings:
 ## 12. Roadmap
 
 ### 1.3: LLM grader (built 25 Sep; live calibration pending)
-- `LLMGrader` (`sim/grader.py`): one call per part. The answer is `{reason, score}`, where the score is
+- `LLMGrader` (`commons/application/graders.py`): one call per part. The answer is `{reason, score}`, where the score is
   an integer from 0 to 10 and a part passes at 5. The reason comes first, so the model argues before
   it decides.
 - **Untrusted work:** the submission is fenced in `<work>` tags, and the system prompt says anything
   inside is data. Attempts to steer the grader count against the submission.
-- **Backends** (`runtime/backends.py`), brought forward from 1.4 for structured output:
+- **Backends** (`commons/adapters/models.py`), brought forward from 1.4 for structured output:
   - `AnthropicBackend`: the official SDK, JSON-schema `output_config`, a cached system prompt,
     readable errors.
   - `LMStudioBackend`: local, plain HTTP, no extra dependency, charged notionally at Haiku prices.
@@ -819,8 +832,8 @@ Findings:
 - **Resilience:** if the grader is down, a finished job waits and grading is retried for up to 3
   cycles before the job fails. The prime isn't punished for an outage. A failed audit call refunds
   the fee.
-- **Calibration** (`sim/calibration.py`): 9 hand-labelled parts, one good and one bad per capability,
-  plus a prompt-injection attempt. Run it with `python -m sim.calibrate --backend …`. The bar for
+- **Calibration** (`commons/application/calibration.py`): 9 hand-labelled parts, one good and one bad per capability,
+  plus a prompt-injection attempt. Run it with `commons calibrate --backend …`. The bar for
   adoption is at least 8 of 9 correct and the injection resisted.
 - **Local result (Hermes 3, Llama 3.1 8B):**
   - First run: 7/9, and the injection *passed*. The model's reasons named violations it then scored
@@ -1055,13 +1068,13 @@ adversarially, then mainnet with per-community daily caps.
 ```sh
 uv sync                                    # install
 uv run pytest                              # all tests (~30 s)
-uv run python -m sim 200                   # scripted society, 200 cycles, summary table
-uv run python -m sim 2000 --no-verify      # faster (skips signature checks)
-uv run python -m sim 200 --no-rep          # control run: reputation disabled
-uv run uvicorn console.app:app             # dashboard at http://localhost:8000 (Ctrl-C to stop)
-uv run python -m sim.live --backend fake   # dry run of an LLM society (free)
-uv run python -m sim.live --backend lmstudio --model <id> --cycles 10 --serve   # local, watch it live
-uv run python -m sim.calibrate --backend lmstudio --model <id>                  # check a grader
+uv run commons sim 200                   # scripted society, 200 cycles, summary table
+uv run commons sim 2000 --no-verify      # faster (skips signature checks)
+uv run commons sim 200 --no-rep          # control run: reputation disabled
+uv run uvicorn commons.interfaces.console.app:app             # dashboard at http://localhost:8000 (Ctrl-C to stop)
+uv run commons run --backend fake   # dry run of an LLM society (free)
+uv run commons run --backend lmstudio --model <id> --cycles 10 --serve   # local, watch it live
+uv run commons calibrate --backend lmstudio --model <id>                  # check a grader
 ```
 
 **Resource rules** (from the checklist, after the 24 Sep restart):

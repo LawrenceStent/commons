@@ -1,8 +1,8 @@
 """Check a grader (or, with --target appraiser, the venture appraiser) against its hand-labelled set.
 
-    uv run python -m sim.calibrate --backend fake
-    uv run python -m sim.calibrate --backend lmstudio --model <loaded model id>
-    uv run python -m sim.calibrate --backend anthropic --yes-spend     # real money: 9 Haiku calls, about a cent
+    uv run commons calibrate --backend fake
+    uv run commons calibrate --backend lmstudio --model <loaded model id>
+    uv run commons calibrate --backend anthropic --yes-spend     # real money: 9 Haiku calls, about a cent
 
 LM Studio: start the server and load a small model first, after checking memory
 (`lms ps`, `memory_pressure`), and unload it afterwards (`lms unload --all`).
@@ -20,7 +20,7 @@ ap = argparse.ArgumentParser()
 add_backend_args(ap, "model id (default: claude-haiku-4-5 for anthropic)")
 ap.add_argument("--max-tokens", type=int, default=400, help="raise for models that reason before answering (e.g. 3000)")
 ap.add_argument("--target", choices=("grader", "appraiser"), default="grader")
-ap.add_argument("--panel", action="store_true", help="grade with the pack's panel of lenses (median), as sim.live --panel does")
+ap.add_argument("--panel", action="store_true", help="grade with the pack's panel of lenses (median), as commons run --panel does")
 ap.add_argument("--pack", default=None, help="whose cases and instructions to use (default earn_online)")
 a = ap.parse_args()
 pack = load_pack(a.pack)

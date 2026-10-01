@@ -1,10 +1,10 @@
-"""Approve or deny what a society's agents asked the gate for (see sim/gate.py), from the command line.
+"""Approve or deny what a society's agents asked the gate for (see commons/application/gate.py), from the command line.
 
-    uv run python -m sim.approve NAME                    # what's waiting, grouped by co-op, tool and host
-    uv run python -m sim.approve NAME --all              # approve everything waiting
-    uv run python -m sim.approve NAME --group 2          # approve the second group
-    uv run python -m sim.approve NAME --id RUN/G3 --deny --reason "not relevant"
-    uv run python -m sim.approve NAME --group 1 --always # approve, and let that co-op read from that host from now on
+    uv run commons approve NAME                    # what's waiting, grouped by co-op, tool and host
+    uv run commons approve NAME --all              # approve everything waiting
+    uv run commons approve NAME --group 2          # approve the second group
+    uv run commons approve NAME --id RUN/G3 --deny --reason "not relevant"
+    uv run commons approve NAME --group 1 --always # approve, and let that co-op read from that host from now on
 
 A running society picks up decisions at the start of its next cycle; approved requests run then. The dashboard
 does the same while it's open.

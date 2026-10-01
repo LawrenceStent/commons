@@ -1,8 +1,8 @@
-"""Rate a sample of a society's work: the human anchor of its scorecard (see sim/ratings.py).
+"""Rate a sample of a society's work: the human anchor of its scorecard (see commons/application/ratings.py).
 
-    uv run python -m sim.rate NAME                       # one piece at a time: 0-3, s to skip, q to stop
-    uv run python -m sim.rate NAME --list                # what is waiting
-    uv run python -m sim.rate NAME --id RUN/J12 --rating 2 --note "clear, usable"
+    uv run commons rate NAME                       # one piece at a time: 0-3, s to skip, q to stop
+    uv run commons rate NAME --list                # what is waiting
+    uv run commons rate NAME --id RUN/J12 --rating 2 --note "clear, usable"
 
 Ratings: 0 wrong or harmful · 1 not useful · 2 useful · 3 very useful. A running society picks up new ratings at
 the start of its next cycle.
