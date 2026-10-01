@@ -42,14 +42,6 @@ def live_population(llm) -> list[Community]:
     ]
 
 
-# The live economy, calibrated on the 1.5 local runs: a steward call costs about 4,500 µcr (about 10,000
-# when the model reasons) and handling a job takes a few turns plus contractors. At the scripted defaults
-# (reward 80k) thinking bankrupted every LLM co-op within three cycles. Spawn and learn were out of reach
-# (1.5M and 2.5M against a 400k purse) until 27 Sep.
-LIVE_PARAMS = dict(job_reward=400_000, purse_seed=400_000, treasury_seed=10_000_000, treasury_reserve=10_000_000,
-                   upkeep=2_000, basic_budget=1_500, floor_cap=4_000, work_cost=40_000, publish_cost=60_000,
-                   spawn_fee=250_000, learn_cost=800_000, audit_cost=20_000, venture_fee=20_000,
-                   board_ttl=5, job_ttl=12, bid_window=4, deliver_ttl=5, review_ttl=3, dispute_window=4)
 
 GRADER_SYSTEM = """You grade work submitted to a marketplace. For each submission you get a task, a rubric, and \
 the submitted work. Judge only whether the work does the task and meets every line of the rubric.
@@ -105,7 +97,6 @@ PACK = Pack(
     population=population,
     live_population=live_population,
     params={},  # the kernel's defaults were calibrated on this pack's scripted runs
-    live_params=LIVE_PARAMS,
     grader_system=GRADER_SYSTEM,
     appraiser_system=APPRAISER_SYSTEM,
     member_system=MEMBER_SYSTEM,

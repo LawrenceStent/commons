@@ -7,7 +7,8 @@ A pack supplies:
     work_source      where jobs come from (a `WorkSource`)
     population       the scripted seed co-ops (the regression suite runs against these)
     live_population  the co-ops for a live run, given a factory that makes an LLM strategy
-    params / live_params   overrides of the kernel's economy defaults, for scripted and live runs
+    params           overrides of the kernel's defaults for scripted runs
+    live_params      overrides of the live economy (`LIVE_ECONOMY`) for live runs; `pack.live` is the result
     grader_system / appraiser_system / member_system   how this society judges and does its work
     grader_cases / venture_cases   hand-labelled calibration sets for its grader and appraiser
     grader_panel     optional lenses (one system prompt each) for a panel of graders; the part gets the median
@@ -31,6 +32,16 @@ if TYPE_CHECKING:
     from society.community import Community
 
 DEFAULT = "earn_online"
+
+# The live economy, for any pack, calibrated on the 1.5 local runs: a steward call costs about 4,500 µcr (about 10,000
+# when the model reasons) and handling a job takes a few turns plus contractors. At the scripted defaults (reward 80k)
+# thinking bankrupted every LLM co-op within three cycles. Spawn and learn were out of reach (1.5M and 2.5M against a
+# 400k purse) until 27 Sep.
+LIVE_ECONOMY: dict[str, Any] = dict(
+    job_reward=400_000, purse_seed=400_000, treasury_seed=10_000_000, treasury_reserve=10_000_000,
+    upkeep=2_000, basic_budget=1_500, floor_cap=4_000, work_cost=40_000, publish_cost=60_000,
+    spawn_fee=250_000, learn_cost=800_000, audit_cost=20_000, venture_fee=20_000,
+    board_ttl=5, job_ttl=12, bid_window=4, deliver_ttl=5, review_ttl=3, dispute_window=4)
 
 
 class WorkSource(Protocol):
@@ -80,6 +91,11 @@ class Pack:
     venture_cases: tuple = ()
     grader_panel: tuple[str, ...] = ()
     scorecard: tuple = ()
+
+    @property
+    def live(self) -> dict[str, Any]:
+        """The settings for a live run: the live economy, with this pack's overrides."""
+        return {**LIVE_ECONOMY, **self.live_params}
 
 
 def load(name: str | None = None) -> Pack:

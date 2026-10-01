@@ -62,12 +62,8 @@ def live_population(llm) -> list[Community]:
 # a cycle would ask (2 x 80k), so good work competes for it; the pool banks up to three budgets.
 PARAMS = dict(economy="grant", grant_budget=120_000, grant_cap_cycles=3)
 
-# Live runs: pack 0's live economy (calibrated on the 1.5 runs), paid by grants.
-LIVE_PARAMS = dict(economy="grant", grant_budget=600_000, grant_cap_cycles=3,
-                   job_reward=400_000, purse_seed=400_000, treasury_seed=10_000_000, treasury_reserve=10_000_000,
-                   upkeep=2_000, basic_budget=1_500, floor_cap=4_000, work_cost=40_000, publish_cost=60_000,
-                   spawn_fee=250_000, learn_cost=800_000, audit_cost=20_000, venture_fee=20_000,
-                   board_ttl=5, job_ttl=12, bid_window=4, deliver_ttl=5, review_ttl=3, dispute_window=4)
+# Live runs: the kernel's live economy (sim.pack.LIVE_ECONOMY), paid by grants.
+LIVE_PARAMS = dict(economy="grant", grant_budget=600_000, grant_cap_cycles=3)
 
 GRADER_SYSTEM = """You grade work done for a society that looks for practical responses to social and \
 environmental problems. For each submission you get a task, a rubric, and the submitted work. Judge whether the \

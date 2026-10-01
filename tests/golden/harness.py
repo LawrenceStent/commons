@@ -86,7 +86,7 @@ def _build(pack_name: str, seed: int, live: bool, tmp: Path):
     def llm(name, caps, charter, members=3, doctrine=""):
         return Community(name, members, caps, LLMStrategy(backend, steward_model="fake", member_model="fake"), charter=charter)
 
-    return World(Params(**{**pack.live_params, **common, "parallel_turns": False, "grading_workers": 1}),
+    return World(Params(**{**pack.live, **common, "parallel_turns": False, "grading_workers": 1}),
                  population=pack.live_population(llm), pack=pack,
                  grader=HybridGrader(LLMGrader(backend, model="fake", system=pack.grader_system)),
                  appraiser=LLMAppraiser(backend, model="fake", system=pack.appraiser_system))

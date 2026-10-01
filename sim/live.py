@@ -134,7 +134,7 @@ run_name = Path(ledger).stem
 operator = Operator(a.operator) if a.operator else None
 web = None if a.no_web or a.backend == "fake" else WebAccess.default(operator.gate.search if operator else "wikipedia")
 world = World(Params(seed=a.seed, ledger_path=ledger,
-                     activity_path=ledger.replace(".sqlite", ".activity.jsonl"), **{**pack.live_params, **RUN}),
+                     activity_path=ledger.replace(".sqlite", ".activity.jsonl"), **{**pack.live, **RUN}),
               population=population, pack=pack,
               grader=HybridGrader(PanelGrader(judges) if len(judges) > 1 else judges[0]),
               appraiser=LLMAppraiser(backend, model=grader, max_tokens=grader_tokens, system=pack.appraiser_system),
