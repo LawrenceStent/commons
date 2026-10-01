@@ -173,7 +173,8 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
       `tests/domain/test_contract.py`, 21 tests, written red then made green)
 - [x] R4.2 Contract code in the world and executor uses the aggregate: every contract state change is a method of
       `Contract` (no assignments to its status, winner, price, deadline or flags outside it)
-- [ ] R4.3 `Job` aggregate: lifecycle, value with quality pay, bond, completeness, deferral (tests first)
+- [x] R4.3 `Job` aggregate: lifecycle, value with quality pay, bond, completeness, deferral (tests first:
+      `tests/domain/test_job.py`, 9 tests). The class keeps the name `MarketJob`
 - [ ] R4.4 Job code in the world and executor uses the aggregate
 - [ ] R4.5 `Micros` and id NewTypes on every public signature
 - [ ] **Done when:** no status comparisons outside the aggregates; golden identical
