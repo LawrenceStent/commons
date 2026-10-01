@@ -19,6 +19,7 @@ class PaymentPolicy(Protocol):
     name: str
     pays_at_once: bool  # False: passing work waits for `shares` at the end of the cycle
     pool: str | None  # the ledger account it pays from and funds, if it keeps one
+    funder: str | None  # the outside account that funds the pool
     source: str | None  # where revenue comes from in the ledger (None: the ledger's default outside buyer)
     payer: str  # how it's named when a co-op is told it was paid
     queued: str  # what a co-op is told when its passing work waits
@@ -35,6 +36,7 @@ class MarketPayment:
     name: str = "market"
     pays_at_once: bool = True
     pool: str | None = None
+    funder: str | None = None
     source: str | None = None
     payer: str = "the market"
     queued: str = ""
@@ -56,6 +58,7 @@ class GrantPayment:
     name: str = "grant"
     pays_at_once: bool = False
     pool: str | None = "grants"
+    funder: str | None = "funder"
     source: str | None = "grants"
     payer: str = "the grants"
     queued: str = "it shares this cycle's grants at the end of the cycle"

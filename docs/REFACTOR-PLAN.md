@@ -190,8 +190,10 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
 - [x] R5.2 `Treasury` rules: floor, upkeep, revenue split, bonds (tests first: `tests/domain/test_treasury.py`), as pure
       functions in `domain/treasury.py`; the ledger, the world and the executor apply them (the bond was computed twice,
       the earner's share recomputed after the split)
-- [ ] R5.3 The world uses the policy; `economy ==` checks removed everywhere, dashboard included
-- [ ] **Done when:** adding an economy means adding one class; golden identical
+- [x] R5.3 The world uses the policy; `economy ==` checks removed everywhere, dashboard included (the only ones left
+      are in `policy_for`, which reads the setting once). The world also accepts a policy directly
+- [x] **Done when:** adding an economy means adding one class; golden identical. Proved by a test: a toy "patron"
+      economy, one class, runs a society with no other change
 
 ### R6. Split the world (XL) — S1, C1, C4, C8
 - [ ] R6.1 `cycle.py`: the phases in order, each marked inside or outside the lock

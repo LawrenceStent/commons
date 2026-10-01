@@ -18,11 +18,8 @@ The contract-net spans cycles, and every stage has a deadline, so no one can sta
 A claimed job must be complete by its deadline or it fails. A complete job is graded part by
 part; if every part passes, the market pays and revenue splits 70/20/10.
 
-Two economies (`Params.economy`):
-    market  every passing job is paid its reward, scaled by quality, by an outside payer (the mock market)
-    grant   a funder puts `grant_budget` into a pool each cycle (up to `grant_cap_cycles` budgets banked); at the
-            end of the cycle, passing work shares the pool by value (reward scaled by quality), never more than
-            its value. What earns is what the grader values, and the budget is fixed however much work is done.
+How passing work is paid is the economy's business (`Params.economy`, a policy from commons/domain/economy.py):
+a market pays each passing job at once; grants share a fixed pool among the cycle's passing work by value.
 
 Money in this world is created money (SIM credits); see commons/substrate/ledger.py.
 """
@@ -61,6 +58,7 @@ from commons.domain.archive import ArchiveIndex
 from commons.domain.archive import citations as archive_citations
 from commons.domain.community import Community
 from commons.domain.contract import Contract
+from commons.domain.economy import PaymentPolicy, policy_for
 from commons.domain.gate import Request as GateRequest
 from commons.domain.goals import Plans
 from commons.domain.grading import Grade, Grader, StubGrader
@@ -217,7 +215,8 @@ class World:
                  hub: Hub | None = None, grader: Grader | None = None, appraiser: Appraiser | None = None,
                  operator: Operator | None = None, pack: Pack | None = None, archive: ArchiveIndex | None = None,
                  ratings: Ratings | None = None, web: WebPort | None = None, gate: Gate | None = None,
-                 ledger: Ledger | None = None, bus: Bus | None = None, activity: ActivityLog | None = None):
+                 ledger: Ledger | None = None, bus: Bus | None = None, activity: ActivityLog | None = None,
+                 payment: PaymentPolicy | None = None):
         """Everything outside the society's rules can be passed in (the model-backed grader and appraiser, the web,
         the ledger, the bus, the activity log); what isn't is built from `params` (see `_default_*` below)."""
         self.params = p = params or Params()
@@ -249,7 +248,9 @@ class World:
         self.outputs: deque[dict] = deque(maxlen=p.outputs_keep)  # paid work, newest last: who did what, how it scored
         self.citations: Counter[str] = Counter()  # archive citations checked: valid / invalid
         self._cite_lock = threading.Lock()  # grading runs in threads
-        self.grant_queue: list[str] = []  # passing jobs waiting for this cycle's grants
+        # how passing work is paid: given, or chosen once from the settings
+        self.payment = payment or policy_for(p.economy, p.grant_budget, p.grant_cap_cycles)
+        self.payment_queue: list[str] = []  # passing jobs waiting to be paid at the end of the cycle
         self.scorecard: list[dict] = []  # the pack's mission metrics plus the general ones, as of the last cycle
         self.ventures: dict[str, Venture] = {}
         self._venture_seq = 0
@@ -349,7 +350,7 @@ class World:
             self._gate_cycle()
             self.bus.begin_cycle(self.cycle)
             self._stats = {n: Counter() for n in self.communities}
-            self._fund_grants()
+            self._fund_payment_pool()
             self._apply_ratings()
             self._floor()
             self._upkeep()
@@ -373,7 +374,7 @@ class World:
             self._allocate_claims()
         self.settle_grading()
         with self.lock:
-            self._award_grants()
+            self._settle_payment_queue()
             if self.cycle % self.params.gossip_every == 0:
                 self._gossip()
             self.rep.tick()
@@ -673,11 +674,10 @@ class World:
         if not job.passed(self.params.pass_score):
             self._fail_job(job, f"a part failed grading ({', '.join(f'{k} {v:.2f}' for k, v in job.scores.items())})")
             return
-        if self.params.economy == "grant":
+        if not self.payment.pays_at_once:
             job.await_grants()
-            self.grant_queue.append(job.id)
-            self._tell(job.prime, "job_graded", f"{job.id} passed grading; it shares this cycle's grants at the end "
-                                                f"of the cycle", job.id)
+            self.payment_queue.append(job.id)
+            self._tell(job.prime, "job_graded", f"{job.id} passed grading; {self.payment.queued}", job.id)
             return
         self._pay_job(job)
 
@@ -921,26 +921,26 @@ class World:
                       model=g.model, real=g.real, **({"audit": audit} if audit else {}))
         return g
 
-    def _fund_grants(self) -> None:
-        """The funder tops the pool up by one budget, never beyond `grant_cap_cycles` budgets. Under the lock."""
-        p = self.params
-        if p.economy != "grant" or p.grant_budget <= 0:
-            return
-        room = p.grant_budget * p.grant_cap_cycles - self.ledger.balance("grants")
-        if (amount := min(p.grant_budget, room)) > 0:
-            self.ledger.transfer("funder", "grants", amount, cycle=self.cycle, kind="grant", memo="budget")
+    def _pool_balance(self) -> int:
+        return self.ledger.balance(self.payment.pool) if self.payment.pool else 0
 
-    def _award_grants(self) -> None:
-        """Passing work shares the pool by value, never more than its value. Under the lock."""
-        queue = [j for jid in self.grant_queue if (j := self.jobs.get(jid)) is not None and j.status == JobStatus.GRADED]
-        self.grant_queue = []
+    def _fund_payment_pool(self) -> None:
+        """The economy's funder tops up its pool, if it keeps one. Under the lock."""
+        if self.payment.pool and (amount := self.payment.funding(self._pool_balance())) > 0:
+            self.ledger.transfer(self.payment.funder, self.payment.pool, amount, cycle=self.cycle, kind="grant",
+                                 memo="budget")
+
+    def _settle_payment_queue(self) -> None:
+        """Pay the work that waited for the end of the cycle, in the shares the economy gives it. Under the lock."""
+        queue = [j for jid in self.payment_queue if (j := self.jobs.get(jid)) is not None and j.status == JobStatus.GRADED]
+        self.payment_queue = []
         if not queue:
             return
         values = {j.id: j.value(self.params.quality_pay) for j in queue}
-        pool, total = self.ledger.balance("grants"), sum(values.values())
+        pool, total = self._pool_balance(), sum(values.values())
+        shares = self.payment.shares(values, pool)
         for j in sorted(queue, key=lambda j: j.id):
-            share = values[j.id] if total <= pool else values[j.id] * pool // total
-            self._pay_job(j, payout=share)
+            self._pay_job(j, payout=shares[j.id])
         self.hub.emit("grants.award", self.cycle, pool=pool, asked=total, paid=min(pool, total), jobs=len(queue))
 
     def _apply_ratings(self) -> None:
@@ -970,9 +970,8 @@ class World:
         mean = job.mean_score
         if payout is None:
             payout = job.value(self.params.quality_pay)  # pay scales with quality
-        grant = self.params.economy == "grant"
         split = self.ledger.settle_revenue(prime, payout, cycle=self.cycle, royalties=dict(weights), memo=job.id, tax=tax,
-                                           source="grants" if grant else None)
+                                           source=self.payment.source)
         share = split.earner
         self._settle_bond(job, returned=True)
         job.pay()
@@ -982,8 +981,7 @@ class World:
         for cap, part in job.parts.items():
             if part.source == "self":
                 track[cap] = track.get(cap, 0) + 1
-        payer = "the grants paid" if grant else "the market paid"
-        self._tell(prime, "job_paid", f"{job.id} passed grading (mean score {mean:.2f}); {payer} {payout} "
+        self._tell(prime, "job_paid", f"{job.id} passed grading (mean score {mean:.2f}); {self.payment.payer} paid {payout} "
                    f"of {job.reward}, you received {share}", job.id)
         record = {"job": job.id, "title": job.title, "prime": prime, "cycle": self.cycle, "scores": dict(job.scores),
                   "payout": payout, "parts": {cap: {"by": self._done_by(job, part), "spec": part.spec,
@@ -1148,7 +1146,7 @@ class World:
             efficiency=self.efficiency(name),
             doctrine=me.doctrine,
             archive=(len(self.archive), tuple(sorted({p.source for p in self.archive.passages.values()}))),
-            grants=(self.ledger.balance("grants"), self.params.grant_budget) if self.params.economy == "grant" else None,
+            grants=self.payment.view(self._pool_balance()),
             web=self.gate.policy.describe() if self.web else "",
             pending_claims=tuple(self.pending_claims(name)),
             goals=tuple(GoalView(g.id, g.title, g.status, tuple((s.text, s.done, s.note) for s in g.steps), round(g.progress, 2))
@@ -1194,7 +1192,7 @@ class World:
             board=sum(j.status == JobStatus.OPEN for j in self.jobs.values()),
             in_progress=sum(j.status == JobStatus.CLAIMED for j in self.jobs.values()),
             pipeline=dict(pipeline),
-            grants=self.ledger.balance("grants") if self.params.economy == "grant" else None,
+            grants=self._pool_balance() if self.payment.pool else None,
             scorecard={r["key"]: r["value"] for r in self.scorecard},
             bus_sent=dict(self.bus.sent),
             communities={
@@ -1231,7 +1229,7 @@ def summary(world: World, window: int = 50) -> str:
     rows.append(f"jobs paid {world.jobs_done}, failed {world.jobs_failed}, expired on board {world.jobs_expired}, "
                 f"treasury {world.ledger.balance('treasury') / 1e6:.3f} cr, playbooks {len(world.library)}, "
                 f"royalties {sum(world.royalties_paid.values()) / 1e6:.3f} cr"
-                + (f", grants left {world.ledger.balance('grants') / 1e6:.3f} cr" if world.params.economy == "grant" else ""))
+                + (f", grants left {world._pool_balance() / 1e6:.3f} cr" if world.payment.pool else ""))
     if world.scorecard:
         rows += ["", "scorecard", scorecard_report(world.scorecard)]
     return "\n".join(rows)

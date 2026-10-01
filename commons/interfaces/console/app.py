@@ -99,8 +99,8 @@ def snapshot(state: dict) -> dict:
                  "recent": [{"id": r.id, "coop": r.coop, "tool": r.tool, "target": r.target, "status": r.status,
                              "result": r.result, "cycle": r.cycle} for r in list(w.gate.requests.values())[-20:]
                             if r.status != RequestStatus.PENDING][::-1]},
-        "society": {"pack": w.pack.title, "economy": w.params.economy, "scorecard": w.scorecard,
-                    "grants": w.ledger.balance("grants") if w.params.economy == "grant" else None,
+        "society": {"pack": w.pack.title, "economy": w.payment.name, "scorecard": w.scorecard,
+                    "grants": w.ledger.balance(w.payment.pool) if w.payment.pool else None,
                     "grant_budget": w.params.grant_budget},
         "treasury_series": _downsample([[e.cycle, e.fields["treasury"]] for e in cycles]),
         "communities": communities,

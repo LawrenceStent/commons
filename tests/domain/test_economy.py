@@ -39,3 +39,34 @@ def test_the_policy_is_chosen_once_from_the_settings():
     assert isinstance(g, GrantPayment) and (g.budget, g.cap_cycles) == (120_000, 3)
     with pytest.raises(ValueError, match="no economy called"):
         policy_for("barter", 0, 3)
+
+
+def test_a_new_economy_is_one_class():
+    """A patron who pays a flat 50,000 for any passing job, at once: no other code changes."""
+    from dataclasses import dataclass
+
+    from commons.application.world import Params, World
+
+    @dataclass(frozen=True)
+    class Patron:
+        name: str = "patron"
+        pays_at_once: bool = False  # queue, then pay flat shares at the end of the cycle
+        pool: str | None = "grants"
+        funder: str | None = "funder"
+        source: str | None = "grants"
+        payer: str = "the patron"
+        queued: str = "the patron pays at the end of the cycle"
+
+        def funding(self, pool_balance):
+            return 1_000_000 - pool_balance
+
+        def shares(self, values, pool):
+            return {jid: 50_000 for jid in values}
+
+        def view(self, pool_balance):
+            return (pool_balance, 1_000_000)
+
+    w = World(Params(seed=0), payment=Patron()).run(30)
+    paid = [e.fields["payout"] for e in w.hub.recent("market.job", n=500) if e.fields["stage"] == "paid"]
+    assert paid and set(paid) == {50_000}
+    w.ledger.check()
