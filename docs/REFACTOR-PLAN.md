@@ -142,8 +142,11 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
       leaves stale bytecode that Python still trusts
 - [x] R0.4 `tests/test_layers.py`: the dependency rule from the AST, with today's violations as named exceptions
       (13 outward imports, 9 imports inside functions; both lists may only shrink)
-- [ ] R0.5 `tools/arch_metrics.py`: the audit's measurements, with a baseline recorded here
-- [ ] **Done when:** the golden master passes twice on an untouched tree and catches a one-character change
+- [x] R0.5 `tools/arch_metrics.py`: the audit's measurements, with a baseline recorded here. Baseline (1 Oct):
+      8,522 lines; package cycles console↔sim, runtime↔sim, sim↔society; largest class `World` 1,009 lines; 2 classes
+      over 300 lines; functions over 70/40/30 lines: 6/13/22 (longest `create_app`, 155); 11 imports inside
+      functions; 63 status-string comparisons; 7 economy-flag checks; about 17 cross-object private accesses
+- [x] **Done when:** the golden master passes twice on an untouched tree and catches a one-character change
 
 ### R1. Quick wins, in place (M) — D1 to D6, C3 (part), A6
 - [ ] R1.1 `JsonlLog` (append, incremental read, read all), used by ratings and the gate (D1, D6)
