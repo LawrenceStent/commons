@@ -27,7 +27,8 @@ from commons.substrate.bus import RateLimited
 from commons.substrate.ledger import InsufficientFunds, purse
 
 if TYPE_CHECKING:
-    from commons.application.world import Contract, World
+    from commons.application.world import World
+    from commons.domain.contract import Contract
     from commons.domain.community import Community
 
 MAX_ARTIFACT = 4000
@@ -106,7 +107,7 @@ class Actions:
         if err := self._use_capacity():
             return err
         for c in self.w.contracts_for(job_id, capability, (ContractStatus.OPEN,)):
-            c.status = ContractStatus.WITHDRAWN
+            c.withdraw(at=None)  # left unclosed, as before: see REFACTOR-PLAN §7
         part.artifact, part.source, part.cites = artifact[:MAX_ARTIFACT], "self", tuple(cites)
         self.w.maybe_submit(job)
         return Outcome(True, f"{capability} part of {job_id} done")
@@ -149,7 +150,7 @@ class Actions:
         if not self._send(Bid(job_id=contract_id, price=price)):
             self.me.capacity += 1
             return Outcome(False, "rate-limited: your standing caps how much you can post per cycle")
-        c.bids[self.me.name] = price
+        c.bid(self.me.name, price)
         return Outcome(True, f"bid {price} on {contract_id}")
 
     def award(self, contract_id: str, bidder: str) -> Outcome:
@@ -195,7 +196,7 @@ class Actions:
         if c is None or c.prime != self.me.name or c.status != ContractStatus.DELIVERED:
             return Outcome(False, f"you have no delivery {contract_id} to review")
         if accept and not self.w.pay_remainder(c):
-            return Outcome(False, f"you can't pay the {c.price - c.advance} remainder; "
+            return Outcome(False, f"you can't pay the {c.owed} remainder; "
                                   f"it defaults at cycle {c.deadline} if still unpaid")
         self._send(Attest(job_id=contract_id, subject=c.winner, capability=c.capability, outcome=1.0 if accept else 0.0))
         self.w.close_review(c, accept, reason[:300])
@@ -210,7 +211,7 @@ class Actions:
         outcome = min(1.0, max(0.0, float(outcome)))
         self._send(Attest(job_id=contract_id, subject=c.prime, capability=c.capability, outcome=outcome))
         self.w.rep.attest(self.me.name, c.prime, c.capability, outcome)
-        c.winner_attested = True
+        c.rated_by_winner()
         return Outcome(True, f"rated {c.prime} {outcome:.2f} on {contract_id}")
 
     def dispute(self, contract_id: str, reason: str) -> Outcome:
@@ -412,7 +413,7 @@ class Actions:
         plans.goals[g.id] = g
         for i in plans.ideas:
             if i.id == idea_id:
-                i.status, i.goal_id = "adopted", g.id
+                i.status, i.goal_id = IdeaStatus.ADOPTED, g.id
         return Outcome(True, f"goal {g.id} set with {len(steps)} steps", g.id)
 
     def update_goal(self, goal_id: str, step: int | None = None, done: bool | None = None, note: str = "",

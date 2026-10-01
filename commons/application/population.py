@@ -130,7 +130,7 @@ def fork(w: World, me: Community, name: str, members: int, capabilities: tuple[s
     caps = tuple(sorted(set(capabilities)))
     if not caps or not set(caps) <= me.capabilities:
         return Outcome(False, "a fork takes a non-empty subset of your capabilities")
-    owed = sum(c.price - c.advance for c in w.contracts.values() if c.prime == me.name and c.status in (ContractStatus.AWARDED, ContractStatus.DELIVERED))
+    owed = sum(c.owed for c in w.contracts.values() if c.prime == me.name and c.status in (ContractStatus.AWARDED, ContractStatus.DELIVERED))
     share = max(0, w.ledger.balance(purse(me.name)) - owed) * members // me.members
 
     child = Community(name, members, set(caps), copy.deepcopy(me.strategy), charter=charter[:200] or me.charter,

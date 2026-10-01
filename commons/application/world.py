@@ -33,7 +33,7 @@ import random
 import threading
 from collections import Counter, defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from commons.application.actions import Actions
 from commons.application.gate import Gate
@@ -59,6 +59,7 @@ from commons.application.ports import WebError, WebPort, host_of
 from commons.application.ratings import Ratings
 from commons.domain.archive import ArchiveIndex
 from commons.domain.archive import citations as archive_citations
+from commons.domain.contract import Contract
 from commons.domain.community import Community
 from commons.domain.gate import Request as GateRequest
 from commons.domain.goals import Plans
@@ -193,31 +194,6 @@ class Playbook:
     title: str = ""
     text: str = ""
     uses: int = 0
-
-
-@dataclass
-class Contract:
-    id: str
-    job_id: str
-    capability: str
-    prime: str
-    spec: str
-    rubric: str
-    max_price: int
-    advance_frac: float
-    announced: int
-    deadline: int
-    bids: dict[str, int] = field(default_factory=dict)
-    status: ContractStatus = ContractStatus.OPEN
-    winner: str | None = None
-    price: int | None = None
-    advance: int = 0
-    artifact: str | None = None
-    cites: tuple[str, ...] = ()
-    reason: str = ""
-    winner_attested: bool = False
-    closed: int | None = None
-    disputed: bool = False
 
 
 @dataclass
@@ -466,11 +442,13 @@ class World:
             if c.deadline >= now:
                 continue
             if c.status == ContractStatus.OPEN:
-                self._close(c, ContractStatus.EXPIRED)
+                c.expire(at=now)
+                self._stage(c, c.status)
                 self._tell(c.prime, "expired", f"{c.id} closed with no award", c.id)
             elif c.status == ContractStatus.AWARDED:
                 # non-delivery is objective: the substrate files the prime's complaint for it
-                self._close(c, ContractStatus.FAILED)
+                c.fail(at=now)
+                self._stage(c, c.status)
                 self.rep.attest(c.prime, c.winner, c.capability, 0.0)
                 self._tell(c.prime, "failed", f"{c.winner} never delivered {c.id}", c.id)
                 self._tell(c.winner, "failed", f"you missed the delivery deadline on {c.id}", c.id)
@@ -478,14 +456,7 @@ class World:
                 if self.pay_remainder(c):
                     self.close_review(c, True, "accepted by default: the prime didn't review in time")
                 else:
-                    self._close(c, ContractStatus.DEFAULTED)
-                    self.rep.attest(c.winner, c.prime, c.capability, 0.0)
-                    c.winner_attested = True
-                    self._tell(c.winner, "defaulted", f"{c.prime} never paid for {c.id}", c.id)
-
-    def _close(self, c: Contract, status: str) -> None:
-        c.status, c.closed = status, self.cycle
-        self._stage(c, status)
+                    self._default(c)
 
     def _prune(self) -> None:
         """Drop closed jobs and contracts after a while, so memory stays flat on long runs."""
@@ -508,8 +479,7 @@ class World:
         self._stage(c, ContractStatus.OPEN)
 
     def award_contract(self, c: Contract, bidder: str, price: int, advance: int) -> None:
-        c.status, c.winner, c.price, c.advance = ContractStatus.AWARDED, bidder, price, advance
-        c.deadline = self.cycle + self.params.deliver_ttl
+        c.award(bidder, price, advance, deliver_by=self.cycle + self.params.deliver_ttl)
         self._stat(bidder, "won")
         self._stat(bidder, "earned", advance)
         self._tell(bidder, "awarded", f"you won {c.id} at {price}; advance {advance} paid; deliver by cycle {c.deadline}", c.id)
@@ -519,8 +489,7 @@ class World:
         self._stage(c, ContractStatus.AWARDED)
 
     def deliver_contract(self, c: Contract, artifact: str, cites: tuple[str, ...]) -> None:
-        c.status, c.artifact, c.cites = ContractStatus.DELIVERED, artifact, cites
-        c.deadline = self.cycle + self.params.review_ttl
+        c.deliver(artifact, cites, review_by=self.cycle + self.params.review_ttl)
         if self.params.grader_reviews:
             self.pending_reviews[c.id] = 0
             self._tell(c.prime, "delivered", f"{c.winner} delivered {c.id}; the grader judges it at the end of this cycle", c.id)
@@ -529,7 +498,7 @@ class World:
         self._stage(c, ContractStatus.DELIVERED)
 
     def pay_remainder(self, c: Contract) -> bool:
-        owed = c.price - c.advance
+        owed = c.owed
         try:
             self.ledger.transfer(purse(c.prime), purse(c.winner), owed, cycle=self.cycle, kind="contract", memo=f"settle {c.id}")
         except InsufficientFunds:
@@ -538,14 +507,14 @@ class World:
         return True
 
     def close_review(self, c: Contract, accept: bool, reason: str) -> None:
-        c.reason = reason
-        self._close(c, ContractStatus.ACCEPTED if accept else ContractStatus.REJECTED)
+        (c.accept if accept else c.reject)(reason, at=self.cycle)
+        self._stage(c, c.status)
         self.rep.attest(c.prime, c.winner, c.capability, 1.0 if accept else 0.0)
         if accept:
             self._stat(c.winner, "ok")
             track = self.communities[c.winner].deliveries
             track[c.capability] = track.get(c.capability, 0) + 1
-            self._tell(c.winner, "accepted", f"{c.prime} accepted {c.id} and paid {c.price - c.advance}", c.id)
+            self._tell(c.winner, "accepted", f"{c.prime} accepted {c.id} and paid {c.owed}", c.id)
             job = self.jobs.get(c.job_id)
             if job and job.status == JobStatus.CLAIMED and job.parts[c.capability].artifact is None:
                 part = job.parts[c.capability]
@@ -557,7 +526,7 @@ class World:
     def audit(self, c: Contract, reason: str) -> Outcome:
         """File a dispute. The grader decides at the end of this cycle, outside the world's lock, so an
         audit never holds up other communities (in the third Qwen run one stalled a cycle for 9 minutes)."""
-        c.disputed = True
+        c.file_dispute()
         self.pending_audits[c.id] = {"reason": reason, "attempts": 0}
         self._stage(c, "audit_filed")
         self._tell(c.prime, "audit_filed", f"{c.winner} disputed your rejection of {c.id}; the grader decides this cycle", c.id)
@@ -573,7 +542,7 @@ class World:
             self._tell(c.prime, "audit", f"the audit upheld your rejection of {c.id} ({g.score:.2f})", c.id)
             self._tell(c.winner, "audit", f"the audit upheld the rejection of {c.id}: your delivery scored {g.score:.2f}; the fee is gone", c.id)
             return
-        owed = c.price - c.advance
+        owed = c.owed
         try:
             # the treasury keeps the fee (it paid for the audit); the prime reimburses the contractor
             self.ledger.transfer(purse(c.prime), purse(c.winner), owed + p.audit_cost,
@@ -584,13 +553,14 @@ class World:
         self.rep.attest("audit", c.prime, c.capability, 0.0)
         self.rep.attest("audit", c.winner, c.capability, 1.0)
         if not paid:
-            self._close(c, ContractStatus.DEFAULTED)
+            c.default(at=self.cycle)
+            self._stage(c, c.status)
             self._tell(c.winner, "audit", f"the audit found for you on {c.id}, but {c.prime} can't pay", c.id)
             return
         self._stat(c.winner, "earned", owed + p.audit_cost)
         self._stat(c.winner, "ok")
-        c.reason = f"overturned on audit ({g.score:.2f}): {reason}"
-        self._close(c, ContractStatus.ACCEPTED)
+        c.overturn(f"overturned on audit ({g.score:.2f}): {reason}", at=self.cycle)
+        self._stage(c, c.status)
         self._stage(c, "audit_overturned", score=g.score)
         self._tell(c.prime, "audit", f"the audit overturned your rejection of {c.id}; you paid {owed} plus the {p.audit_cost} fee", c.id)
         job = self.jobs.get(c.job_id)
@@ -755,9 +725,10 @@ class World:
         self.close_review(c, True, f"passed grading ({g.score:.2f}): {g.reason}"[:300])
 
     def _default(self, c: Contract) -> None:
-        self._close(c, ContractStatus.DEFAULTED)
+        c.default(at=self.cycle)
+        self._stage(c, c.status)
         self.rep.attest(c.winner, c.prime, c.capability, 0.0)
-        c.winner_attested = True
+        c.rated_by_winner()
         self._tell(c.winner, "defaulted", f"{c.prime} never paid for {c.id}", c.id)
 
     def _settle_audit(self, cid: str, g) -> None:
@@ -770,7 +741,7 @@ class World:
             entry["attempts"] += 1
             if entry["attempts"] >= self.params.grade_retries:
                 self.pending_audits.pop(cid)
-                c.disputed = False  # it may be filed again
+                c.drop_dispute()  # it may be filed again
                 self.ledger.transfer("treasury", purse(c.winner), self.params.audit_cost, cycle=self.cycle, kind="audit",
                                      memo=f"refund {cid}")
                 self._tell(c.winner, "audit", f"the grader was unavailable for the audit of {cid}; your fee was refunded", cid)
@@ -1106,7 +1077,8 @@ class World:
         self.jobs_failed += 1
         for c in self.contracts.values():
             if c.job_id == job.id and c.status == ContractStatus.OPEN:
-                self._close(c, ContractStatus.WITHDRAWN)
+                c.withdraw(at=self.cycle)
+                self._stage(c, c.status)
         self._tell(job.prime, "job_failed", f"{job.id} failed: {why}", job.id)
         self.hub.emit("market.job", self.cycle, id=job.id, stage="failed", prime=job.prime, caps=sorted(job.parts),
                       reward=job.reward, why=why)
@@ -1177,7 +1149,7 @@ class World:
                     "communities": len(self._living()),
                     "upkeep": p.upkeep, "actions_per_member": p.actions_per_member, "job_ttl": p.job_ttl},
             track=dict(me.deliveries),
-            owed=sum(c.price - c.advance for c in cs if c.prime == name and c.status in (ContractStatus.AWARDED, ContractStatus.DELIVERED)),
+            owed=sum(c.owed for c in cs if c.prime == name and c.status in (ContractStatus.AWARDED, ContractStatus.DELIVERED)),
             ventures=tuple(VentureView(v.id, v.title, v.status, v.score, v.reward, v.reason, v.job_id, v.cycle)
                            for v in list(self.ventures.values()) if v.proposer == name)[-5:],
             efficiency=self.efficiency(name),

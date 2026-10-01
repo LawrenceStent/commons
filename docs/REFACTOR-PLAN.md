@@ -171,7 +171,8 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
 ### R4. Aggregates, test-first (L) — C2, C3, C4 (part)
 - [x] R4.1 `Contract` aggregate: transition table, a method per move, `DomainError` on illegal moves (tests first:
       `tests/domain/test_contract.py`, 21 tests, written red then made green)
-- [ ] R4.2 Contract code in the world and executor uses the aggregate
+- [x] R4.2 Contract code in the world and executor uses the aggregate: every contract state change is a method of
+      `Contract` (no assignments to its status, winner, price, deadline or flags outside it)
 - [ ] R4.3 `Job` aggregate: lifecycle, value with quality pay, bond, completeness, deferral (tests first)
 - [ ] R4.4 Job code in the world and executor uses the aggregate
 - [ ] R4.5 `Micros` and id NewTypes on every public signature
@@ -270,4 +271,9 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
 
 ## 7. Found along the way
 
-Behaviour issues noticed during the refactor, to fix after the merge (none yet).
+Behaviour issues noticed during the refactor, to fix after the merge. Each is kept exactly as it was until then.
+
+1. **Withdrawn contracts are sometimes never closed** (R4.2). When a prime does a part itself, the executor withdraws
+   that part's open contracts without setting `closed` or emitting the `contract.stage` event, so they are never
+   pruned and the dashboard never sees the withdrawal. When a job fails, its open contracts are withdrawn properly.
+   Fix: `withdraw(at=self.w.cycle)` plus the stage event in `do_part`.
