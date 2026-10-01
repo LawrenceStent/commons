@@ -185,7 +185,8 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
       through the enums; moving every query into the aggregates would add methods without adding safety
 
 ### R5. The economy as a policy, test-first (M) — S4
-- [ ] R5.1 `PaymentPolicy` with `MarketPayment` and `GrantPayment` (tests first)
+- [x] R5.1 `PaymentPolicy` with `MarketPayment` and `GrantPayment` (tests first: `tests/domain/test_economy.py`);
+      `policy_for` is the one place the economy setting is read
 - [ ] R5.2 `Treasury` rules: floor, upkeep, revenue split, bonds (tests first)
 - [ ] R5.3 The world uses the policy; `economy ==` checks removed everywhere, dashboard included
 - [ ] **Done when:** adding an economy means adding one class; golden identical
