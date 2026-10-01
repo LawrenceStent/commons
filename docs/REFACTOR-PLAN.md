@@ -280,8 +280,8 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
 - [x] R12.3 `docs/ARCHITECTURE.md`: layers, the dependency rule, patterns, and how to add a pack, economy, tool,
       backend or metric
 - [x] R12.4 `COMMONS.md`, `CHECKLIST.md`, `FRAMEWORK.md`, the review doc and memory updated
-- [ ] R12.5 Fast-forward `phase-1`, push
-- [ ] **Done when:** the layer test has no exceptions; every audit finding is closed or explicitly deferred
+- [x] R12.5 Fast-forward `phase-1`, push
+- [x] **Done when:** the layer test has no exceptions; every audit finding is closed or explicitly deferred
 
 ---
 
