@@ -18,13 +18,14 @@ from __future__ import annotations
 
 import copy
 import json
+import random
 import time
 from dataclasses import dataclass
 from typing import Any
 
 from commons.agents.llm.render import PREAMBLE, commissionable, community_block, operator_block, render
 from commons.agents.llm.tools import MEMBER, NAMES, member_tools, steward_tools
-from commons.agents.scripted.base import Strategy
+from commons.agents.waking import members_to_wake
 from commons.application.observation import ActionsAPI, Observation, Outcome
 from commons.application.ports import ModelBackend, ModelError, ToolCall, ToolResult
 from commons.domain.grading import strip_tags
@@ -46,14 +47,15 @@ class Draft:
     ref: str = ""  # the job or contract it was written for
 
 
-class LLMStrategy(Strategy):
+class LLMStrategy:
+    """An agent (commons.domain.community.Agent) whose turns are taken by a model."""
     name = "llm"
+    gossips = True
 
     def __init__(self, backend: ModelBackend, steward_model: str = "claude-sonnet-5",
                  member_model: str = "claude-haiku-4-5", max_rounds: int = 8, turn_tokens: int = 80_000,
-                 max_tokens: int = 4096, member_max_tokens: int = 1200, keep_drafts: int = 20, member_rounds: int = 4,
-                 **kw):
-        super().__init__(**kw)
+                 max_tokens: int = 4096, member_max_tokens: int = 1200, keep_drafts: int = 20, member_rounds: int = 4):
+        self.rng = random.Random(0)  # the world reseeds this per community
         self.backend = backend
         self.steward_model, self.member_model = steward_model, member_model
         self.max_rounds, self.turn_tokens = max_rounds, turn_tokens
@@ -68,6 +70,10 @@ class LLMStrategy(Strategy):
         clone = copy.copy(self)
         clone.drafts, clone._seq, clone._commissions = {}, 0, 0
         return clone
+
+    def wake(self, obs: Observation) -> int:
+        """How many members to wake: the default rule (commons/agents/waking.py)."""
+        return members_to_wake(obs)
 
     # ── the turn ───────────────────────────────────────────────
     def turn(self, obs: Observation, act: ActionsAPI) -> None:

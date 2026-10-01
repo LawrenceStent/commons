@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import random
 
+from commons.agents.waking import free, members_to_wake
 from commons.application.observation import ActionsAPI, BidView, ContractView, JobView, Observation
 from commons.domain.grading import StubGrader, is_tagged, tagged
 from commons.domain.money import Micros
@@ -64,17 +65,8 @@ class Strategy:
         self.grow(obs, act)
 
     def wake(self, obs: Observation) -> int:
-        """How many members to pay to think this cycle: enough for the work in hand plus a
-        little for new business, within what's free after commitments. Always one if there
-        are promises to keep and a purse to keep them with."""
-        per = int(obs.params.get("actions_per_member", 2))
-        upkeep = int(obs.params.get("upkeep", 8_000))
-        work = len(obs.to_deliver) + sum(1 for j in obs.my_jobs for p in j.parts
-                                         if not p.done and p.capability in obs.capabilities)
-        new_business = 2 if obs.board or obs.open_contracts else 0
-        want = max(1, -(-(work + new_business) // per))
-        afford = max(0, self.free(obs)) // upkeep
-        return max(1 if obs.purse >= upkeep else 0, min(want, afford))
+        """How many members to pay to think this cycle (commons/agents/waking.py), at this strategy's own costs."""
+        return members_to_wake(obs, self.cost)
 
     # ── hooks ──────────────────────────────────────────────────
     def learn(self, obs: Observation) -> None:
@@ -207,17 +199,7 @@ class Strategy:
 
     # ── money ──────────────────────────────────────────────────
     def free(self, obs: Observation) -> int:
-        """Purse minus everything already promised: remainders owed, work we've won,
-        and the rest of the jobs we're prime on. Committing past this is how a
-        community spirals into default."""
-        sub_share = obs.params.get("sub_share", 0.4)
-        promised = obs.owed + sum(self.cost(obs, c.capability) for c in obs.to_deliver)
-        for job in obs.my_jobs:
-            for p in job.parts:
-                if p.done or p.pending in ("awarded", "delivered"):
-                    continue
-                promised += self.cost(obs, p.capability) if p.capability in obs.capabilities else round(job.reward * sub_share)
-        return obs.purse - promised
+        return free(obs, self.cost)
 
     # ── the work itself ────────────────────────────────────────
     def playbook(self, obs: Observation, capability: str) -> str | None:

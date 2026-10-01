@@ -35,3 +35,15 @@ def test_no_wrapping_happens_at_import():
     import commons.application.actions as actions
 
     assert "setattr" not in inspect.getsource(actions)
+
+
+def test_both_kinds_of_agent_meet_the_agent_interface_and_the_llm_one_stands_alone():
+    from commons.agents.llm.steward import LLMStrategy
+    from commons.agents.scripted import Cooperator
+    from commons.domain.community import Agent
+
+    agent_members = {n for n in vars(Agent) if not n.startswith("_")} | set(Agent.__annotations__)
+    for cls in (LLMStrategy, Cooperator):
+        missing = {m for m in agent_members if not hasattr(cls, m) and m != "rng"}
+        assert not missing, (cls.__name__, missing)
+    assert LLMStrategy.__mro__[1] is object  # it inherits none of the scripted hooks

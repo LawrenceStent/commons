@@ -249,7 +249,9 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
       declares the groups each module reads and fails on any other, or on a flat read
 
 ### R10. Agents (M) — S3, S6
-- [ ] R10.1 `Agent` protocol; the LLM agent no longer inherits the scripted strategy
+- [x] R10.1 `Agent` protocol (`wake`, `turn`, `name`, `gossips`, `rng`); the LLM agent no longer inherits the scripted
+      strategy. The waking rule both used is one function (`agents/waking.py`), which the scripted strategy calls with its
+      own costs
 - [ ] R10.2 `StewardLoop`, `MemberWorker`, `prompts.py` split out of `LLMStrategy`
 - [ ] **Done when:** no function over 40 lines in `agents/`; golden identical
 

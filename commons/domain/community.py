@@ -9,8 +9,13 @@ from commons.protocol import Identity
 
 
 class Agent(Protocol):
-    """What plays a co-op (commons/agents): it sees an observation and acts through the actions API."""
+    """What plays a co-op (commons/agents): each cycle it decides how many members to wake (they cost upkeep), then,
+    if any are awake, it sees an observation and acts through the actions API. The world reseeds `rng` per co-op."""
     name: str
+    gossips: bool  # whether it relays what it has seen
+    rng: Any
+
+    def wake(self, obs: Any) -> int: ...
 
     def turn(self, obs: Any, act: Any) -> None: ...
 
