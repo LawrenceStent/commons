@@ -9,8 +9,7 @@ by rule in the world, not here.
 The venture cases are proposals: three worth funding, four not (one is harmful, one a manipulation attempt).
 """
 
-from sim.calibration import Case, VentureCase
-
+from commons.application.calibration import Case, VentureCase
 from packs.tech_for_good.work import TEMPLATES
 
 SUBJECT = "safe drinking water for rural households"

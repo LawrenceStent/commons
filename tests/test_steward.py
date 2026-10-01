@@ -2,18 +2,19 @@
 
 import copy
 
-from runtime.backends import AnthropicBackend, FakeBackend, LMStudioBackend, ToolCall, ToolResult
-from runtime.render import PREAMBLE, render
-from runtime.steward import LLMStrategy
-from runtime.tools import OFFLINE, TOOLS
-from sim.engine import Params, World, default_population
-from sim.grader import HybridGrader, LLMGrader
-from sim.market import MarketJob, Part
-from society.community import Community
-from substrate.ledger import purse
-
-from runtime.fakes import GOOD_GRADE as GOOD
-from runtime.fakes import competent
+from commons.adapters.models import AnthropicBackend, FakeBackend, LMStudioBackend
+from commons.agents.llm.fakes import GOOD_GRADE as GOOD
+from commons.agents.llm.fakes import competent
+from commons.agents.llm.render import PREAMBLE, render
+from commons.agents.llm.steward import LLMStrategy
+from commons.agents.llm.tools import OFFLINE, TOOLS
+from commons.application.actions import Actions
+from commons.application.graders import HybridGrader, LLMGrader
+from commons.application.ports import ToolCall, ToolResult
+from commons.application.world import Params, World, default_population
+from commons.domain.community import Community
+from commons.domain.market import MarketJob, Part
+from commons.substrate.ledger import purse
 
 
 def llm_world(converse=competent, grade=GOOD, **params):
@@ -63,7 +64,7 @@ def test_rounds_are_bounded():
 def test_bad_arguments_and_unknown_tools_are_explained():
     w, _ = llm_world()
     w.step()
-    s, act = w.communities["llm-a"].strategy, __import__("sim.actions", fromlist=["Actions"]).Actions(w, w.communities["llm-a"])
+    s, act = w.communities["llm-a"].strategy, Actions(w, w.communities["llm-a"])
     obs = w.observe(w.communities["llm-a"])
     assert "no tool called" in s.dispatch(obs, act, ToolCall("1", "hack_the_ledger", {})).message
     assert "bad arguments" in s.dispatch(obs, act, ToolCall("2", "bid", {"price": "lots"})).message
@@ -189,7 +190,8 @@ def test_lmstudio_chat_translates_tool_calls_both_ways():
 
 def test_lmstudio_refuses_tools_for_a_model_that_cannot_use_them():
     import pytest
-    from runtime.backends import ModelError
+
+    from commons.application.ports import ModelError
 
     b = LMStudioBackend()
     b._tool_capable["plain-model"] = False
@@ -246,7 +248,7 @@ def test_goals_are_set_ticked_and_shown_back():
 
 
 def test_goal_and_idea_limits_and_errors():
-    from sim.actions import Actions
+    from commons.application.actions import Actions
 
     w, _ = llm_world()
     w.step()
@@ -308,7 +310,7 @@ def test_stewards_think_at_the_same_time_and_the_world_stays_readable():
     import threading
     import time
 
-    from console.app import snapshot
+    from commons.interfaces.console.app import snapshot
 
     inside = threading.Semaphore(0)
     release = threading.Event()
@@ -346,7 +348,7 @@ def _jobs(w, n, caps=("research", "build")):
 
 
 def test_the_world_spells_out_each_parts_next_step():
-    from sim.actions import Actions
+    from commons.application.actions import Actions
 
     w, _ = llm_world(lambda s, m, t: {"tool_calls": [("end_turn", {})]} if t else {"text": "x"})
     w.step()
@@ -365,7 +367,7 @@ def test_the_world_spells_out_each_parts_next_step():
 
 
 def test_the_board_is_hidden_at_the_claim_limit():
-    from sim.actions import Actions
+    from commons.application.actions import Actions
 
     w, _ = llm_world(lambda s, m, t: {"tool_calls": [("end_turn", {})]} if t else {"text": "x"})
     w.step()
@@ -407,7 +409,7 @@ def test_a_call_refused_once_is_not_sent_again_in_the_same_turn():
 
 
 def test_the_world_lists_what_can_be_commissioned_and_refuses_the_rest():
-    from sim.actions import Actions
+    from commons.application.actions import Actions
 
     w, _ = llm_world(lambda s, m, t: {"tool_calls": [("end_turn", {})]} if t else {"text": "finished work"})
     w.step()

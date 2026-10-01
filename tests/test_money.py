@@ -2,8 +2,9 @@
 
 import pytest
 
-from substrate.ledger import SIM, USD, InsufficientFunds, Ledger, WrongCurrency, purse
-from substrate.meter import KillSwitch, Meter, Usage, cost_micros
+from commons.domain.compute import Usage, cost_micros
+from commons.substrate.ledger import SIM, USD, InsufficientFunds, Ledger, WrongCurrency, purse
+from commons.substrate.meter import KillSwitch, Meter
 
 CALL = Usage(input_tokens=10_000, output_tokens=2_000)
 COST = cost_micros("claude-haiku-4-5", CALL)  # 20_000 micro-dollars

@@ -1,13 +1,13 @@
 """Spawn, retire, fork, merge, learn and disputes: each has a check that stops one community
 from doing it alone or cheaply."""
 
-from sim.actions import Actions
-from sim.engine import Params, World
-from sim.market import MarketJob, Part
-from society.grading import tagged
-from society.community import Community
-from society.strategies import Strategy
-from substrate.ledger import purse
+from commons.agents.scripted import Strategy
+from commons.application.actions import Actions
+from commons.application.world import Params, World
+from commons.domain.community import Community
+from commons.domain.grading import tagged
+from commons.domain.market import MarketJob, Part
+from commons.substrate.ledger import purse
 
 
 class Puppet(Strategy):

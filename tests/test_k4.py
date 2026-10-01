@@ -6,19 +6,20 @@ from pathlib import Path
 
 import pytest
 
+from commons.adapters.models import FakeBackend
+from commons.agents.llm.steward import LLMStrategy
+from commons.application import founding
+from commons.application.archive import Archive
+from commons.application.calibration import run as run_calibration
+from commons.application.graders import GradingError, LLMGrader, PanelGrader
+from commons.application.ratings import Ratings, add
+from commons.application.world import Params, World
+from commons.domain.archive import citations
+from commons.domain.community import Community
+from commons.domain.market import MarketJob, Part
+from commons.domain.pack import load
+from commons.domain.scorecard import GENERAL, Metric, evaluate
 from packs.tech_for_good import CAPABILITIES, PACK, SCORECARD
-from runtime.backends import FakeBackend
-from runtime.steward import LLMStrategy
-from sim import founding
-from sim.archive import Archive, citations
-from sim.calibration import run as run_calibration
-from sim.engine import Params, World
-from sim.grader import GradingError, LLMGrader, PanelGrader
-from sim.market import MarketJob, Part
-from sim.pack import load
-from sim.ratings import Ratings, add
-from sim.scorecard import GENERAL, Metric, evaluate
-from society.community import Community
 
 EXAMPLE = Path(__file__).parent.parent / "society.example"
 SEEDS = range(3)
@@ -103,7 +104,7 @@ def test_a_market_economy_is_unchanged():
 
 
 def test_stewards_are_told_about_the_grants():
-    from runtime.render import render
+    from commons.agents.llm.render import render
 
     w = grant_world()
     w.step()
@@ -200,7 +201,7 @@ def test_a_societys_questions_become_its_work(tmp_path):
 
 # ── members work from archive sources ──────────────────────────
 def test_a_commission_can_hand_the_member_archive_sources():
-    from sim.actions import Actions
+    from commons.application.actions import Actions
 
     backend = FakeBackend(converse=lambda s, m, t: {"text": "1. repair days [archive: repairs#1]"})
     me = Community("fieldwork", 3, {"scout", "assess"}, LLMStrategy(backend), charter="c")

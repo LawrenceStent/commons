@@ -10,11 +10,18 @@ A society's own questions (societies/<name>/questions.md) replace the default su
 
 import re
 
-from sim.pack import Pack
-from sim.scorecard import Metric, cost_per_useful, distinct_subjects, harmful, mean_grade, useful, useful_share
-from society.community import Community
-from society.strategies import Cooperator, Defector, FreeRider
-
+from commons.agents.scripted import Cooperator, Defector, FreeRider
+from commons.domain.community import Community
+from commons.domain.pack import Pack
+from commons.domain.scorecard import (
+    Metric,
+    cost_per_useful,
+    distinct_subjects,
+    harmful,
+    mean_grade,
+    useful,
+    useful_share,
+)
 from packs.tech_for_good.calibration import CASES, VENTURE_CASES
 from packs.tech_for_good.work import TEMPLATES, WORK_SOURCE
 

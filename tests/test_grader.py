@@ -4,15 +4,16 @@ import json
 
 import pytest
 
-from runtime.backends import AnthropicBackend, FakeBackend, LMStudioBackend, ModelError
+from commons.adapters.models import AnthropicBackend, FakeBackend, LMStudioBackend
+from commons.agents.scripted import Strategy
+from commons.application import calibration
+from commons.application.graders import SCHEMA, GradingError, LLMGrader
+from commons.application.ports import ModelError
+from commons.application.world import Params, World
+from commons.domain.community import Community
+from commons.domain.market import MarketJob, Part
+from commons.substrate.ledger import USD
 from packs.earn_online import calibration as pack_cases
-from sim import calibration
-from sim.engine import Params, World
-from sim.grader import SCHEMA, GradingError, LLMGrader
-from sim.market import MarketJob, Part
-from society.community import Community
-from society.strategies import Strategy
-from substrate.ledger import USD
 
 
 def answer(score, reason="because", met=None, manipulation=False):
@@ -181,7 +182,7 @@ def test_a_grader_that_stays_down_fails_the_job_after_retries():
 
 
 def test_real_grading_respects_the_real_kill_switch():
-    from substrate.meter import KillSwitch
+    from commons.substrate.meter import KillSwitch
 
     w = world(LLMGrader(FakeBackend(lambda *a: answer(8, "ok"), real=True)))
     w.meter.real_ceiling = 1
@@ -273,7 +274,7 @@ def test_grading_runs_in_parallel_and_applies_in_a_fixed_order():
 
 
 def test_the_appraiser_calibration_set_is_well_formed_and_flags_a_gullible_appraiser():
-    from sim.ventures import LLMAppraiser
+    from commons.application.ventures import LLMAppraiser
 
     cases = pack_cases.VENTURE_CASES
     assert len({c.name for c in cases}) == len(cases) and sum(c.fund for c in cases) == 4

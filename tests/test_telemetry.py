@@ -1,6 +1,6 @@
 import pytest
 
-from substrate.telemetry import Hub
+from commons.substrate.telemetry import Hub
 
 
 def test_rings_are_bounded_and_counts_are_not():

@@ -5,10 +5,9 @@ Everything in the repo that is specific to "earning money online" lives in this 
 (everything outside packs/) knows only how a society works.
 """
 
-from sim.pack import Pack
-from society.community import Community
-from society.strategies import Cooperator, Defector, FreeRider
-
+from commons.agents.scripted import Cooperator, Defector, FreeRider
+from commons.domain.community import Community
+from commons.domain.pack import Pack
 from packs.earn_online.calibration import CASES, VENTURE_CASES
 from packs.earn_online.market import TEMPLATES, WORK_SOURCE
 

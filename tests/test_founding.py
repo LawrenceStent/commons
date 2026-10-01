@@ -4,14 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from runtime.backends import FakeBackend
-from runtime.render import community_block, render
-from sim import founding
-from sim.archive import Archive
-from sim.engine import Params, World
-from sim.pack import load as load_pack
-from society.community import Community
-from society.strategies import Cooperator
+from commons.adapters.models import FakeBackend
+from commons.agents.llm.render import community_block, render
+from commons.agents.scripted import Cooperator
+from commons.application import founding
+from commons.application.archive import Archive
+from commons.application.world import Params, World
+from commons.domain.community import Community
+from commons.domain.pack import load as load_pack
 
 EXAMPLE = Path(__file__).parent.parent / "society.example"
 
@@ -96,7 +96,7 @@ def test_the_archive_is_searched_on_demand():
     hits = arc.search("which repairs do people delay")
     assert hits and "Repairs people put off" in hits[0][0].text
     assert arc.search("xylophone") == []
-    from sim.actions import Actions
+    from commons.application.actions import Actions
 
     w = World(Params(seed=0, verify=False), archive=arc)
     w.step()

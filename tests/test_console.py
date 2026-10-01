@@ -2,9 +2,9 @@ import json
 
 from fastapi.testclient import TestClient
 
-from console.app import create_app, snapshot
-from sim.engine import Params, World
-from substrate.telemetry import Hub
+from commons.application.world import Params, World
+from commons.interfaces.console.app import create_app, snapshot
+from commons.substrate.telemetry import Hub
 
 
 def test_dashboard_renders_and_controls():
@@ -77,7 +77,7 @@ def test_snapshot_stays_bounded_over_a_long_run():
 def test_dashboard_separates_real_money_from_credits():
     w = World(Params(seed=0)).run(3)
     w.meter.real_ceiling = 10**9
-    from substrate.meter import Usage
+    from commons.domain.compute import Usage
     w.meter.charge_usage("coop-a", "claude-haiku-4-5", Usage(input_tokens=1000), cycle=w.cycle, real=True)
     snap = snapshot({"world": w, "running": False, "speed": 4, "reason": None, "rss_limit": 1})
     assert snap["money"]["currency"] == "SIM"

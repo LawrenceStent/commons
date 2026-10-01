@@ -7,10 +7,11 @@ import time
 
 import pytest
 
-from protocol import Envelope, Identity
-from protocol.contract import Bid
-from substrate.bus import BadSignature, RedisBus
-from substrate.registry import Registry
+from commons.adapters.redis_bus import RedisBus
+from commons.protocol import Envelope, Identity
+from commons.protocol.contract import Bid
+from commons.substrate.bus import BadSignature
+from commons.substrate.registry import Registry
 
 pytestmark = pytest.mark.skipif(shutil.which("redis-server") is None, reason="redis-server not installed")
 

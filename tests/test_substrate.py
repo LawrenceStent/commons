@@ -1,14 +1,15 @@
 import pytest
 
-from protocol import Envelope, Identity
-from protocol.contract import Announce, Bid, Deliver
-from protocol.reputation import Attest, Gossip
-from substrate.bus import BadSignature, MemoryBus, RateLimited, allowance_for
-from substrate.ledger import InsufficientFunds, Ledger, purse
-from substrate.meter import KillSwitch, Meter, Usage, cost_micros
-from substrate.registry import Registry
-from substrate.reputation import Reputation
-from substrate.workspace import Workspace, WorkspaceEscape
+from commons.domain.compute import Usage, cost_micros
+from commons.protocol import Envelope, Identity
+from commons.protocol.contract import Announce, Bid, Deliver
+from commons.protocol.reputation import Attest, Gossip
+from commons.substrate.bus import BadSignature, MemoryBus, RateLimited, allowance_for
+from commons.substrate.ledger import InsufficientFunds, Ledger, purse
+from commons.substrate.meter import KillSwitch, Meter
+from commons.substrate.registry import Registry
+from commons.substrate.reputation import Reputation
+from commons.substrate.workspace import Workspace, WorkspaceEscape
 
 
 # ── protocol ──────────────────────────────────────────────────
@@ -187,10 +188,10 @@ def test_workspace_isolation(tmp_path):
 
 
 def test_memory_bus_backlog_is_capped_even_with_no_readers():
-    from protocol import Envelope, Identity
-    from protocol.knowledge import Publish
-    from substrate.bus import MemoryBus
-    from substrate.registry import Registry
+    from commons.protocol import Envelope, Identity
+    from commons.protocol.knowledge import Publish
+    from commons.substrate.bus import MemoryBus
+    from commons.substrate.registry import Registry
 
     me = Identity("a")
     reg = Registry()

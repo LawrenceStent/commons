@@ -9,7 +9,7 @@ knowledge, so every rubric asks the same thing: cite an archive passage as [arch
 (unverified). A made-up citation fails the part by rule, before any grading (see World._try_grade).
 """
 
-from sim.pack import TemplateWorkSource
+from commons.domain.pack import TemplateWorkSource
 
 # Used when a society gives no questions of its own (and by the scripted regression runs).
 SUBJECTS = (

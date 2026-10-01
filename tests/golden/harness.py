@@ -67,19 +67,19 @@ def _recording_turns(world, told: list[str]):
 
 
 def _build(pack_name: str, seed: int, live: bool, tmp: Path):
-    from sim.engine import Params, World
-    from sim.pack import load
+    from commons.application.world import Params, World
+    from commons.domain.pack import load
 
     pack = load(pack_name)
     common = dict(seed=seed, activity_path=str(tmp / "activity.jsonl"))
     if not live:
         return World(Params(**{**pack.params, **common}), pack=pack)
-    from runtime.backends import FakeBackend
-    from runtime.fakes import GOOD_GRADE, competent
-    from runtime.steward import LLMStrategy
-    from sim.grader import HybridGrader, LLMGrader
-    from sim.ventures import LLMAppraiser
-    from society.community import Community
+    from commons.adapters.models import FakeBackend
+    from commons.agents.llm.fakes import GOOD_GRADE, competent
+    from commons.agents.llm.steward import LLMStrategy
+    from commons.application.graders import HybridGrader, LLMGrader
+    from commons.application.ventures import LLMAppraiser
+    from commons.domain.community import Community
 
     backend = FakeBackend(respond=lambda *a: GOOD_GRADE, converse=competent)
 
@@ -93,7 +93,7 @@ def _build(pack_name: str, seed: int, live: bool, tmp: Path):
 
 
 def capture(name: str) -> dict[str, list[str]]:
-    from sim.engine import summary
+    from commons.application.world import summary
 
     pack, seed, cycles, live = RUNS[name]
     with tempfile.TemporaryDirectory() as d:

@@ -1,11 +1,12 @@
 """Ventures: rules refuse deterministically, the appraiser only scores, the market allocates by score."""
 
-from runtime.backends import FakeBackend
-from sim.actions import Actions
-from sim.engine import Params, World
-from sim.ventures import LLMAppraiser, StubAppraiser, Venture, similar, value
-from society.community import Community
-from society.strategies import Strategy
+from commons.adapters.models import FakeBackend
+from commons.agents.scripted import Strategy
+from commons.application.actions import Actions
+from commons.application.ventures import LLMAppraiser
+from commons.application.world import Params, World
+from commons.domain.community import Community
+from commons.domain.ventures import StubAppraiser, Venture, similar, value
 
 
 class Puppet(Strategy):
@@ -75,7 +76,7 @@ def test_low_scores_are_worth_nothing_and_rejected():
 def test_the_market_takes_the_best_scored_first_not_the_first_asked():
     class ByTitle:
         def appraise(self, v):
-            from sim.ventures import Appraisal
+            from commons.domain.ventures import Appraisal
             return Appraisal(9 if "best" in v.title else 6, "scored by title")
 
     w = world(ByTitle(), venture_budget=1)
@@ -105,7 +106,7 @@ def test_the_appraiser_only_scores_and_code_holds_it_to_its_findings():
 def test_an_unavailable_appraiser_leaves_the_proposal_waiting():
     class Down:
         def appraise(self, v):
-            from sim.ventures import AppraisalError
+            from commons.domain.ventures import AppraisalError
             raise AppraisalError("model not loaded")
 
     w = world(Down())

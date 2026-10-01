@@ -6,11 +6,11 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from runtime.render import operator_block
-from sim.actions import Actions
-from sim.engine import Params, World, default_population
-from sim.operator import Operator
-from society.community import Community
+from commons.agents.llm.render import operator_block
+from commons.application.actions import Actions
+from commons.application.operator import Operator
+from commons.application.world import Params, World, default_population
+from commons.domain.community import Community
 
 EXAMPLE = Path(__file__).parent.parent / "operator.example"
 
@@ -70,9 +70,9 @@ def test_changes_are_picked_up_each_cycle_and_logged(folder):
 
 
 def test_the_steward_sees_directives_limits_and_context_as_trusted_instructions(folder):
-    from runtime.backends import FakeBackend
-    from runtime.fakes import GOOD_GRADE, competent
-    from runtime.steward import LLMStrategy
+    from commons.adapters.models import FakeBackend
+    from commons.agents.llm.fakes import GOOD_GRADE, competent
+    from commons.agents.llm.steward import LLMStrategy
 
     backend = FakeBackend(respond=lambda *a: GOOD_GRADE, converse=competent)
     pop = [Community("studio", 3, {"write", "design"}, LLMStrategy(backend))] + default_population()[:2]
@@ -85,8 +85,8 @@ def test_the_steward_sees_directives_limits_and_context_as_trusted_instructions(
 
 
 def test_the_thinking_budget_ends_a_turn(folder):
-    from runtime.backends import FakeBackend
-    from runtime.steward import LLMStrategy
+    from commons.adapters.models import FakeBackend
+    from commons.agents.llm.steward import LLMStrategy
 
     (folder / "config.toml").write_text("[coops.studio.limits]\nthinking_budget = 1\n")
     backend = FakeBackend(converse=lambda s, m, t: {"tool_calls": [("note", {"text": "hm"})]} if t else {"text": "x"})
@@ -98,7 +98,7 @@ def test_the_thinking_budget_ends_a_turn(folder):
 
 
 def test_directives_can_be_edited_from_the_dashboard(folder):
-    from console.app import create_app
+    from commons.interfaces.console.app import create_app
 
     w = World(Params(seed=0, verify=False), operator=Operator(folder))
     with TestClient(create_app(w, autostart=False)) as client:

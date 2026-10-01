@@ -3,7 +3,7 @@
 Every part is a few lines a model can write and a grader can judge in one call.
 """
 
-from sim.pack import TemplateWorkSource
+from commons.domain.pack import TemplateWorkSource
 
 SUBJECTS = (
     "a reusable coffee cup", "a budgeting app for students", "a bike repair kit",

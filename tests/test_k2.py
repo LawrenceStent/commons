@@ -1,13 +1,13 @@
 """K2: no rule rewards being first. Claims are allocated by rule, bonds make hoarding unprofitable, pay
 scales with quality, and outcomes known only later can settle later."""
 
-from sim.actions import Actions
-from sim.engine import Params, World
-from sim.market import MarketJob, Part
-from society.grading import Grade, StubGrader, tagged
-from society.community import Community
-from society.strategies import Cooperator, Strategy
-from substrate.ledger import purse
+from commons.agents.scripted import Cooperator, Strategy
+from commons.application.actions import Actions
+from commons.application.world import Params, World
+from commons.domain.community import Community
+from commons.domain.grading import Grade, StubGrader, tagged
+from commons.domain.market import MarketJob, Part
+from commons.substrate.ledger import purse
 
 
 class Puppet(Strategy):
@@ -168,7 +168,7 @@ def test_a_deferred_outcome_can_turn_out_badly():
 
 
 def test_efficiency_is_earned_against_spent_and_each_coop_sees_its_own():
-    from runtime.render import render
+    from commons.agents.llm.render import render
 
     w = World(Params(seed=0, verify=False)).run(60)
     e = w.efficiency("coop-a")

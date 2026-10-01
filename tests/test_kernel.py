@@ -7,8 +7,8 @@ domain word from a pack (earn online, tech for good) creeps into the kernel.
 import re
 from pathlib import Path
 
-from sim.engine import Params, World
-from sim.pack import TemplateWorkSource, load
+from commons.application.world import Params, World
+from commons.domain.pack import TemplateWorkSource, load
 
 ROOT = Path(__file__).parent.parent
 KERNEL = ["sim", "society", "runtime", "substrate", "protocol", "console"]
@@ -31,8 +31,8 @@ def test_a_world_runs_on_any_pack():
     """A toy pack, defined here in a few lines, runs on the unchanged kernel."""
     from dataclasses import replace
 
-    from society.community import Community
-    from society.strategies import Cooperator
+    from commons.agents.scripted import Cooperator
+    from commons.domain.community import Community
 
     toy = replace(
         load(),
@@ -60,11 +60,11 @@ def test_packs_load_by_name_and_unknown_ones_are_refused():
 
 def test_the_world_runs_on_infrastructure_it_is_given(tmp_path):
     """R2.3: the ledger, bus and activity log are passed in (adapters), not built inside the world."""
-    from sim.activity import ActivityLog
-    from substrate.bus import MemoryBus
-    from substrate.ledger import Ledger
-    from substrate.registry import Registry
-    from substrate.telemetry import Hub
+    from commons.substrate.activity import ActivityLog
+    from commons.substrate.bus import MemoryBus
+    from commons.substrate.ledger import Ledger
+    from commons.substrate.registry import Registry
+    from commons.substrate.telemetry import Hub
 
     hub = Hub()
     ledger, bus = Ledger(str(tmp_path / "ledger.sqlite"), hub=hub), MemoryBus(Registry(), hub=hub)

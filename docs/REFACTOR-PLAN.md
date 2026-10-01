@@ -12,79 +12,52 @@ a separate, labelled decision.
 
 ## 1. Target architecture
 
-### 1.1 The dependency rule
+### 1.1 The dependency rule (as built in R3)
 
 ```
-                 interfaces  (CLI, dashboard)            ─┐
-                 agents      (LLM steward and members,     │  outer: may import anything inward
-                              scripted strategies)         │
-                 adapters    (SQLite ledger, bus, files,   │
-                              HTTP, model backends)       ─┘
-                 application (the society, the cycle,     ─┐
-                              services, commands, ports)   │  inner: imports only domain
-                 domain      (pure rules and models)      ─┘  innermost: imports nothing of ours
-
-  packs/  plug-ins: import domain and application only
-  protocol/  signed messages: imported by domain and adapters; imports nothing of ours
+  packs        plug-ins: a society's purpose (may import anything below)               outermost
+  interfaces   composition roots: the commons CLI and the dashboard
+  adapters     ports implemented against other processes and the network
+               (model backends, the web, Redis)
+  agents       what plays a co-op: scripted strategies, the LLM steward and its members
+  application  the society (World), its cycle, services and commands, through ports
+  substrate    in-process platform services, standard library only: ledger (SQLite), in-memory bus,
+               telemetry, registry, meter, reputation, activity log, JSON-lines files, workspace
+  domain       pure rules and models: statuses, jobs, grading, packs, gate policy, venture rules,
+               archive index, scorecard, compute prices, blueprints, operator limits
+  protocol     signed messages                                                          innermost
 ```
 
-- **domain**: no I/O, no threads, no clock, no models, no randomness except an RNG passed in. Testable in microseconds.
-- **application**: orchestrates the domain through **ports** (Protocols it owns: `ModelBackend`, `Grader`,
-  `Appraiser`, `Ledger`, `WebAccess`, `Store`, `Clock`). Holds the world's lock and the cycle.
-- **adapters**: implement the ports (SQLite, Redis, JSONL files, urllib, Anthropic, LM Studio, fakes).
-- **agents**: what plays a co-op, through the observation and command APIs only.
-- **interfaces**: composition roots. They build adapters, wire them into the application, and expose them.
+Each layer imports only layers below it; `tests/test_layers.py` checks it from the source (type-only imports count)
+and has **no exceptions** since R3. Two decisions made while building it, 1 Oct:
 
-A test (stage 0) enforces this rule from the AST, listing today's violations as known exceptions that must reach
-zero by the end.
+- **Local files are platform, not adapters.** A single-process simulation reads and writes its own folders (the
+  society folder, the operator folder, the archive, ratings and gate files) with the standard library, through
+  `substrate`. Adapters are reserved for things in another process or across the network, which is where
+  substitution, failure and cost actually matter.
+- **Agents sit inside adapters.** Agents use only ports (the observation, the actions API, the model port); adapters
+  may assemble them (a founded society's co-ops).
 
-### 1.2 Package layout (end state)
+### 1.2 Package layout (as built in R3)
 
 ```
 commons/
-  domain/
-    money.py          Micros (a NewType over int), Currency, account names, the revenue split
-    ids.py            JobId, ContractId, CoopId, RequestId (NewTypes)
-    status.py         JobStatus, ContractStatus, VentureStatus, RequestStatus (StrEnum)
-    events.py         domain events (JobPaid, ContractAwarded, GateRequested, …)
-    market/           job.py (the Job aggregate), grading.py (Grade, quality tags), work.py (WorkSource, TemplateWorkSource)
-    contracts/        contract.py (the Contract aggregate and its state machine)
-    economy/          payment.py (PaymentPolicy: MarketPayment, GrantPayment), treasury.py (floor, upkeep, bonds)
-    reputation.py     (from substrate/reputation.py)
-    population.py     proposal rules (from sim/population.py, the rule half)
-    ventures.py       rules and value (from sim/ventures.py, the rule half)
-    knowledge.py      Playbook, royalties; archive_index.py (BM25 over texts, no files)
-    gate.py           GatePolicy, Request, decisions (from sim/gate.py, the rule half)
-    scorecard.py      Metric, evaluate, general metrics
-    pack.py           Pack (from sim/pack.py)
-  application/
-    ports.py          every Protocol the application needs
-    society.py        Society: the state and the facade (today's World public API, kept)
-    cycle.py          the cycle as an ordered list of phases (inside or outside the lock)
-    services/         contract_net, claims, grading, ventures, population, grants, ratings, web, knowledge, gossip, recorder
-    commands/         the actions executor, split by area, with an explicit middleware chain
-    observe.py        ObservationBuilder (the read model a co-op sees)
-    queries.py        read models for the dashboard (today's snapshot)
-    founding.py       found, approve, load (file access through a port)
-  adapters/
-    ledger_sqlite.py  meter.py  bus_memory.py  bus_redis.py  telemetry.py  activity_log.py  jsonl.py
-    society_folder.py (society.toml, blueprints, questions, operator folder, archive files)
-    web_http.py       (from runtime/web.py)
-    models/           anthropic.py  lmstudio.py  fake.py
-  agents/
-    llm/              steward.py (the turn loop)  member.py (the look-up loop and drafts)  render.py  tools.py  prompts.py
-    scripted/         base.py  cooperator.py  defector.py  free_rider.py
-  interfaces/
-    cli.py            one command: commons run | sim | found | approve | rate | calibrate
-    console/          app.py (thin routes)  panels.py  dashboard.html
-  protocol/           (moved as is)
-packs/                (unchanged location)
-tests/
-  domain/  application/  adapters/  agents/  interfaces/  acceptance/  golden/
+  protocol/      envelope, contract, knowledge, population, reputation
+  domain/        status, compute, grading, market, pack, community, goals, scorecard, archive (index),
+                 gate (policy), ventures (rules), operator (limits), ratings (scale), founding (blueprints)
+  substrate/     ledger, meter, bus, registry, reputation, telemetry, activity, jsonl, workspace
+  application/   ports, world, actions, population, observation, graders, calibration, gate (queue), ventures
+                 (checks, LLM appraiser), archive (folder), operator (folder), ratings (files), founding (folder)
+  agents/        scripted/ (base, scripted), llm/ (steward, render, tools, fakes)
+  adapters/      models (Anthropic, LM Studio, fake), web (urllib), redis_bus
+  interfaces/    cli/ (main, live, sim, found, approve, rate, calibrate), console/ (app, host, dashboard)
+packs/           earn_online, tech_for_good
+sim/             shims for the old `python -m sim.*` commands
 ```
 
-Old entry points (`python -m sim.live`, `sim.found`, `sim.rate`, `sim.approve`, `sim.calibrate`, `python -m sim`) stay
-as thin shims that call the new CLI, until you decide to drop them.
+Later stages refine inside these layers (R4 and R5 add aggregates and policies to `domain`; R6 splits `world.py`
+into services; R10 splits `agents/llm`), and `reputation` moves from `substrate` to `domain` once R7's events
+remove its telemetry calls.
 
 ### 1.3 Patterns, and where each one lands
 
@@ -179,11 +152,16 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
       `calibrate`); they are 7 of the layer test's exceptions (13 → 7) and go when R3 moves the scripts to `interfaces`
 
 ### R3. The new layout (L, mechanical) — A3
-- [ ] R3.1 Create `commons/` with `domain`, `application`, `adapters`, `agents`, `interfaces`, `protocol`
-- [ ] R3.2 Move modules (`git mv`), splitting rule halves from I/O halves (`gate`, `ventures`, `population`, `archive`, `founding`)
-- [ ] R3.3 Rewrite imports by script; `pyproject.toml` packages and a `commons` console script
-- [ ] R3.4 Old entry points (`python -m sim`, `sim.live`, `sim.found`, `sim.rate`, `sim.approve`, `sim.calibrate`) as shims
-- [ ] R3.5 Tests moved into the new tree, unchanged in logic
+- [x] R3.1 Create `commons/` with `domain`, `substrate`, `application`, `agents`, `adapters`, `interfaces`, `protocol`
+- [x] R3.2 Move modules (`git mv`, so history follows), splitting the pure halves into `domain`: `gate`, `ventures`,
+      `archive`, `founding`, `operator`, `ratings`, and compute prices out of the meter. `population` had no pure half
+      worth splitting (R6 revisits it)
+- [x] R3.3 Rewrite imports by script (symbol by symbol, so model-port types resolve to `application.ports`);
+      `pyproject.toml` packages; a `commons` console script with subcommands (run, sim, found, approve, rate, calibrate)
+- [x] R3.4 Old entry points (`python -m sim`, `sim.live`, `sim.found`, `sim.rate`, `sim.approve`, `sim.calibrate`) as shims
+      that print the new command and run it
+- [x] R3.5 Tests updated to the new imports, unchanged in logic (regrouping them by layer is R12.1). The layer test
+      is rewritten for the new layers and passes with no exceptions; the last 3 status strings converted
 - [ ] R3.6 Docs: every path in `COMMONS.md`, `CHECKLIST.md`, `FRAMEWORK.md`, READMEs and examples updated
 - [ ] **Done when:** golden identical; every documented command works; layer exceptions are only those R4 to R10 remove
 

@@ -9,18 +9,19 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from console.app import create_app
-from runtime.backends import FakeBackend
-from runtime.steward import LLMStrategy
-from runtime.tools import OFFLINE, TOOLS
-from runtime.web import EgressDenied, Egress, Fetcher, WebAccess, WebError, WikipediaSearch, html_to_text
-from sim.actions import Actions
-from sim.engine import Params, World
-from sim.gate import Gate, GateError, GatePolicy, pending_in, record
-from sim.market import MarketJob, Part
-from sim.operator import Operator
-from society.community import Community
-from society.strategies import Cooperator
+from commons.adapters.models import FakeBackend
+from commons.adapters.web import Egress, EgressDenied, Fetcher, WebAccess, WebError, WikipediaSearch, html_to_text
+from commons.agents.llm.steward import LLMStrategy
+from commons.agents.llm.tools import OFFLINE, TOOLS
+from commons.agents.scripted import Cooperator
+from commons.application.actions import Actions
+from commons.application.gate import Gate, pending_in, record
+from commons.application.operator import Operator
+from commons.application.world import Params, World
+from commons.domain.community import Community
+from commons.domain.gate import GateError, GatePolicy
+from commons.domain.market import MarketJob, Part
+from commons.interfaces.console.app import create_app
 
 PAGE = b"<html><head><title>Hand pumps</title><script>track()</script></head><body><nav>menu</nav>" \
        b"<p>Hand pumps fail most often because spare parts are hard to find.</p><p>Village committees help.</p></body></html>"

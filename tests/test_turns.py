@@ -1,13 +1,13 @@
 """The turn-based engine: the contract-net across cycles, its deadlines, and what each side sees."""
 
 
-from sim.actions import Actions
-from sim.engine import Params, World
-from sim.market import MarketJob, Part
-from society.grading import tagged
-from society.community import Community
-from society.strategies import Strategy
-from substrate.ledger import purse
+from commons.agents.scripted import Strategy
+from commons.application.actions import Actions
+from commons.application.world import Params, World
+from commons.domain.community import Community
+from commons.domain.grading import tagged
+from commons.domain.market import MarketJob, Part
+from commons.substrate.ledger import purse
 
 
 class Puppet(Strategy):
@@ -120,7 +120,7 @@ def test_a_grader_outage_accepts_the_delivery_by_default_after_retries():
     c = announce_and_award(w, claimed_job_needing_build(w))
     act(w, "sub").deliver(c.id, "untagged text the stub can't read")
 
-    from sim.grader import GradingError
+    from commons.application.graders import GradingError
 
     def down(*a):
         raise GradingError("model not loaded")

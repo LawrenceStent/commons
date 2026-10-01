@@ -13,7 +13,7 @@ from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-SKIP = {"tests", "tools", ".venv", "runs", "societies", "operator", "docs"}
+SKIP = {"tests", "tools", ".venv", "runs", "societies", "operator", "docs", "sim"}  # sim/: shims only
 
 
 def _sources():
@@ -24,9 +24,15 @@ def _sources():
         yield rel, path.read_text()
 
 
+def _package(parts) -> str:
+    """The unit the metrics count: a layer of commons/ (commons.domain, …), or a top-level package (packs)."""
+    parts = list(parts)
+    return ".".join(parts[:2]) if parts[0] == "commons" and len(parts) > 2 else parts[0]
+
+
 def _ours(module: str, packages: set[str]) -> str | None:
-    top = module.split(".")[0]
-    return top if top in packages else None
+    name = _package(module.split(".") + ["x"]) if module.startswith("commons.") else module.split(".")[0]
+    return name if name in packages else None
 
 
 def _cycles(edges: dict[str, set[str]]) -> list[tuple[str, str]]:
@@ -35,12 +41,12 @@ def _cycles(edges: dict[str, set[str]]) -> list[tuple[str, str]]:
 
 def measure() -> dict[str, object]:
     files = list(_sources())
-    packages = {rel.parts[0] for rel, _ in files if len(rel.parts) > 1}
+    packages = {_package(rel.parts) for rel, _ in files if len(rel.parts) > 1}
     funcs, classes, nested, edges = [], [], 0, defaultdict(set)
     private, status, economy = 0, 0, 0
     for rel, text in files:
         tree = ast.parse(text)
-        top = rel.parts[0]
+        top = _package(rel.parts)
         inner = set()
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):

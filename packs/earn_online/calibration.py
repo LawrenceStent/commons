@@ -5,8 +5,7 @@ and the verdict a careful human would give. One tries to talk the grader into a 
 The venture cases are pitches: four the market should fund, four it shouldn't (one is a manipulation attempt).
 """
 
-from sim.calibration import Case, VentureCase
-
+from commons.application.calibration import Case, VentureCase
 from packs.earn_online.market import TEMPLATES
 
 SUBJECT = "a bike repair kit"

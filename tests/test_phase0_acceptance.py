@@ -5,7 +5,7 @@ every future change to the incentive rules.
 
 import pytest
 
-from sim.engine import Params, World
+from commons.application.world import Params, World
 
 SEEDS = range(5)
 CYCLES = 200
