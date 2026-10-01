@@ -193,3 +193,156 @@ def _(e: ev.AuditCancelled, w):
 @telemetry.register
 def _(e: ev.AuditCancelled, w):
     return []
+
+
+# ── jobs ───────────────────────────────────────────────────────
+def _job(job, stage, **extra) -> tuple[str, dict]:
+    return "market.job", dict(id=job.id, stage=stage, **extra)
+
+
+@notices.register
+def _(e: ev.JobPosted, w):
+    return []
+
+
+@telemetry.register
+def _(e: ev.JobPosted, w):
+    return [_job(e.job, "posted", caps=sorted(e.job.parts), reward=e.job.reward)]
+
+
+@notices.register
+def _(e: ev.JobExpired, w):
+    return []
+
+
+@telemetry.register
+def _(e: ev.JobExpired, w):
+    return [_job(e.job, "expired", caps=sorted(e.job.parts), reward=e.job.reward)]
+
+
+@notices.register
+def _(e: ev.BondUnaffordable, w):
+    return [(e.claimant, "claim_lost", f"you couldn't post the {e.bond} bond for {e.job.id}", e.job.id)]
+
+
+@telemetry.register
+def _(e: ev.BondUnaffordable, w):
+    return []
+
+
+@notices.register
+def _(e: ev.JobClaimed, w):
+    j = e.job
+    return [(j.prime, "claim_won", f"{j.id} is yours (bond {e.bond}, returned when it's paid); "
+                                   f"submit every part by cycle {j.deadline}", j.id)] + \
+           [(o, "claim_lost", f"{j.id} went to {j.prime} (more trusted, a better fit, or less loaded)", j.id)
+            for o in e.claimants if o != j.prime]
+
+
+@telemetry.register
+def _(e: ev.JobClaimed, w):
+    j = e.job
+    return [_job(j, "claimed", prime=j.prime, caps=sorted(j.parts), reward=j.reward, claimants=sorted(e.claimants),
+                 bond=e.bond)]
+
+
+@notices.register
+def _(e: ev.JobSubmitted, w):
+    return [(e.job.prime, "submitted", f"{e.job.id} is complete and goes to the grader at the end of this cycle",
+             e.job.id)]
+
+
+@telemetry.register
+def _(e: ev.JobSubmitted, w):
+    return []
+
+
+@notices.register
+def _(e: ev.GradingDelayed, w):
+    return [(e.job.prime, "grading_delayed", f"{e.job.id} is waiting for the grader: {e.error}", e.job.id)]
+
+
+@telemetry.register
+def _(e: ev.GradingDelayed, w):
+    return []
+
+
+@notices.register
+def _(e: ev.JobDeferred, w):
+    return [(e.job.prime, "job_graded", f"{e.job.id} passed for now; its outcome settles at cycle {e.job.settle_at}",
+             e.job.id)]
+
+
+@telemetry.register
+def _(e: ev.JobDeferred, w):
+    return []
+
+
+@notices.register
+def _(e: ev.JobAwaitingPayment, w):
+    return [(e.job.prime, "job_graded", f"{e.job.id} passed grading; {e.note}", e.job.id)]
+
+
+@telemetry.register
+def _(e: ev.JobAwaitingPayment, w):
+    return []
+
+
+@notices.register
+def _(e: ev.JobPaid, w):
+    j = e.job
+    return [(j.prime, "job_paid", f"{j.id} passed grading (mean score {e.mean:.2f}); {e.payer} paid {e.payout} "
+                                  f"of {j.reward}, you received {e.share}", j.id)] + \
+           [(author, "royalty", f"your playbook was used in {j.id}: {amount}", j.id) for author, amount in e.royalties.items()]
+
+
+@telemetry.register
+def _(e: ev.JobPaid, w):
+    j = e.job
+    return [_job(j, "paid", prime=j.prime, caps=sorted(j.parts), reward=j.reward, payout=e.payout, scores=j.scores,
+                 royalties=e.royalties, taxed=e.taxed)]
+
+
+@notices.register
+def _(e: ev.JobFailed, w):
+    return [(e.job.prime, "job_failed", f"{e.job.id} failed: {e.why}", e.job.id)]
+
+
+@telemetry.register
+def _(e: ev.JobFailed, w):
+    j = e.job
+    return [_job(j, "failed", prime=j.prime, caps=sorted(j.parts), reward=j.reward, why=e.why)]
+
+
+@notices.register
+def _(e: ev.PoolShared, w):
+    return []
+
+
+@telemetry.register
+def _(e: ev.PoolShared, w):
+    return [("grants.award", dict(pool=e.pool, asked=e.asked, paid=min(e.pool, e.asked), jobs=e.jobs))]
+
+
+# ── grading and model calls ────────────────────────────────────
+@notices.register
+def _(e: ev.ModelCalled, w):
+    return []
+
+
+@telemetry.register
+def _(e: ev.ModelCalled, w):
+    return [("llm.call", dict(community=e.community, role=e.role, model=e.model, input_tokens=e.input_tokens,
+                              output_tokens=e.output_tokens, cache_hit=e.cache_hit, cost=e.cost, ms=e.ms, real=e.real))]
+
+
+@notices.register
+def _(e: ev.PartGraded, w):
+    return []
+
+
+@telemetry.register
+def _(e: ev.PartGraded, w):
+    g = e.grade
+    return [("grader.grade", dict(job=e.job, part=e.part, score=g.score, cost=g.cost, reason=g.reason, model=g.model,
+                                  real=g.real, **({"audit": e.audit} if e.audit else {})))]

@@ -223,7 +223,8 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
 - [x] R7.1 Typed events (`domain/events.py`) and a dispatcher (`application/events.py`); subscribers for what co-ops
       are told (`notices`) and telemetry (`telemetry`), one function per event type. The activity log already derives its
       change entries from telemetry, so it needs no subscriber of its own
-- [ ] R7.2 Contract and job events moved onto it (one family per commit)
+- [x] R7.2 Contract and job events moved onto it (one family per commit): 14 contract events, 11 job events, and
+      the grading pair (`ModelCalled`, `PartGraded`), published exactly where the telemetry used to be emitted
 - [ ] R7.3 Venture, population, grant, rating and gate events moved onto it
 - [ ] **Done when:** no direct `_tell`, `hub.emit` or `activity.add` in services; golden identical
 

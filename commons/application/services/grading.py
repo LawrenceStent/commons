@@ -12,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING
 
 from commons.application.graders import GradingError
+from commons.domain import events as ev
 from commons.domain.archive import citations as archive_citations
 from commons.domain.grading import Grade
 from commons.domain.ids import JobId
@@ -42,7 +43,7 @@ class Grading:
         if not job.complete or job.status != JobStatus.CLAIMED or job.id in self.awaiting_grade:
             return
         self.awaiting_grade[job.id] = 0
-        self.w.tell(job.prime, "submitted", f"{job.id} is complete and goes to the grader at the end of this cycle", job.id)
+        self.w.events.publish(ev.JobSubmitted(job))
 
     def settle(self) -> None:
         """Grade every submitted job and every filed audit. Model calls run outside the world's lock;
@@ -122,13 +123,13 @@ class Grading:
                 self.awaiting_grade.pop(jid)
                 self.w.board.fail(job, "the grader was unavailable")
             else:
-                self.w.tell(job.prime, "grading_delayed", f"{jid} is waiting for the grader: {errors[0]}", jid)
+                self.w.events.publish(ev.GradingDelayed(job, errors[0]))
             return
         self.awaiting_grade.pop(jid, None)
         if defer and job.passed(self.w.params.pass_score):
             job.defer(until=self.w.cycle + defer)
             self.deferred.add(jid)
-            self.w.tell(job.prime, "job_graded", f"{jid} passed for now; its outcome settles at cycle {job.settle_at}", jid)
+            self.w.events.publish(ev.JobDeferred(job))
             return
         self.w.board.finish(job)
 
@@ -154,11 +155,9 @@ class Grading:
             payer = next((a for a in payers if self.w.ledger.balance(a) >= g.cost), payers[-1])
             self.w.ledger.transfer(payer, "compute", g.cost, cycle=self.w.cycle, kind="grading", memo=audit or job)
         if g.model and g.usage:
-            self.w.hub.emit("llm.call", self.w.cycle, community="grader", role="grader", model=g.model,
-                          input_tokens=g.usage.input_tokens, output_tokens=g.usage.output_tokens,
-                          cache_hit=g.cache_hit, cost=g.cost, ms=g.ms, real=g.real)
+            self.w.events.publish(ev.ModelCalled("grader", "grader", g.model, g.usage.input_tokens, g.usage.output_tokens,
+                                                 g.cache_hit, g.cost, g.ms, g.real))
             if g.real:
                 self.w.meter.record_real("grader", g.price_as or g.model, g.usage, cycle=self.w.cycle)
-        self.w.hub.emit("grader.grade", self.w.cycle, job=job, part=part, score=g.score, cost=g.cost, reason=g.reason,
-                      model=g.model, real=g.real, **({"audit": audit} if audit else {}))
+        self.w.events.publish(ev.PartGraded(job, part, g, audit))
         return g

@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from commons.domain.contract import Contract
+from commons.domain.grading import Grade
+from commons.domain.market import MarketJob
 
 
 class Event:
@@ -93,3 +95,99 @@ class AuditCancelled(Event):
     """The grader stayed down; the contractor's fee is refunded and the dispute may be filed again."""
     contract: Contract
     extra: dict = field(default_factory=dict)
+
+
+# ── jobs ───────────────────────────────────────────────────────
+@dataclass(frozen=True)
+class JobPosted(Event):
+    job: MarketJob
+
+
+@dataclass(frozen=True)
+class JobExpired(Event):
+    job: MarketJob
+
+
+@dataclass(frozen=True)
+class BondUnaffordable(Event):
+    claimant: str
+    job: MarketJob
+    bond: int
+
+
+@dataclass(frozen=True)
+class JobClaimed(Event):
+    job: MarketJob
+    claimants: tuple[str, ...]  # everyone who asked, in the order they asked
+    bond: int
+
+
+@dataclass(frozen=True)
+class JobSubmitted(Event):
+    job: MarketJob
+
+
+@dataclass(frozen=True)
+class GradingDelayed(Event):
+    job: MarketJob
+    error: str
+
+
+@dataclass(frozen=True)
+class JobDeferred(Event):
+    """Passed for now; its outcome settles later."""
+    job: MarketJob
+
+
+@dataclass(frozen=True)
+class JobAwaitingPayment(Event):
+    """Passed; paid at the end of the cycle (`note` says how, in the economy's words)."""
+    job: MarketJob
+    note: str
+
+
+@dataclass(frozen=True)
+class JobPaid(Event):
+    job: MarketJob
+    payout: int
+    mean: float
+    share: int
+    payer: str
+    royalties: dict
+    taxed: bool
+
+
+@dataclass(frozen=True)
+class JobFailed(Event):
+    job: MarketJob
+    why: str
+
+
+@dataclass(frozen=True)
+class PoolShared(Event):
+    """The economy's pool was shared among the cycle's passing work."""
+    pool: int
+    asked: int
+    jobs: int
+
+
+# ── grading and model calls ────────────────────────────────────
+@dataclass(frozen=True)
+class ModelCalled(Event):
+    community: str
+    role: str
+    model: str
+    input_tokens: int
+    output_tokens: int
+    cache_hit: float | None
+    cost: int
+    ms: int | None
+    real: bool
+
+
+@dataclass(frozen=True)
+class PartGraded(Event):
+    job: str
+    part: str
+    grade: Grade
+    audit: str | None = None

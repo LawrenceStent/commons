@@ -7,6 +7,7 @@ from __future__ import annotations
 from collections import Counter
 from typing import TYPE_CHECKING
 
+from commons.domain import events as ev
 from commons.domain.market import MarketJob
 from commons.domain.money import Micros
 from commons.domain.status import (
@@ -42,7 +43,7 @@ class Payments:
         shares = self.w.payment.shares(values, pool)
         for j in sorted(queue, key=lambda j: j.id):
             self.pay(j, payout=shares[j.id])
-        self.w.hub.emit("grants.award", self.w.cycle, pool=pool, asked=total, paid=min(pool, total), jobs=len(queue))
+        self.w.events.publish(ev.PoolShared(pool, total, len(queue)))
 
     def pay(self, job: MarketJob, payout: Micros | None = None) -> None:
         prime = job.prime
@@ -69,8 +70,6 @@ class Payments:
         for cap, part in job.parts.items():
             if part.source == "self":
                 track[cap] = track.get(cap, 0) + 1
-        self.w.tell(prime, "job_paid", f"{job.id} passed grading (mean score {mean:.2f}); {self.w.payment.payer} paid {payout} "
-                   f"of {job.reward}, you received {share}", job.id)
         record = {"job": job.id, "title": job.title, "prime": prime, "cycle": self.w.cycle, "scores": dict(job.scores),
                   "payout": payout, "parts": {cap: {"by": self.done_by(job, part), "spec": part.spec,
                                                     "text": (part.artifact or "")[:4000]}
@@ -81,9 +80,7 @@ class Payments:
         for author, amount in split.royalties.items():
             self.w.recorder.stat(author, "earned", amount)
             self.w.royalties_paid[author] = self.w.royalties_paid.get(author, 0) + amount
-            self.w.tell(author, "royalty", f"your playbook was used in {job.id}: {amount}", job.id)
-        self.w.hub.emit("market.job", self.w.cycle, id=job.id, stage="paid", prime=prime, caps=sorted(job.parts),
-                      reward=job.reward, payout=payout, scores=job.scores, royalties=split.royalties, taxed=tax)
+        self.w.events.publish(ev.JobPaid(job, payout, mean, share, self.w.payment.payer, split.royalties, tax))
 
     def done_by(self, job: MarketJob, part) -> str:
         if part.source in (None, "self"):
