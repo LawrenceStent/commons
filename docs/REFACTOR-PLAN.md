@@ -225,8 +225,11 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
       change entries from telemetry, so it needs no subscriber of its own
 - [x] R7.2 Contract and job events moved onto it (one family per commit): 14 contract events, 11 job events, and
       the grading pair (`ModelCalled`, `PartGraded`), published exactly where the telemetry used to be emitted
-- [ ] R7.3 Venture, population, grant, rating and gate events moved onto it
-- [ ] **Done when:** no direct `_tell`, `hub.emit` or `activity.add` in services; golden identical
+- [x] R7.3 Venture, population, grant, rating and gate events moved onto it, and the records (gossip, scorecard
+      breaches, the cycle summary, playbooks published, the operator's folder reloaded). The gate decision's activity
+      entry goes through a third subscriber, `activity`. `Proposal` moved into the domain
+- [x] **Done when:** no direct `_tell`, `hub.emit` or `activity.add` in services; golden identical. 56 event types;
+      a test holds both: every event defines its notices and telemetry, and no service reports directly
 
 ### R8. Commands (M) — C6, S2, S7 (part)
 - [ ] R8.1 Middleware chain (operator limits, lock, activity log) declared per command; no `setattr` at import

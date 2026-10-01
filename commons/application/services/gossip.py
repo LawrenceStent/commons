@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from commons.domain import events as ev
 from commons.protocol.reputation import Gossip
 
 if TYPE_CHECKING:
@@ -30,4 +31,4 @@ class GossipService:
                     g = env.open()
                     self.w.rep.hear(listener.name, env.sender, g.subject, g.capability, g.score, g.evidence)
                     heard += 1
-        self.w.hub.emit("reputation.gossip", self.w.cycle, heard=heard)
+        self.w.events.publish(ev.GossipHeard(heard))

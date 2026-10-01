@@ -31,6 +31,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from commons.application.population import expire_proposals
+from commons.domain import events as ev
 
 if TYPE_CHECKING:
     from commons.application.society import World
@@ -47,7 +48,7 @@ def _start(w: World) -> None:
     w.cycle += 1
     w.rep.cycle = w.cycle
     if w.operator.reload():  # your directives, context and limits, re-read every cycle
-        w.hub.emit("operator.update", w.cycle, coops=sorted(w.operator.views), errors=w.operator.errors)
+        w.events.publish(ev.OperatorReloaded(tuple(sorted(w.operator.views)), tuple(w.operator.errors)))
         w.gate.policy = w.operator.gate
         if w.web:
             w.web.set_hosts(w.gate.policy.allow_hosts)

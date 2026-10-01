@@ -3,8 +3,8 @@
 from commons.adapters.models import FakeBackend
 from commons.agents.scripted import Strategy
 from commons.application.actions import Actions
-from commons.application.ventures import LLMAppraiser
 from commons.application.society import Params, World
+from commons.application.ventures import LLMAppraiser
 from commons.domain.community import Community
 from commons.domain.ventures import StubAppraiser, Venture, similar, value
 

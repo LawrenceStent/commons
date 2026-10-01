@@ -11,9 +11,10 @@ from commons.agents.llm.tools import OFFLINE, TOOLS
 from commons.application.actions import Actions
 from commons.application.graders import HybridGrader, LLMGrader
 from commons.application.ports import ToolCall, ToolResult
-from commons.application.society import Params, World, default_population
+from commons.application.society import Params, World
 from commons.domain.community import Community
 from commons.domain.market import MarketJob, Part
+from commons.domain.pack import default_population
 from commons.substrate.ledger import purse
 
 

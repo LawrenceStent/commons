@@ -7,6 +7,7 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from commons.domain import events as ev
 from commons.domain.scorecard import GENERAL
 from commons.domain.scorecard import evaluate as evaluate_scorecard
 from commons.domain.scorecard import report as scorecard_report
@@ -55,10 +56,9 @@ class Recorder:
         self.w.scorecard = evaluate_scorecard(self.w, tuple(self.w.pack.scorecard) + GENERAL)
         for row in self.w.scorecard:
             if row["status"] == "breach":
-                self.w.hub.emit("scorecard.breach", self.w.cycle, metric=row["key"], value=row["value"], floor=row["floor"])
+                self.w.events.publish(ev.ScorecardBreached(row["key"], row["value"], row["floor"]))
         pipeline = Counter(c.status for c in self.w.contracts.values() if c.status in LIVE_CONTRACT)
-        self.w.hub.emit(
-            "world.cycle", self.w.cycle,
+        self.w.events.publish(ev.CycleRecorded(dict(
             treasury=self.w.ledger.balance("treasury"),
             jobs_done=self.w.jobs_done, jobs_failed=self.w.jobs_failed, jobs_expired=self.w.jobs_expired,
             board=sum(j.status == JobStatus.OPEN for j in self.w.jobs.values()),
@@ -73,7 +73,7 @@ class Recorder:
                     "ok": h[-1].delivered_ok, "earned": h[-1].earned}
                 for n, h in self.w.history.items()
             },
-        )
+        )))
 
 
 @dataclass

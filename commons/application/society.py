@@ -37,7 +37,6 @@ from commons.application.observation import (
 from commons.application.observe import ObservationBuilder
 from commons.application.operator import Operator
 from commons.application.params import Params
-from commons.application.population import Proposal
 from commons.application.ports import WebPort
 from commons.application.ratings import Ratings
 from commons.application.services.board import JobBoard
@@ -50,6 +49,7 @@ from commons.application.services.recorder import Recorder, Snapshot
 from commons.application.services.upkeep import Upkeep
 from commons.application.services.ventures import VentureDesk
 from commons.application.services.web import WebDesk
+from commons.domain import events as ev
 from commons.domain.archive import ArchiveIndex
 from commons.domain.community import Community
 from commons.domain.contract import Contract
@@ -61,6 +61,7 @@ from commons.domain.knowledge import Playbook
 from commons.domain.market import MarketJob
 from commons.domain.pack import Pack
 from commons.domain.pack import load as load_pack
+from commons.domain.population import Proposal
 from commons.domain.ventures import Appraiser, StubAppraiser, Venture
 from commons.protocol import Envelope, Message
 from commons.substrate.activity import ActivityLog
@@ -70,11 +71,6 @@ from commons.substrate.meter import Meter
 from commons.substrate.registry import Registry
 from commons.substrate.reputation import Reputation
 from commons.substrate.telemetry import Hub
-
-
-def default_population() -> list[Community]:
-    """The default pack's scripted co-ops (kept for callers that predate packs)."""
-    return load_pack().population()
 
 
 class Society:
@@ -242,7 +238,7 @@ class Society:
 
     def add_playbook(self, pid: str, author: str, capability: str, title: str, text: str) -> None:
         self.library[pid] = Playbook(pid, author, capability, title, text)
-        self.hub.emit("knowledge.publish", self.cycle, id=pid, author=author, capability=capability, title=title)
+        self.events.publish(ev.PlaybookPublished(self.library[pid]))
 
     # ── what a community sees ──────────────────────────────────
 

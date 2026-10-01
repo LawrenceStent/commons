@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from commons.domain import events as ev
 from commons.domain.ratings import EVIDENCE
 
 if TYPE_CHECKING:
@@ -21,9 +22,7 @@ class RatingDesk:
             return
         for r in self.w.ratings.reload():
             sample = self.w.ratings.samples[r.id]
-            for cap, part in sample["parts"].items():
-                if part["by"] in self.w.communities:
-                    self.w.rep.attest("operator", part["by"], cap, EVIDENCE[r.rating])
-                    self.w.tell(part["by"], "rated", f"the operator rated your {cap} for {sample['job']} {r.rating}/3"
-                               + (f": {r.note}" if r.note else ""), sample["job"])
-            self.w.hub.emit("operator.rating", self.w.cycle, id=r.id, job=sample["job"], rating=r.rating, note=r.note)
+            rated = tuple((part["by"], cap) for cap, part in sample["parts"].items() if part["by"] in self.w.communities)
+            for coop, cap in rated:
+                self.w.rep.attest("operator", coop, cap, EVIDENCE[r.rating])
+            self.w.events.publish(ev.WorkRated(r, sample["job"], rated))

@@ -9,8 +9,9 @@ from fastapi.testclient import TestClient
 from commons.agents.llm.render import operator_block
 from commons.application.actions import Actions
 from commons.application.operator import Operator
-from commons.application.society import Params, World, default_population
+from commons.application.society import Params, World
 from commons.domain.community import Community
+from commons.domain.pack import default_population
 
 EXAMPLE = Path(__file__).parent.parent / "operator.example"
 

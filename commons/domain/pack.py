@@ -107,3 +107,8 @@ def load(name: str | None = None) -> Pack:
     except ModuleNotFoundError as e:
         raise ValueError(f"no pack called {name!r} (looked for packs/{name}/)") from e
     return module.PACK
+
+
+def default_population() -> list[Community]:
+    """The default pack's scripted co-ops."""
+    return load().population()
