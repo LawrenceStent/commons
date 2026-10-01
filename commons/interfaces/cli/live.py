@@ -133,6 +133,7 @@ def _lock() -> None:
             sys.exit(f"another live run is active (pid {other}); stop it first: kill -INT {other}")
         except (ValueError, ProcessLookupError, PermissionError):
             pass  # a stale file from a run that died
+    PID.parent.mkdir(parents=True, exist_ok=True)
     PID.write_text(str(os.getpid()))
     lock = PID  # the file this run locked, whatever happens to the name later
     atexit.register(lambda: lock.exists() and lock.read_text() == str(os.getpid()) and lock.unlink())
@@ -222,6 +223,16 @@ def _report(world: World, society, ledger: str, turns_path: str) -> None:
         print(f"{len(world.ratings.samples)} pieces of work set aside for you to rate: uv run commons rate {society.name}")
 
 
+def _ledger_path(runs: Path, backend: str) -> Path:
+    """A ledger file no earlier run has used: runs started in the same second get -2, -3 and so on."""
+    stem = f"live-{backend}-{time.strftime('%Y%m%d-%H%M%S')}"
+    path, n = runs / f"{stem}.sqlite", 1
+    while path.exists():
+        n += 1
+        path = runs / f"{stem}-{n}.sqlite"
+    return path
+
+
 def main(argv: list[str] | None = None) -> None:
     a = parser().parse_args(argv)
     society, pack = _source(a)
@@ -229,7 +240,7 @@ def main(argv: list[str] | None = None) -> None:
     population = _population(society, pack, models)
     runs = society.folder / "runs" if society else Path("runs")
     runs.mkdir(parents=True, exist_ok=True)
-    ledger = str(runs / f"live-{a.backend}-{time.strftime('%Y%m%d-%H%M%S')}.sqlite")
+    ledger = str(_ledger_path(runs, a.backend))
     _lock()
     world = _world(a, society, pack, models, population, ledger)
     _announce(world, society, population, a)

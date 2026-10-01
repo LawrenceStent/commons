@@ -12,10 +12,7 @@ from typing import TYPE_CHECKING
 from commons.domain import events as ev
 from commons.domain.community import Community
 from commons.domain.market import MarketJob
-from commons.domain.status import (
-    ContractStatus,
-    JobStatus,
-)
+from commons.domain.status import JobStatus
 from commons.domain.treasury import bond_for
 from commons.substrate.ledger import InsufficientFunds, purse
 
@@ -113,8 +110,5 @@ class JobBoard:
         self.settle_bond(job, returned=False)
         job.fail()
         self.w.jobs_failed += 1
-        for c in self.w.contracts.values():
-            if c.job_id == job.id and c.status == ContractStatus.OPEN:
-                c.withdraw(at=self.w.cycle)
-                self.w.events.publish(ev.ContractWithdrawn(c))
+        self.w.contract_net.withdraw_open(job.id)
         self.w.events.publish(ev.JobFailed(job, why))

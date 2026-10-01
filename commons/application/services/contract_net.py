@@ -65,6 +65,13 @@ class ContractNet:
         return [c for c in self.w.contracts.values()
                 if c.job_id == job_id and c.capability == capability and c.status in statuses]
 
+    def withdraw_open(self, job_id: JobId, capability: str | None = None) -> None:
+        """Close a job's open contracts (one part's, or all): the part was done some other way, or the job failed."""
+        for c in self.w.contracts.values():
+            if c.job_id == job_id and c.status == ContractStatus.OPEN and capability in (None, c.capability):
+                c.withdraw(at=self.w.cycle)
+                self.w.events.publish(ev.ContractWithdrawn(c))
+
     def open(self, cid: ContractId, job: MarketJob, capability: str, prime: str, max_price: Micros, advance_frac: float) -> None:
         part = job.parts[capability]
         c = Contract(cid, job.id, capability, prime, part.spec, part.rubric, max_price, advance_frac,

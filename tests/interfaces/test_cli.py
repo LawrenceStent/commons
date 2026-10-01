@@ -57,7 +57,6 @@ def test_run_a_founded_society_with_fake_models(scratch, capsys, monkeypatch):
     cli.main(["found", "demo", "--brief", "society.example/brief.md", "--context", "society.example/archive"])
     cli.main(["found", "demo", "--approve"])
     capsys.readouterr()
-    (scratch / "runs").mkdir()  # the run lock lives here (see REFACTOR-PLAN §7, item 3)
     monkeypatch.setattr(live, "PID", scratch / "runs" / "live.pid")  # released when the process exits
     cli.main(["run", "--society", "demo", "--backend", "fake", "--cycles", "2"])
     out = capsys.readouterr().out
@@ -97,3 +96,13 @@ def test_console_parses_its_options():
 
     a = console.parser().parse_args(["--pack", "tech_for_good", "--port", "8123"])
     assert (a.pack, a.port) == ("tech_for_good", 8123)
+
+
+def test_two_runs_in_the_same_second_get_their_own_ledgers(tmp_path, monkeypatch):
+    from commons.interfaces.cli import live
+
+    monkeypatch.setattr(live.time, "strftime", lambda fmt: "20261001-120000")
+    first = live._ledger_path(tmp_path, "fake")
+    first.touch()
+    second = live._ledger_path(tmp_path, "fake")
+    assert second != first and not second.exists()

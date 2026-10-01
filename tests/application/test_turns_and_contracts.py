@@ -228,3 +228,16 @@ def test_the_control_run_refuses_no_one():
     for _ in range(6):
         w.rep.attest("other", "sub", "build", 0.0)
     assert w.eligible("prime", "sub", "build") == (True, "")
+
+
+def test_doing_a_part_yourself_closes_its_open_contracts():
+    w = world()
+    job = MarketJob("T2", "kit", 80_000, {"research": Part("research", "do research", "rubric")},
+                    posted=w.cycle, deadline=w.cycle + 3)
+    w.jobs[job.id] = job
+    assert act(w, "prime").claim(job.id)
+    cid = act(w, "prime").announce(job.id, "research", 30_000, 0.5).id
+    assert act(w, "prime").do_part(job.id, "research", "done it myself")
+    c = w.contracts[cid]
+    assert c.status == "withdrawn" and c.closed == w.cycle
+    assert [e.fields["stage"] for e in w.hub.recent("contract.stage") if e.fields["id"] == cid][-1] == "withdrawn"

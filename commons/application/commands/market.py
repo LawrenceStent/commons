@@ -64,8 +64,7 @@ class MarketCommands(CommandBase):
             return err
         if err := self._use_capacity():
             return err
-        for c in self.w.contract_net.contracts_for(job_id, capability, (ContractStatus.OPEN,)):
-            c.withdraw(at=None)  # left unclosed, as before: see REFACTOR-PLAN §7
+        self.w.contract_net.withdraw_open(job_id, capability)
         job.fill(capability, artifact[:MAX_ARTIFACT], source="self", cites=tuple(cites))
         self.w.grading.maybe_submit(job)
         return Outcome(True, f"{capability} part of {job_id} done")

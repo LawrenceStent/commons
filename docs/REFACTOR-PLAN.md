@@ -324,7 +324,8 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
 
 ## 7. Found along the way
 
-Behaviour issues noticed during the refactor, to fix after the merge. Each is kept exactly as it was until then.
+Behaviour issues noticed during the refactor, kept as they were until the merge. All three fixed 1 Oct, after it, each with a
+test (the golden master didn't move: no scripted run does a part it had put out to contract).
 
 1. **Withdrawn contracts are sometimes never closed** (R4.2). When a prime does a part itself, the executor withdraws
    that part's open contracts without setting `closed` or emitting the `contract.stage` event, so they are never
