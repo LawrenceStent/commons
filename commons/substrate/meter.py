@@ -16,6 +16,7 @@ Cache writes assume the 5-minute TTL (1.25x input).
 from __future__ import annotations
 
 from commons.domain.compute import PRICES, Usage, cost_micros
+from commons.domain.money import Micros
 from commons.substrate.ledger import SIM, USD, InsufficientFunds, Ledger, purse
 from commons.substrate.telemetry import NULL, Hub
 
@@ -25,8 +26,8 @@ class KillSwitch(Exception):
 
 
 class Meter:
-    def __init__(self, ledger: Ledger, daily_ceiling: int, cycles_per_day: int = 1, hub: Hub = NULL,
-                 real_ceiling: int = 5_000_000):
+    def __init__(self, ledger: Ledger, daily_ceiling: Micros, cycles_per_day: int = 1, hub: Hub = NULL,
+                 real_ceiling: Micros = 5_000_000):
         self.hub = hub
         self.ledger = ledger
         self.daily_ceiling = daily_ceiling  # notional, in the ledger's currency
@@ -39,7 +40,7 @@ class Meter:
         self._spent_today = 0
         self.by_community: dict[str, int] = {}
 
-    def charge(self, community: str, amount: int, *, cycle: int, memo: str = "") -> None:
+    def charge(self, community: str, amount: Micros, *, cycle: int, memo: str = "") -> None:
         """Debit compute. Raises InsufficientFunds (silence) or KillSwitch."""
         if self.halted:
             raise KillSwitch("society halted")
@@ -77,7 +78,7 @@ class Meter:
         self._check_real(cycle)
         return amount
 
-    def _book_real(self, who: str, model: str, amount: int, cycle: int, from_purse: bool) -> None:
+    def _book_real(self, who: str, model: str, amount: Micros, cycle: int, from_purse: bool) -> None:
         self._roll(cycle // self.cycles_per_day)
         if not from_purse:  # in a USD society a purse charge *is* the bill; don't book it twice
             self.ledger.transfer("owner:capital", "ext:anthropic", amount, cycle=cycle, kind="api",

@@ -15,6 +15,8 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
+from commons.domain.ids import PassageId
+
 PASSAGE = 800  # characters, roughly
 MAX_RESULTS = 5
 _WORD = re.compile(r"[a-z0-9]+")
@@ -113,5 +115,5 @@ class ArchiveIndex:
                 scored.append((self.passages[pid], round(score, 3)))
         return sorted(scored, key=lambda x: (-x[1], x[0].id))[:k]
 
-    def get(self, passage_id: str) -> Passage | None:
+    def get(self, passage_id: PassageId) -> Passage | None:
         return self.passages.get(passage_id)

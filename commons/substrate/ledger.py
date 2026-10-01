@@ -26,6 +26,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Iterable
 
+from commons.domain.money import Micros
 from commons.substrate.telemetry import NULL, Hub
 
 SIM, USD = "SIM", "USD"
@@ -129,14 +130,14 @@ class Ledger:
         self.hub.emit("ledger.post", cycle, entry=entry, currency=cur, type=kind, memo=memo, legs=legs)
         return entry
 
-    def transfer(self, src: str, dst: str, amount: int, *, cycle: int, kind: str, memo: str = "",
+    def transfer(self, src: str, dst: str, amount: Micros, *, cycle: int, kind: str, memo: str = "",
                  currency: str | None = None) -> int:
         return self.post([(src, -amount), (dst, amount)], cycle=cycle, kind=kind, memo=memo, currency=currency)
 
     def settle_revenue(
         self,
         earner: str,
-        amount: int,
+        amount: Micros,
         *,
         cycle: int,
         royalties: dict[str, int] | None = None,
@@ -171,7 +172,7 @@ class Ledger:
         self.post(legs, cycle=cycle, kind="revenue", memo=memo)
         return split
 
-    def add_capital(self, amount: int, *, cycle: int, to: str = "treasury", memo: str = "") -> int:
+    def add_capital(self, amount: Micros, *, cycle: int, to: str = "treasury", memo: str = "") -> int:
         """Real money the owner puts in. The only way USD enters besides a customer paying."""
         return self.transfer("owner:capital", to, amount, cycle=cycle, kind="capital", memo=memo, currency=USD)
 

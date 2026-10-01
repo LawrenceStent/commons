@@ -26,7 +26,9 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
+from commons.domain.ids import JobId
 from commons.domain.market import MarketJob, Part
+from commons.domain.money import Micros
 
 if TYPE_CHECKING:
     from commons.domain.community import Community
@@ -47,7 +49,7 @@ LIVE_ECONOMY: dict[str, Any] = dict(
 class WorkSource(Protocol):
     """Where a society's jobs come from. Called once per job the world posts."""
 
-    def new_job(self, rng: random.Random, job_id: str, cycle: int, reward: int, board_ttl: int, parts: int) -> MarketJob: ...
+    def new_job(self, rng: random.Random, job_id: JobId, cycle: int, reward: Micros, board_ttl: int, parts: int) -> MarketJob: ...
 
 
 @dataclass(frozen=True)

@@ -14,6 +14,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from commons.domain.errors import DomainError
+from commons.domain.ids import JobId
+from commons.domain.money import Micros
 from commons.domain.status import LIVE_CONTRACT, ContractStatus
 
 S = ContractStatus
@@ -29,20 +31,20 @@ TRANSITIONS: dict[ContractStatus, set[ContractStatus]] = {
 @dataclass
 class Contract:
     id: str
-    job_id: str
+    job_id: JobId
     capability: str
     prime: str
     spec: str
     rubric: str
-    max_price: int
+    max_price: Micros
     advance_frac: float
     announced: int
     deadline: int
     bids: dict[str, int] = field(default_factory=dict)
     status: ContractStatus = S.OPEN
     winner: str | None = None
-    price: int | None = None
-    advance: int = 0
+    price: Micros | None = None
+    advance: Micros = 0
     artifact: str | None = None
     cites: tuple[str, ...] = ()
     reason: str = ""
@@ -69,12 +71,12 @@ class Contract:
         self.closed = at
 
     # ── the moves ──────────────────────────────────────────────
-    def bid(self, bidder: str, price: int) -> None:
+    def bid(self, bidder: str, price: Micros) -> None:
         if self.status != S.OPEN:
             raise DomainError(f"{self.id} can't take bids: it is {self.status}")
         self.bids[bidder] = price
 
-    def award(self, bidder: str, price: int, advance: int, *, deliver_by: int) -> None:
+    def award(self, bidder: str, price: Micros, advance: Micros, *, deliver_by: int) -> None:
         self._move(S.AWARDED)
         self.winner, self.price, self.advance, self.deadline = bidder, price, advance, deliver_by
 

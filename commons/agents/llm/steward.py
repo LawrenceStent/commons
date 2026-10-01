@@ -28,6 +28,7 @@ from commons.agents.scripted.base import Strategy
 from commons.application.observation import ActionsAPI, Observation, Outcome
 from commons.application.ports import ModelBackend, ModelError, ToolCall, ToolResult
 from commons.domain.grading import strip_tags
+from commons.domain.ids import PlaybookId
 from commons.substrate.ledger import InsufficientFunds
 
 MEMBER_SYSTEM = """You are a working member of a co-operative team. Your steward has asked you for one piece of \
@@ -207,7 +208,7 @@ class LLMStrategy(Strategy):
             return Outcome(False, f"bad arguments for {call.name}: {e}")
 
     def commission(self, obs: Observation, act: ActionsAPI, ref: str, capability: str, instructions: str,
-                   playbook_id: str | None, sources=()) -> Outcome:
+                   playbook_id: PlaybookId | None, sources=()) -> Outcome:
         obs = act.observe()  # the job may have been claimed earlier this turn
         if capability not in obs.capabilities:
             return Outcome(False, f"none of your members can do {capability}; announce a contract instead")

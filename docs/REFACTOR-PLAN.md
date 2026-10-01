@@ -178,8 +178,11 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
 - [x] R4.4 Job code in the world and executor uses the aggregate. Two detours went with it: passed jobs used to be set
       back to `claimed` before paying (after a deferred outcome, and when grants were shared) only so the old code path
       would accept them; the aggregate pays from `graded` directly. Golden identical
-- [ ] R4.5 `Micros` and id NewTypes on every public signature
-- [ ] **Done when:** no status comparisons outside the aggregates; golden identical
+- [x] R4.5 `Micros` (`domain/money.py`) and id NewTypes (`domain/ids.py`) on money and id parameters across domain,
+      substrate, application and agents (the wire messages in `protocol` keep plain types)
+- [x] **Done when:** no status comparisons outside the aggregates; golden identical. Amended 1 Oct: no status *changes*
+      outside the aggregates (none remain). Reading a status to select ("the open contracts") stays where the query is,
+      through the enums; moving every query into the aggregates would add methods without adding safety
 
 ### R5. The economy as a policy, test-first (M) — S4
 - [ ] R5.1 `PaymentPolicy` with `MarketPayment` and `GrantPayment` (tests first)
@@ -239,6 +242,11 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
 - [ ] **Done when:** the layer test has no exceptions; every audit finding is closed or explicitly deferred
 
 ---
+
+### Proposed: R13. Type checking (needs your decision)
+- With named types in place, a type checker can hold them. `pyright` (basic mode) reports 247 errors today, mostly
+  `None` handling and loosely typed dicts. Proposed: make it clean, then run it in the test suite so it stays clean.
+  Not started: it wasn't in the approved scope.
 
 ## 4. Risks and how they're handled
 

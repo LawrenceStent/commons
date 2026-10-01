@@ -16,6 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from commons.domain.errors import DomainError
+from commons.domain.money import Micros
 from commons.domain.status import JobStatus
 
 S = JobStatus
@@ -41,14 +42,14 @@ class Part:
 class MarketJob:
     id: str
     title: str
-    reward: int
+    reward: Micros
     parts: dict[str, Part]
     posted: int
     deadline: int  # claim-by while on the board; submit-by once claimed
     prime: str | None = None
     status: JobStatus = JobStatus.OPEN
     scores: dict[str, float] = field(default_factory=dict)
-    bond: int = 0  # posted by the prime on allocation; returned when paid, forfeited if the job fails
+    bond: Micros = 0  # posted by the prime on allocation; returned when paid, forfeited if the job fails
     settle_at: int | None = None  # for deferred outcomes: the cycle the grader settles it
 
     @property
@@ -73,7 +74,7 @@ class MarketJob:
         self.status = to
 
     # ── the moves ──────────────────────────────────────────────
-    def claim(self, prime: str, *, deadline: int, bond: int = 0) -> None:
+    def claim(self, prime: str, *, deadline: int, bond: Micros = 0) -> None:
         self._move(S.CLAIMED)
         self.prime, self.deadline, self.bond = prime, deadline, bond
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from commons.domain.ids import GoalId, IdeaId
 from commons.domain.status import GoalStatus, IdeaStatus
 
 MAX_ACTIVE_GOALS = 8
@@ -33,7 +34,7 @@ class Goal:
     created: int
     updated: int
     status: GoalStatus = GoalStatus.ACTIVE
-    idea_id: str | None = None
+    idea_id: IdeaId | None = None
     outcome: str = ""
 
     @property
@@ -48,7 +49,7 @@ class Idea:
     detail: str
     cycle: int
     status: IdeaStatus = IdeaStatus.NEW
-    goal_id: str | None = None
+    goal_id: GoalId | None = None
 
 
 @dataclass

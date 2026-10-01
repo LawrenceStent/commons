@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from commons.domain.compute import Usage
+from commons.domain.ids import IdeaId, JobId
+from commons.domain.money import Micros
 from commons.domain.status import VentureStatus
 
 MAX_PARTS = 3
@@ -23,17 +25,17 @@ class Venture:
     cycle: int
     status: VentureStatus = VentureStatus.PENDING
     score: int | None = None
-    reward: int = 0
+    reward: Micros = 0
     reason: str = ""
-    job_id: str | None = None
-    idea_id: str | None = None
+    job_id: JobId | None = None
+    idea_id: IdeaId | None = None
 
 
 @dataclass(frozen=True)
 class Appraisal:
     score: int  # 0..10
     reason: str
-    cost: int = 0
+    cost: Micros = 0
     model: str | None = None
     price_as: str | None = None
     usage: Usage | None = None

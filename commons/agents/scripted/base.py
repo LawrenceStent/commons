@@ -14,6 +14,7 @@ import random
 
 from commons.application.observation import ActionsAPI, BidView, ContractView, JobView, Observation
 from commons.domain.grading import StubGrader, is_tagged, tagged
+from commons.domain.money import Micros
 from commons.domain.status import ContractStatus
 
 _read = StubGrader()
@@ -28,7 +29,7 @@ class Strategy:
     name = "base"
     gossips = True
 
-    def __init__(self, work_cost: int | None = None, markup: float = 1.6, refuse_below: float = 0.35,
+    def __init__(self, work_cost: Micros | None = None, markup: float = 1.6, refuse_below: float = 0.35,
                  explore: float = 0.1, max_jobs: int = 2, publish_after: int = 5):
         self.work_cost = work_cost
         self.markup = markup

@@ -17,6 +17,8 @@ from commons.application import population
 from commons.application import ventures as ventures_mod
 from commons.application.observation import Outcome
 from commons.domain.goals import MAX_ACTIVE_GOALS, MAX_STEPS, Goal, Idea, Step
+from commons.domain.ids import ContractId, GoalId, IdeaId, JobId, PassageId, PlaybookId, ProposalId
+from commons.domain.money import Micros
 from commons.domain.status import LIVE_CONTRACT, ContractStatus, IdeaStatus, JobStatus
 from commons.protocol import Envelope, Message
 from commons.protocol.contract import Announce, Award, Bid, Deliver
@@ -28,8 +30,8 @@ from commons.substrate.ledger import InsufficientFunds, purse
 
 if TYPE_CHECKING:
     from commons.application.world import World
-    from commons.domain.contract import Contract
     from commons.domain.community import Community
+    from commons.domain.contract import Contract
 
 MAX_ARTIFACT = 4000
 MAX_NOTE = 500
@@ -57,7 +59,7 @@ class Actions:
         self.me.capacity -= 1
         return None
 
-    def _contract(self, contract_id: str) -> Contract | None:
+    def _contract(self, contract_id: ContractId) -> Contract | None:
         return self.w.contracts.get(contract_id)
 
     def _cites_ok(self, cites: tuple[str, ...]) -> Outcome | None:
@@ -65,7 +67,7 @@ class Actions:
         return Outcome(False, f"unknown playbook(s): {', '.join(unknown)}") if unknown else None
 
     # ── market ─────────────────────────────────────────────────
-    def claim(self, job_id: str) -> Outcome:
+    def claim(self, job_id: JobId) -> Outcome:
         job = self.w.jobs.get(job_id)
         if job is None or job.status != JobStatus.OPEN:
             return Outcome(False, f"job {job_id} is not on the board")
@@ -90,7 +92,7 @@ class Actions:
         job.claim(self.me.name, deadline=w.cycle + p.job_ttl)
         return Outcome(True, f"claimed {job_id}; submit all parts by cycle {job.deadline}", job_id)
 
-    def do_part(self, job_id: str, capability: str, artifact: str, cites: tuple[str, ...] = ()) -> Outcome:
+    def do_part(self, job_id: JobId, capability: str, artifact: str, cites: tuple[str, ...] = ()) -> Outcome:
         job = self.w.jobs.get(job_id)
         if job is None or job.prime != self.me.name or job.status != JobStatus.CLAIMED:
             return Outcome(False, f"you are not working on job {job_id}")
@@ -112,7 +114,7 @@ class Actions:
         return Outcome(True, f"{capability} part of {job_id} done")
 
     # ── contract-net ───────────────────────────────────────────
-    def announce(self, job_id: str, capability: str, max_price: int, advance_frac: float) -> Outcome:
+    def announce(self, job_id: JobId, capability: str, max_price: Micros, advance_frac: float) -> Outcome:
         job = self.w.jobs.get(job_id)
         if job is None or job.prime != self.me.name or job.status != JobStatus.CLAIMED:
             return Outcome(False, f"you are not working on job {job_id}")
@@ -131,7 +133,7 @@ class Actions:
         self.w.open_contract(cid, job, capability, self.me.name, max_price, advance_frac)
         return Outcome(True, f"announced {cid}; bids arrive from next turn", cid)
 
-    def bid(self, contract_id: str, price: int) -> Outcome:
+    def bid(self, contract_id: ContractId, price: Micros) -> Outcome:
         c = self._contract(contract_id)
         if c is None or c.status != ContractStatus.OPEN:
             return Outcome(False, f"contract {contract_id} is not open")
@@ -152,7 +154,7 @@ class Actions:
         c.bid(self.me.name, price)
         return Outcome(True, f"bid {price} on {contract_id}")
 
-    def award(self, contract_id: str, bidder: str) -> Outcome:
+    def award(self, contract_id: ContractId, bidder: str) -> Outcome:
         c = self._contract(contract_id)
         if c is None or c.prime != self.me.name or c.status != ContractStatus.OPEN:
             return Outcome(False, f"you have no open contract {contract_id}")
@@ -174,7 +176,7 @@ class Actions:
         self.w.award_contract(c, bidder, price, advance)
         return Outcome(True, f"awarded {contract_id} to {bidder} at {price}; advance {advance} paid")
 
-    def deliver(self, contract_id: str, artifact: str, cites: tuple[str, ...] = ()) -> Outcome:
+    def deliver(self, contract_id: ContractId, artifact: str, cites: tuple[str, ...] = ()) -> Outcome:
         c = self._contract(contract_id)
         if c is None or c.winner != self.me.name or c.status != ContractStatus.AWARDED:
             return Outcome(False, f"you have no awarded contract {contract_id} to deliver")
@@ -188,7 +190,7 @@ class Actions:
         self.w.deliver_contract(c, artifact[:MAX_ARTIFACT], tuple(cites))
         return Outcome(True, f"delivered {contract_id}; {c.prime} reviews by cycle {c.deadline}")
 
-    def review(self, contract_id: str, accept: bool, reason: str = "") -> Outcome:
+    def review(self, contract_id: ContractId, accept: bool, reason: str = "") -> Outcome:
         if self.w.params.grader_reviews:
             return Outcome(False, "the grader judges deliveries; there is nothing for you to review")
         c = self._contract(contract_id)
@@ -201,7 +203,7 @@ class Actions:
         self.w.close_review(c, accept, reason[:300])
         return Outcome(True, f"{'accepted' if accept else 'rejected'} {contract_id}")
 
-    def attest(self, contract_id: str, outcome: float) -> Outcome:
+    def attest(self, contract_id: ContractId, outcome: float) -> Outcome:
         c = self._contract(contract_id)
         if c is None or c.winner != self.me.name or c.status not in (ContractStatus.ACCEPTED, ContractStatus.REJECTED, ContractStatus.FAILED):
             return Outcome(False, f"no closed contract {contract_id} where you were the contractor")
@@ -213,7 +215,7 @@ class Actions:
         c.rated_by_winner()
         return Outcome(True, f"rated {c.prime} {outcome:.2f} on {contract_id}")
 
-    def dispute(self, contract_id: str, reason: str) -> Outcome:
+    def dispute(self, contract_id: ContractId, reason: str) -> Outcome:
         """Take a rejection to audit. The grader judges the delivery against the part's rubric.
         Found for you: the prime pays what it owed plus your audit fee, and the audit counts
         against it. Found against you: you lose the fee, and the audit counts against you."""
@@ -242,7 +244,7 @@ class Actions:
             return err
         return population.propose_spawn(self.w, self.me, role)
 
-    def second_spawn(self, proposal_id: str) -> Outcome:
+    def second_spawn(self, proposal_id: ProposalId) -> Outcome:
         return population.second_spawn(self.w, self.me, proposal_id)
 
     def retire(self) -> Outcome:
@@ -258,10 +260,10 @@ class Actions:
             return err
         return population.propose_merge(self.w, self.me, target)
 
-    def accept_merge(self, proposal_id: str) -> Outcome:
+    def accept_merge(self, proposal_id: ProposalId) -> Outcome:
         return population.accept_merge(self.w, self.me, proposal_id)
 
-    def learn(self, capability: str, playbook_id: str | None = None) -> Outcome:
+    def learn(self, capability: str, playbook_id: PlaybookId | None = None) -> Outcome:
         if err := self._use_capacity():
             return err
         return population.learn(self.w, self.me, capability, playbook_id)
@@ -283,7 +285,7 @@ class Actions:
         self.w.add_playbook(pid, self.me.name, capability, title[:120], text[:MAX_ARTIFACT])
         return Outcome(True, f"published playbook {pid}; you earn royalties whenever it is cited", pid)
 
-    def read_playbook(self, playbook_id: str) -> Outcome:
+    def read_playbook(self, playbook_id: PlaybookId) -> Outcome:
         pb = self.w.library.get(playbook_id)
         if pb is None:
             return Outcome(False, f"no playbook {playbook_id}")
@@ -346,7 +348,7 @@ class Actions:
         lines = [f"{p.id} ({p.source}): {' '.join(p.text.split())[:160]}…" for p, _ in hits]
         return Outcome(True, "Archive passages (read one in full with read_archive):\n" + "\n".join(lines))
 
-    def read_archive(self, passage_id: str) -> Outcome:
+    def read_archive(self, passage_id: PassageId) -> Outcome:
         """Free: one archive passage in full, as reference material."""
         p = self.w.archive.get(str(passage_id))
         if p is None:
@@ -363,7 +365,7 @@ class Actions:
         return self.w.web_call(self.me.name, self.actor, "web_fetch", url)
 
     # ── ventures ───────────────────────────────────────────────
-    def propose_venture(self, title: str, pitch: str, parts: list, idea_id: str | None = None) -> Outcome:
+    def propose_venture(self, title: str, pitch: str, parts: list, idea_id: IdeaId | None = None) -> Outcome:
         """Propose work of your own. Rules refuse at once; the appraisal comes at the start of next cycle."""
         norm = []
         for part in parts or []:
@@ -400,7 +402,7 @@ class Actions:
         plans.trim()
         return Outcome(True, f"idea {i.id} recorded", i.id)
 
-    def set_goal(self, title: str, steps: list[str], idea_id: str | None = None) -> Outcome:
+    def set_goal(self, title: str, steps: list[str], idea_id: IdeaId | None = None) -> Outcome:
         plans = self.w.plans[self.me.name]
         if len(plans.active()) >= MAX_ACTIVE_GOALS:
             return Outcome(False, f"you already have {MAX_ACTIVE_GOALS} active goals; finish or drop one first")
@@ -415,7 +417,7 @@ class Actions:
                 i.status, i.goal_id = IdeaStatus.ADOPTED, g.id
         return Outcome(True, f"goal {g.id} set with {len(steps)} steps", g.id)
 
-    def update_goal(self, goal_id: str, step: int | None = None, done: bool | None = None, note: str = "",
+    def update_goal(self, goal_id: GoalId, step: int | None = None, done: bool | None = None, note: str = "",
                     status: str | None = None) -> Outcome:
         g = self.w.plans[self.me.name].goals.get(goal_id)
         if g is None:
@@ -442,7 +444,7 @@ class Actions:
         self.w.journal[self.me.name].append(f"[cycle {self.w.cycle}] {text[:MAX_NOTE]}")
         return Outcome(True, "noted")
 
-    def spend(self, amount: int, memo: str) -> Outcome:
+    def spend(self, amount: Micros, memo: str) -> Outcome:
         try:
             self.w.meter.charge(self.me.name, amount, cycle=self.w.cycle, memo=memo)
             return Outcome(True, f"spent {amount}")

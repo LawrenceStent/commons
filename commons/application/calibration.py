@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from commons.application.graders import GradingError
+from commons.domain.money import Micros
 from commons.domain.ventures import AppraisalError, Venture
 
 
@@ -28,7 +29,7 @@ class Result:
     case: Case
     score: float | None
     reason: str
-    cost: int
+    cost: Micros
     ms: int | None
     error: str | None = None
 

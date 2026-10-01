@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING
 
 from commons.application.observation import Outcome
 from commons.domain.community import Community
+from commons.domain.ids import PlaybookId
 from commons.domain.status import ContractStatus, JobStatus, ProposalStatus
 from commons.protocol.population import Fork, Merge, Retire, Spawn
 from commons.substrate.ledger import InsufficientFunds, purse
@@ -189,7 +190,7 @@ def accept_merge(w: World, me: Community, pid: str) -> Outcome:
 
 
 # ── learn ──────────────────────────────────────────────────────
-def learn(w: World, me: Community, capability: str, playbook_id: str | None = None) -> Outcome:
+def learn(w: World, me: Community, capability: str, playbook_id: PlaybookId | None = None) -> Outcome:
     p = w.params
     if capability in me.capabilities:
         return Outcome(False, f"you already have {capability}")

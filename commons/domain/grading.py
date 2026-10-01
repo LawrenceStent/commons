@@ -12,12 +12,13 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from commons.domain.compute import Usage
+from commons.domain.money import Micros
 
 
 @dataclass(frozen=True)
 class Grade:
     score: float  # 0..1
-    cost: int = 0  # micro-units spent grading, charged to the treasury
+    cost: Micros = 0  # micro-units spent grading, charged to the treasury
     reason: str = ""
     # set when a model did the grading
     model: str | None = None  # what answered
@@ -55,7 +56,7 @@ class StubGrader:
     """Reads the quality a scripted artifact declares. Untagged text scores zero. `cost` stands
     in for what a real grading call would charge the treasury."""
 
-    def __init__(self, cost: int = 0):
+    def __init__(self, cost: Micros = 0):
         self.cost = cost
 
     def grade(self, spec: str, rubric: str, artifact: str) -> Grade:

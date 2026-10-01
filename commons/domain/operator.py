@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from commons.domain.money import Micros
+
 MAX_DIRECTIVES = 4_000  # characters per co-op (all.md + its own file)
 MAX_CONTEXT = 12_000  # characters of reference material per co-op
 LIMIT_KEYS = {"forbid", "max_price", "max_jobs", "thinking_budget"}
@@ -35,9 +37,9 @@ def _expand_forbid(names) -> frozenset[str]:
 @dataclass(frozen=True)
 class Limits:
     forbid: frozenset[str] = frozenset()
-    max_price: int | None = None
+    max_price: Micros | None = None
     max_jobs: int | None = None
-    thinking_budget: int | None = None
+    thinking_budget: Micros | None = None
 
     def describe(self) -> list[str]:
         out = []

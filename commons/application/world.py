@@ -59,12 +59,14 @@ from commons.application.ports import WebError, WebPort, host_of
 from commons.application.ratings import Ratings
 from commons.domain.archive import ArchiveIndex
 from commons.domain.archive import citations as archive_citations
-from commons.domain.contract import Contract
 from commons.domain.community import Community
+from commons.domain.contract import Contract
 from commons.domain.gate import Request as GateRequest
 from commons.domain.goals import Plans
 from commons.domain.grading import Grade, Grader, StubGrader
+from commons.domain.ids import ContractId, JobId
 from commons.domain.market import MarketJob, Part
+from commons.domain.money import Micros
 from commons.domain.pack import Pack
 from commons.domain.pack import load as load_pack
 from commons.domain.ratings import EVIDENCE
@@ -96,18 +98,18 @@ from commons.substrate.telemetry import Hub
 class Params:
     seed: int = 0
     reputation: bool = True  # False = the control run: primes can't tell bidders apart
-    treasury_seed: int = 2_000_000
-    treasury_reserve: int = 2_000_000  # the treasury stops taking its 20% at this balance
-    purse_seed: int = 150_000
-    basic_budget: int = 3_000  # per cycle, to communities whose purse is below floor_cap
-    floor_cap: int = 8_000  # two cycles of one member's upkeep
-    upkeep: int = 4_000  # per member, per cycle
+    treasury_seed: Micros = 2_000_000
+    treasury_reserve: Micros = 2_000_000  # the treasury stops taking its 20% at this balance
+    purse_seed: Micros = 150_000
+    basic_budget: Micros = 3_000  # per cycle, to communities whose purse is below floor_cap
+    floor_cap: Micros = 8_000  # two cycles of one member's upkeep
+    upkeep: Micros = 4_000  # per member, per cycle
     actions_per_member: int = 2
     jobs_per_cycle: int = 2
-    job_reward: int = 80_000
+    job_reward: Micros = 80_000
     parts_per_job: int = 2
-    work_cost: int = 10_000  # what a scripted community spends producing one part
-    grade_cost: int = 2_000  # notional treasury cost per graded part (StubGrader)
+    work_cost: Micros = 10_000  # what a scripted community spends producing one part
+    grade_cost: Micros = 2_000  # notional treasury cost per graded part (StubGrader)
     # Reviews (your decision, 26 Sep, option B): the grader judges every delivery against the part's rubric.
     # Pass = the prime pays the rest; fail = rejected. The grade is reused when the job is graded. The prime
     # had a conflict of interest (rejecting saves money) and LLM primes rejected good work. False restores
@@ -122,14 +124,14 @@ class Params:
     # Pay scales with quality: this share of the reward depends on the mean part score (1.0 pays in full, 0.5
     # pays 1 - share/2). Every part must still pass. 0 = the old flat reward.
     quality_pay: float = 0.5
-    venture_fee: int = 5_000  # paid to the treasury when proposing a venture (deters spam)
+    venture_fee: Micros = 5_000  # paid to the treasury when proposing a venture (deters spam)
     venture_budget: int = 2  # ventures the market will take on per cycle, best-scored first
     venture_min_score: int = 5  # appraisals below this are worth nothing
     grade_retries: int = 3  # cycles a complete job waits for an unavailable grader before it fails
     # K4: the economy. "market" pays each passing job its reward; "grant" shares a fixed budget per cycle among
     # passing work by value (see the module docstring). A pack sets these.
     economy: str = "market"
-    grant_budget: int = 0
+    grant_budget: Micros = 0
     grant_cap_cycles: int = 3  # budgets the pool may bank when too little work passes
     outputs_keep: int = 200  # paid work kept in memory for the scorecard (the full record is in the activity log)
     # The world refuses bids (and awards) from anyone below this line, in the commons' pooled standing or in
@@ -144,12 +146,12 @@ class Params:
     bid_window: int = 3  # cycles an announcement stays open
     deliver_ttl: int = 3
     review_ttl: int = 2
-    publish_cost: int = 15_000
+    publish_cost: Micros = 15_000
     gossip_every: int = 5
     gossip_fanout: int = 3
     base_allowance: int = 12
     decay: float = 0.995
-    daily_ceiling: int = 10**12
+    daily_ceiling: Micros = 10**12
     verify: bool = True
     ledger_path: str = ":memory:"  # a file under runs/ keeps long runs out of RAM
     journal_keep: int = 20
@@ -169,15 +171,15 @@ class Params:
     # population and capabilities (commons/application/population.py)
     max_members: int = 7
     max_communities: int = 12
-    spawn_fee: int = 300_000
+    spawn_fee: Micros = 300_000
     spawn_window: int = 3
     merge_window: int = 3
     fork_good_keep: float = 0.5  # share of a parent's good record a fork inherits (bad is kept in full)
-    learn_cost: int = 500_000
+    learn_cost: Micros = 500_000
     learn_playbook_discount: float = 0.4
     learn_royalty: float = 0.1  # of learn_cost, to the author of the playbook learned from
     # disputes
-    audit_cost: int = 6_000  # paid by the disputing contractor; refunded by the prime if the audit finds for them
+    audit_cost: Micros = 6_000  # paid by the disputing contractor; refunded by the prime if the audit finds for them
     dispute_window: int = 3
 
 
@@ -467,18 +469,18 @@ class World:
             del self.contracts[k]
 
     # ── called by the actions executor ────────────────────────
-    def contracts_for(self, job_id: str, capability: str, statuses: tuple[str, ...]) -> list[Contract]:
+    def contracts_for(self, job_id: JobId, capability: str, statuses: tuple[str, ...]) -> list[Contract]:
         return [c for c in self.contracts.values()
                 if c.job_id == job_id and c.capability == capability and c.status in statuses]
 
-    def open_contract(self, cid: str, job: MarketJob, capability: str, prime: str, max_price: int, advance_frac: float) -> None:
+    def open_contract(self, cid: ContractId, job: MarketJob, capability: str, prime: str, max_price: Micros, advance_frac: float) -> None:
         part = job.parts[capability]
         c = Contract(cid, job.id, capability, prime, part.spec, part.rubric, max_price, advance_frac,
                      announced=self.cycle, deadline=self.cycle + self.params.bid_window)
         self.contracts[cid] = c
         self._stage(c, ContractStatus.OPEN)
 
-    def award_contract(self, c: Contract, bidder: str, price: int, advance: int) -> None:
+    def award_contract(self, c: Contract, bidder: str, price: Micros, advance: Micros) -> None:
         c.award(bidder, price, advance, deliver_by=self.cycle + self.params.deliver_ttl)
         self._stat(bidder, "won")
         self._stat(bidder, "earned", advance)
@@ -629,7 +631,7 @@ class World:
         except GradingError as e:
             return e
 
-    def _apply_job_grades(self, jid: str, graded: list) -> None:
+    def _apply_job_grades(self, jid: JobId, graded: list) -> None:
         job = self.jobs.get(jid)
         if job is None or job.status != JobStatus.CLAIMED:
             self.awaiting_grade.pop(jid, None)
@@ -691,7 +693,7 @@ class World:
                 job.record_score(cap, score)
             self._finish_job(job)
 
-    def _settle_review(self, cid: str, g) -> None:
+    def _settle_review(self, cid: ContractId, g) -> None:
         """The grader's verdict on a delivery decides the contract (option B). Under the lock."""
         c = self.contracts.get(cid)
         if c is None or c.status != ContractStatus.DELIVERED:
@@ -728,7 +730,7 @@ class World:
         c.rated_by_winner()
         self._tell(c.winner, "defaulted", f"{c.prime} never paid for {c.id}", c.id)
 
-    def _settle_audit(self, cid: str, g) -> None:
+    def _settle_audit(self, cid: ContractId, g) -> None:
         entry = self.pending_audits[cid]
         c = self.contracts.get(cid)
         if c is None:
@@ -951,7 +953,7 @@ class World:
                                + (f": {r.note}" if r.note else ""), sample["job"])
             self.hub.emit("operator.rating", self.cycle, id=r.id, job=sample["job"], rating=r.rating, note=r.note)
 
-    def _pay_job(self, job: MarketJob, payout: int | None = None) -> None:
+    def _pay_job(self, job: MarketJob, payout: Micros | None = None) -> None:
         prime = job.prime
         weights: Counter[str] = Counter()
         for part in job.parts.values():
