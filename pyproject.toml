@@ -25,3 +25,4 @@ packages = ["substrate", "protocol", "society", "sim", "console"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["golden: the golden master (tests/golden): today's runs, reproduced exactly"]

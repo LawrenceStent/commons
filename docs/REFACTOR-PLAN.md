@@ -134,8 +134,8 @@ as thin shims that call the new CLI, until you decide to drop them.
 Sizes are relative (S, M, L, XL). Tick each item when it's committed.
 
 ### R0. Safety net (S)
-- [ ] R0.1 Golden-master harness and fixtures in `tests/golden/` (§2), run alone with `pytest -m golden`
-- [ ] R0.2 Recording wrapper that captures what each co-op is told (tests only)
+- [x] R0.1 Golden-master harness and fixtures in `tests/golden/` (§2), run alone with `pytest -m golden`
+- [x] R0.2 Recording wrapper that captures what each co-op is told (tests only)
 - [ ] R0.3 Mutation check: changing one posting fails the golden master (proved, then reverted)
 - [ ] R0.4 `tests/test_layers.py`: the dependency rule from the AST, with today's violations as named exceptions
 - [ ] R0.5 `tools/arch_metrics.py`: the audit's measurements, with a baseline recorded here
