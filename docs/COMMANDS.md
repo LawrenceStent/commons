@@ -11,12 +11,13 @@ Since the refactor (R3, 1 Oct) there is one command, `commons`, with a subcomman
 | `uv run commons approve` | Decides what agents asked the gate for (web reads) | Nothing | [approve](#commons-approve) |
 | `uv run commons rate` | Rates the work a society set aside for you | Nothing | [rate](#commons-rate) |
 | `uv run commons calibrate` | Checks a grader or appraiser against hand-labelled cases | One call per case (per lens with `--panel`) | [calibrate](#commons-calibrate) |
-| `uv run uvicorn commons.interfaces.console.app:app` | The dashboard on a scripted society | Nothing | [dashboard](#the-dashboard) |
+| `uv run commons console` | The dashboard on a scripted society | Nothing | [console](#commons-console) |
+| `uv run commons metrics` | Architecture measurements (development) | Nothing | [metrics](#commons-metrics) |
+| `uv run commons golden` | Checks, or regenerates, the golden master (development) | Nothing | [golden](#commons-golden) |
 | `uv run pytest` | The test suite, golden master included | Nothing | [tests](#tests) |
-| `uv run python -m tests.golden.update` | Regenerates the golden-master fixtures | Nothing | [tests](#tests) |
-| `uv run python -m tools.arch_metrics` | Architecture measurements | Nothing | [metrics](#architecture-metrics) |
 
-`python -m commons …` works the same as `uv run commons …` inside the virtual environment. The old commands
+`python -m commons …` works the same as `uv run commons …` inside the virtual environment, and `uv run commons
+<command> --help` lists a command's options. The old commands
 (`python -m sim`, `sim.live`, `sim.found`, `sim.rate`, `sim.approve`, `sim.calibrate`) still work: each prints the
 new command and runs it.
 
@@ -192,38 +193,62 @@ uv run commons calibrate --pack tech_for_good --target appraiser --backend lmstu
 
 Writes nothing. Last results: see `docs/CHECKLIST.md`.
 
-## The dashboard
+## commons console
 
-`commons run --serve` shows a live run. To watch a scripted society instead:
+The dashboard on a scripted society. `commons run --serve` shows a live run instead.
 
 ```sh
-uv run uvicorn commons.interfaces.console.app:app      # http://localhost:8000; Ctrl-C to stop
+uv run commons console                          # http://localhost:8000; Ctrl-C to stop
+uv run commons console --pack tech_for_good --seed 3 --port 8123
 ```
 
-The page has controls (pause, resume, step, speed, pull and reset the kill-switch), every component's panel, the scorecard, the
-Gate panel (approve requests in batches, standing approvals, revoke) and the Operator panel (edit directives live).
-It pauses itself if its process passes 2 GB.
+| Option | Default | Meaning |
+|---|---|---|
+| `--pack NAME` | `earn_online` | Which pack |
+| `--seed N` | 0 | Random seed |
+| `--port N` | 8000 | Where it listens |
+
+The page has controls (pause, resume, step, speed, pull and reset the kill-switch), every component's panel, the
+scorecard, the Gate panel (approve requests in batches, standing approvals, revoke) and the Operator panel (edit
+directives live). It pauses itself if its process passes 2 GB. `uv run uvicorn commons.interfaces.console.app:app`
+does the same with the default pack.
 
 ## Tests
 
 ```sh
-uv run pytest                          # everything (about 35 s), golden master included
+uv run pytest                          # everything (about 37 s), golden master included
 uv run pytest -m golden                # only the golden master (8 runs, about 5 s)
 uv run pytest tests/test_layers.py     # only the dependency rule
-uv run python -m tests.golden.update   # regenerate the golden fixtures: only after an approved behaviour change
 ```
 
 Commit only when pytest itself exits 0 (`uv run pytest -q > runs/pytest.log 2>&1; rc=$?`), never through a pipe,
 which hides failures. After a deliberate mutation test, delete `__pycache__` before trusting the next run.
 
-## Architecture metrics
+## commons golden
+
+The golden master (`tests/golden/`): today's scripted and fake-model runs, recorded stream by stream (ledger postings,
+telemetry, activity, what each co-op was told, the summary). A refactor must reproduce them exactly.
 
 ```sh
-uv run python -m tools.arch_metrics
+uv run commons golden                                        # check them (the same as pytest -m golden)
+uv run commons golden --update --approved "pay rounds down now"   # regenerate, after an approved behaviour change
 ```
 
-Prints the measurements behind `docs/ARCHITECTURE-AUDIT.md` (sizes, cycles, long functions, hidden imports, status
-strings, economy checks, private access). Re-run after every refactor stage.
+| Option | Meaning |
+|---|---|
+| `--update` | Regenerate every fixture (needs `--approved`) |
+| `--approved WHY` | The approved behaviour change the new fixtures record; refused without it |
+
+Run from the repository root. Regenerating changes what counts as correct, so it is never part of refactoring.
+
+## commons metrics
+
+```sh
+uv run commons metrics
+```
+
+Prints the measurements behind `docs/ARCHITECTURE-AUDIT.md`: sizes, package cycles, the largest class, long functions,
+imports hidden in functions, status strings, economy checks, cross-object private access. Run from the repository root.
 
 ## Local models
 

@@ -263,8 +263,8 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
 - [x] R11.2 Scripts grouped: run, sim, found, approve, rate, calibrate, plus `console` (the dashboard on a scripted
       society), `metrics` (moved from `tools/`) and `golden` (check, or regenerate with `--update --approved "why"`);
       shims for the old paths print the new command. `tests/interfaces/test_cli.py` runs every command through `main`
-- [ ] R11.3 `docs/COMMANDS.md`: every command and script, with its purpose, every option, examples, what it reads
-      and writes, what it costs, and its safety limits
+- [x] R11.3 `docs/COMMANDS.md`: every command and script, with its purpose, every option, examples, what it reads
+      and writes, what it costs, and its safety limits (written in R3.6, extended for console, metrics and golden)
 - [ ] R11.4 Dashboard: queries in `application/queries.py`, panel builders, thin routes; JSON identical by test
 - [ ] **Done when:** `create_app` under 60 lines; every command documented and tested through `main(argv)`
 

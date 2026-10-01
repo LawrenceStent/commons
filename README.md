@@ -16,5 +16,6 @@ uv run pytest                                          # the test suite, golden 
 uv run commons sim 200                                 # a scripted society (default pack: earn_online)
 uv run commons sim 200 --no-rep                        # control run: reputation disabled
 uv run commons run --backend fake                      # a live society with fake models (free)
-uv run uvicorn commons.interfaces.console.app:app      # the dashboard at http://localhost:8000
+uv run commons console                                 # the dashboard at http://localhost:8000
+uv run commons --help                                  # every command (docs/COMMANDS.md has every option)
 ```
