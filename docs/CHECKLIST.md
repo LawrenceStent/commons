@@ -654,8 +654,17 @@ checklists in the plan (R0 to R12), on branch `refactor/architecture`; no featur
       take several passage ids; price local calls with the prefix cache LM Studio actually reuses; then rerun
     - Done (92aca8d). Run 3 (`runs/t4g-live-3.log`) got 2 cycles in before LM Studio was stopped (you needed the
       laptop): 76% of input tokens now cached, 0.09 cr of thinking in 2 cycles against 0.72 cr in 5 before, 8 archive
-      reads instead of dozens; no job finished yet. The stop rule halted the run at once. A full 10-cycle rerun is
-      still to do, at a time the laptop is free
+      reads instead of dozens; no job finished yet. The stop rule halted the run at once
+    - **Run 5 (2 Oct, `runs/t4g-live-5.log`), the full 10 cycles, 25 minutes:** the first job done LLM to LLM and paid.
+      Pilots designed J4 itself and bought its scout part from fieldwork (graded 0.90 and 1.00). Pilots ended
+      richer than it started (0.414 cr from 0.4); fieldwork at 0.135 cr, with two deliveries still to be judged
+      when the run ended. 84% of input cached; 0.51 cr of thinking over 10 cycles (0.72 cr in 5 before). Half the
+      work cites the archive and every citation is valid; 9 page reads. The co-ops traded both ways (5 contracts
+      between them), and the defector's junk was caught again (0.04, rejected); pilots re-announced the part and
+      fieldwork won it
+    - Still weak: pilots' write for the scripted co-op failed on the rubric's 350-word limit (graded 0.40: members
+      don't count words); no assessment named risks (0%); cycles slow from about 1 to 4 minutes as conversations
+      grow; nobody rated the work, so the scorecard's "your rating" rows are empty
 - [ ] K6 Trading pack: paper broker, forward-only, deterministic risk-adjusted evaluator, doctrine per co-op
 - [ ] K7 OSINT pack: sourcing-first evaluator, separate verify co-op, forbidden-target policy enforced in tools
 - [ ] K8 Many societies: registry, CLI, dashboard picker, per-society and total spend caps, slow-cadence scheduler
