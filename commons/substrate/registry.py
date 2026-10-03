@@ -28,6 +28,13 @@ class Registry:
         self._keys[name] = public
         return card
 
+    def __getstate__(self) -> dict:  # the cards hold every key as hex; key objects can't be pickled
+        return {"cards": self.cards}
+
+    def __setstate__(self, state: dict) -> None:
+        self.cards = state["cards"]
+        self._keys = {n: Ed25519PublicKey.from_public_bytes(bytes.fromhex(c.public_key)) for n, c in self.cards.items()}
+
     def key(self, name: str) -> Ed25519PublicKey | None:
         return self._keys.get(name)
 

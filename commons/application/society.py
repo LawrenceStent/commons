@@ -26,6 +26,7 @@ import random
 import threading
 from collections import Counter, defaultdict, deque
 
+from commons.application import saving
 from commons.application.actions import Actions
 from commons.application.cycle import run_cycle
 from commons.application.events import Events
@@ -73,6 +74,10 @@ from commons.substrate.registry import Registry
 from commons.substrate.telemetry import Hub
 
 
+
+def _last_two() -> deque:
+    return deque(maxlen=2)
+
 class Society:
     def __init__(self, params: Params | None = None, population: list[Community] | None = None,
                  hub: Hub | None = None, grader: Grader | None = None, appraiser: Appraiser | None = None,
@@ -105,19 +110,23 @@ class Society:
         self.bus = bus or MemoryBus(Registry(), base_allowance=p.trust.base_allowance, verify=p.run.verify, hub=self.hub)
         self.bus.standing = self.standing  # the bus rations messages by this society's trust
         self.registry = self.bus.registry
-        self.grader = grader or StubGrader(cost=p.market.grade_cost)
-        self.appraiser = appraiser or StubAppraiser()
         self.operator = operator or Operator(None)
         self.archive = archive or ArchiveIndex()  # the society's reference material, searched on demand
         self.ratings = ratings  # your ratings of a sample of the paid work (commons/application/ratings.py)
-        # the web (a WebPort; None = no web at all), behind the gate, whose policy is the operator's [gate] section
-        self.web = web
         self.gate = gate or Gate()
         self.gate.policy = self.operator.gate
-        if self.web:
-            self.web.set_hosts(self.gate.policy.allow_hosts)
+        self.attach(grader, appraiser, web)
         # how passing work is paid: given, or chosen once from the settings
         self.payment = payment or policy_for(p.money.economy, p.money.grant_budget, p.money.grant_cap_cycles)
+
+    def attach(self, grader=None, appraiser=None, web: WebPort | None = None) -> None:
+        """What judges work, and the web (a WebPort; None = no web at all), behind the gate whose policy is the
+        operator's [gate] section: given, or the defaults. Also used when a saved society resumes."""
+        self.grader = grader or StubGrader(cost=self.params.market.grade_cost)
+        self.appraiser = appraiser or StubAppraiser()
+        self.web = web
+        if self.web:
+            self.web.set_hosts(self.gate.policy.allow_hosts)
 
     def _open_records(self) -> None:
         """The society's state: work, knowledge, plans, and what happened."""
@@ -136,7 +145,7 @@ class Society:
         self.proposals: dict[str, Proposal] = {}
         self.thinking_spend: Counter[str] = Counter()  # µcr of model calls, per co-op
         self.cheapest_call: dict[str, int] = {}  # µcr of each co-op's cheapest steward call so far
-        self.transcripts: defaultdict[str, deque] = defaultdict(lambda: deque(maxlen=2))  # LLM turns, newest last
+        self.transcripts: defaultdict[str, deque] = defaultdict(_last_two)  # LLM turns, newest last
         self.plans: defaultdict[str, Plans] = defaultdict(Plans)  # ideas and goals per community
         self.known_capabilities = set(self.pack.capabilities).union(*(c.capabilities for c in self.communities.values()))
         self.turn_order: list[Community] = []  # this cycle's, shuffled (see cycle.py)
@@ -220,6 +229,20 @@ class Society:
         for _ in range(cycles):
             self.step()
         return self
+
+    # ── saving and resuming (commons/application/saving.py) ──
+    def save(self, path) -> None:
+        saving.save(self, path)
+
+    @classmethod
+    def resume(cls, path, **attach) -> Society:
+        return saving.resume(path, **attach)
+
+    def __getstate__(self) -> dict:
+        return saving.state_of(self)
+
+    def __setstate__(self, state: dict) -> None:
+        saving.restore(self, state)
 
     def turn(self, c: Community) -> None:
         with self.lock:

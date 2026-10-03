@@ -37,6 +37,12 @@ class Grading:
         self.citations = Counter()  # archive citations checked: valid / invalid
         self._cite_lock = threading.Lock()  # grading runs in threads
 
+    def __getstate__(self) -> dict:  # the lock belongs to the process (a saved society: commons/application/saving.py)
+        return {k: v for k, v in self.__dict__.items() if k != "_cite_lock"}
+
+    def __setstate__(self, state: dict) -> None:
+        self.__dict__.update(state, _cite_lock=threading.Lock())
+
     def maybe_submit(self, job: MarketJob) -> None:
         """A complete job is submitted for grading at the end of this cycle. Every part must pass for the
         market to pay."""

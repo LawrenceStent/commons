@@ -11,6 +11,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
     Ed25519PublicKey,
 )
+from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat
 from pydantic import BaseModel, ConfigDict
 
 
@@ -48,6 +49,12 @@ class Identity:
 
     def sign(self, data: bytes) -> bytes:
         return self._key.sign(data)
+
+    def __getstate__(self) -> dict:  # the key as raw bytes: key objects can't be pickled (a saved society)
+        return {"id": self.id, "key": self._key.private_bytes(Encoding.Raw, PrivateFormat.Raw, NoEncryption())}
+
+    def __setstate__(self, state: dict) -> None:
+        self.__init__(state["id"], Ed25519PrivateKey.from_private_bytes(state["key"]))
 
 
 class Envelope(BaseModel):

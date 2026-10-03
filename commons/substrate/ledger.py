@@ -78,6 +78,7 @@ class Ledger:
         if currency not in EXTERNAL:
             raise ValueError(f"unknown currency {currency}")
         self.hub = hub
+        self.path = path
         self.currency = currency
         # the console builds a world on one thread and drives it from the event loop's
         self.db = sqlite3.connect(path, isolation_level=None, check_same_thread=False)
@@ -87,6 +88,17 @@ class Ledger:
         self._balances: dict[tuple[str, str], int] = {
             (a, c): n for a, c, n in self.db.execute("SELECT account, currency, amount FROM balances")
         }
+
+    def __getstate__(self) -> dict:
+        """A saved society keeps its ledger on disk; the save records the balances, to check the file against."""
+        if self.path == ":memory:":
+            raise ValueError("a saved society needs an on-disk ledger (set Params ledger_path)")
+        return {k: v for k, v in self.__dict__.items() if k != "db"}
+
+    def __setstate__(self, state: dict) -> None:
+        self.__init__(state["path"], state["hub"], state["currency"])
+        if self._balances != state["_balances"]:
+            raise ValueError(f"the ledger {self.path} has changed since the society was saved; it can't be resumed")
 
     def balance(self, account: str, currency: str | None = None) -> int:
         return self._balances.get((account, currency or self.currency), 0)

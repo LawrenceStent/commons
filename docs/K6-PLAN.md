@@ -55,11 +55,11 @@ job part today); news search; shorting or derivatives; anything with real money.
       exist since R3
 
 ### T1. Save and resume (M) — kernel
-- [ ] T1.1 Infrastructure that can't be pickled says so: the ledger reconnects to its file, the hub drops its
+- [x] T1.1 Infrastructure that can't be pickled says so: the ledger reconnects to its file, the hub drops its
       subscribers, the lock is rebuilt; model backends, the web and graders are detached and reattached
-- [ ] T1.2 `Society.save(path)` and `Society.resume(path, ...)`; a saved society needs an on-disk ledger
-- [ ] T1.3 Proof: N cycles straight equals N/2, save, resume, N/2, for both packs, stream for stream
-- [ ] T1.4 LLM co-ops resume with their drafts, journal and plans; their backends come from the run's settings
+- [x] T1.2 `Society.save(path)` and `Society.resume(path, ...)`; a saved society needs an on-disk ledger
+- [x] T1.3 Proof: N cycles straight equals N/2, save, resume, N/2, for both packs, stream for stream
+- [x] T1.4 LLM co-ops resume with their drafts, journal and plans; their backends come from the run's settings
 
 ### T2. Pack desks (M) — kernel
 - [ ] T2.1 `Pack.desk`: tools, an observation section, a cycle phase, saved state

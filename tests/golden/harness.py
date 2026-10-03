@@ -71,7 +71,7 @@ def _build(pack_name: str, seed: int, live: bool, tmp: Path):
     from commons.domain.pack import load
 
     pack = load(pack_name)
-    common = dict(seed=seed, activity_path=str(tmp / "activity.jsonl"))
+    common = dict(seed=seed, activity_path=str(tmp / "activity.jsonl"), ledger_path=str(tmp / "ledger.sqlite"))
     if not live:
         return World(Params(**{**pack.params, **common}), pack=pack)
     from commons.adapters.models import FakeBackend
@@ -92,7 +92,29 @@ def _build(pack_name: str, seed: int, live: bool, tmp: Path):
                  appraiser=LLMAppraiser(backend, model="fake", system=pack.appraiser_system))
 
 
-def capture(name: str) -> dict[str, list[str]]:
+def _resume(world, tmp: Path, live: bool):
+    """Save the society, then resume it into a new object, reattaching what a save leaves out (as a scheduled run
+    would): the fake model for the LLM co-ops, the grader and the appraiser."""
+    from commons.application.society import World
+
+    world.save(tmp / "society.save")
+    world.activity.close()
+    if not live:
+        return World.resume(tmp / "society.save")
+    from commons.adapters.models import FakeBackend
+    from commons.agents.llm.fakes import GOOD_GRADE, competent
+    from commons.application.graders import HybridGrader, LLMGrader
+    from commons.application.ventures import LLMAppraiser
+
+    backend = FakeBackend(respond=lambda *a: GOOD_GRADE, converse=competent)
+    pack = world.pack
+    return World.resume(tmp / "society.save", grader=HybridGrader(LLMGrader(backend, model="fake", system=pack.grader_system)),
+                        appraiser=LLMAppraiser(backend, model="fake", system=pack.appraiser_system), backend=backend)
+
+
+def capture(name: str, split: int | None = None) -> dict[str, list[str]]:
+    """The run's streams. With `split`, it plays `split` cycles, saves, resumes and plays the rest: the streams must
+    be the same as without."""
     from commons.application.services.recorder import summary
 
     pack, seed, cycles, live = RUNS[name]
@@ -100,10 +122,18 @@ def capture(name: str) -> dict[str, list[str]]:
         tmp = Path(d)
         world = _build(pack, seed, live, tmp)
         telemetry: list[str] = []
-        world.hub.subscribe(lambda ev: telemetry.append(_line({"kind": ev.kind, "cycle": ev.cycle, "fields": ev.fields})))
+
+        def record(ev):
+            telemetry.append(_line({"kind": ev.kind, "cycle": ev.cycle, "fields": ev.fields}))
+
+        world.hub.subscribe(record)
         told: list[str] = []
         with _recording_turns(world, told):
-            world.run(cycles)
+            if split:
+                world.run(split)
+                world = _resume(world, tmp, live)
+                world.hub.subscribe(record)
+            world.run(cycles - (split or 0))
         world.ledger.check()
         postings = [_line(row) for row in world.ledger.db.execute(
             "SELECT e.id, e.cycle, e.currency, e.kind, e.memo, p.account, p.amount FROM entries e "

@@ -137,5 +137,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
 _TYPES = {f.name: f.type for f in fields(Params)}
 # one frozen dataclass per group, with the flat settings' names and types: RunConfig, MoneyConfig, MarketConfig, ...
 CONFIGS = {g: make_dataclass(f"{g.capitalize()}Config", [(n, _TYPES[n]) for n in names], frozen=True,
-                             namespace={"__doc__": f"The {g} settings (see commons/application/params.py)."})
+                             namespace={"__doc__": f"The {g} settings (see commons/application/params.py)."},
+                             module=__name__)
            for g, names in GROUPS.items()}
+globals().update({cls.__name__: cls for cls in CONFIGS.values()})  # findable by name, so a saved society can be loaded

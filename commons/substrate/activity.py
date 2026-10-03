@@ -99,6 +99,14 @@ class ActivityLog:
         self._seq = 0
         self._lock = threading.Lock()  # web calls log outside the world's lock
 
+    def __getstate__(self) -> dict:  # the file and the lock belong to this process; resuming reopens the file
+        return {k: v for k, v in self.__dict__.items() if k not in ("_file", "_lock")}
+
+    def __setstate__(self, state: dict) -> None:
+        self.__dict__.update(state)
+        self._file = open(self.path, "a") if self.path else None
+        self._lock = threading.Lock()
+
     def add(self, cycle, community, actor, kind, name, text, ok=None, args=None, why="") -> Entry:
         with self._lock:
             self._seq += 1

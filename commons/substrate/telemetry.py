@@ -56,6 +56,18 @@ class Hub:
                 self._subs.remove(sub)
         return ev
 
+    def __getstate__(self) -> dict:
+        """Saved without its subscribers (they belong to the process that made them; whoever resumes subscribes
+        again), and with the next sequence number as a plain number."""
+        state = self.__dict__.copy()
+        n = next(self._seq)
+        self._seq = itertools.count(n)  # put back the number just taken
+        state.update(_subs=[], _seq=n)
+        return state
+
+    def __setstate__(self, state: dict) -> None:
+        self.__dict__.update(state, _seq=itertools.count(state["_seq"]))
+
     def subscribe(self, fn: Subscriber) -> Callable[[], None]:
         self._subs.append(fn)
         return lambda: fn in self._subs and self._subs.remove(fn)

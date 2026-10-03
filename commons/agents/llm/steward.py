@@ -71,6 +71,14 @@ class LLMStrategy:
         self.member_rounds = member_rounds  # look-ups a member may make (archive, web) before it must write
         self.members = MemberWorker(backend, member_model, member_max_tokens, member_rounds, keep_drafts)
 
+    def __getstate__(self) -> dict:  # a saved society leaves the model out; resuming attaches the run's (saving.py)
+        return {**self.__dict__, "backend": None}
+
+    def attach(self, backend: ModelBackend | None) -> None:
+        if backend is None:
+            raise ValueError("this co-op's agent needs a model backend to resume")
+        self.backend = self.members.backend = backend
+
     @property
     def drafts(self) -> dict[str, Draft]:
         return self.members.drafts
@@ -78,6 +86,7 @@ class LLMStrategy:
     def __deepcopy__(self, memo):
         """A fork gets its own drafts and counters but shares the backend (and its client)."""
         clone = copy.copy(self)
+        clone.backend = self.backend  # copy.copy goes through __getstate__, which leaves the backend out
         clone.members = self.members.fresh()
         return clone
 

@@ -49,6 +49,9 @@ class MemberWorker:
         self.seq = 0  # drafts written, ever: D1, D2, …
         self.commissions = 0  # this turn
 
+    def __getstate__(self) -> dict:  # the model is the run's, not the society's: see LLMStrategy.attach
+        return {**self.__dict__, "backend": None}
+
     def begin_turn(self, system: str, model: str, max_tokens: int) -> None:
         """A new turn: the pack's member instructions and the operator's runtime settings, and a fresh count."""
         self.system, self.model, self.max_tokens, self.commissions = system, model, max_tokens, 0
