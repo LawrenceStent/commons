@@ -95,7 +95,7 @@ class Society:
         self.rng = random.Random(p.run.seed)
         self.cycle = 0
         self.communities = {c.name: c for c in (population or self.pack.population())}
-        self.desk = desk or (self.pack.desk() if self.pack.desk else None)  # the pack's own tools (domain/desk.py)
+        self.desk = desk or (self.pack.desk(p.run.seed) if self.pack.desk else None)  # the pack's own tools (domain/desk.py)
         self._connect(ledger, bus, grader, appraiser, operator, archive, ratings, web, gate, payment)
         self._open_records()
         self.activity = activity or ActivityLog(p.storage.activity_keep, p.storage.activity_path)

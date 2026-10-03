@@ -59,6 +59,7 @@ class FakeMarket:
     seed: int = 0
     start: float = datetime(2026, 10, 5, 9, 0, tzinfo=NEW_YORK).timestamp()  # a Monday, before the US open
     step_seconds: float = 3600.0
+    drift: float = 0.0  # per step, for tests that need a market going one way
     prices: dict[str, float] = field(default_factory=dict)
     at: float | None = None
     rng: random.Random | None = None
@@ -73,7 +74,7 @@ class FakeMarket:
         if now != self.at:
             self.at = now
             for s in sorted(self.prices):  # every symbol, in a fixed order, so the path doesn't depend on who asks
-                shock = self.rng.gauss(0.0, HOURLY_VOL["crypto" if is_crypto(s) else "us"])
+                shock = self.rng.gauss(self.drift, HOURLY_VOL["crypto" if is_crypto(s) else "us"])
                 if is_crypto(s) or us_open(now):
                     self.prices[s] *= math.exp(shock)
         return {s: Quote(s, round(self.prices[s], 4), now, is_crypto(s) or us_open(now)) for s in symbols

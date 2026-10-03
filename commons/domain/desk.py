@@ -1,4 +1,4 @@
-"""Desks: what a pack adds to the kernel when its work isn't jobs and parts (a trading pack's broker, say).
+"""Desks: what a pack adds to the kernel when its work isn't jobs and parts (accounts it keeps for each co-op, say).
 
 A desk has its own tools, a section of every co-op's observation, two phases in every cycle (one when it opens, after
 the start, one when it closes, before the records), and state that is saved with the society. Its tools run through

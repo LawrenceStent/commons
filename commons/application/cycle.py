@@ -5,7 +5,7 @@ models or the web, and takes the lock itself only to apply what came back). Turn
 parallel: with `parallel_turns`, model calls overlap and every action still takes the lock.
 
     start         the cycle number; the operator's folder re-read; the gate's day begins; the bus's allowances reset
-    desk_open     the pack's desk, if it has one, opens the cycle (a broker marks to market, say)
+    desk_open     the pack's desk, if it has one, opens the cycle (fetching the day's data, say)
     fund          the economy tops up its pool, if it keeps one
     ratings       your new ratings become evidence
     floor         the treasury tops up poor purses

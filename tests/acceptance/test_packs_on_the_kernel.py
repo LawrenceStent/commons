@@ -13,7 +13,8 @@ from tests.paths import ROOT
 KERNEL = ["commons", "sim"]  # every layer of the kernel, and the old commands' shims
 DOMAIN = re.compile(r'"(research|build|design|write)"|product|bike|espresso|buyer|marketplace|launch kit|'
                     r'coop-[abc]|"studio"|"lab"|tagline|'
-                    r'"(scout|assess)"|drinking water|volunteer|funder or council', re.IGNORECASE)  # packs 0 and 1
+                    r'"(scout|assess)"|drinking water|volunteer|funder or council|'
+                    r'broker|stop.?loss|benchmark|BTC|SPY|coinbase|yahoo|drawdown|sortino', re.IGNORECASE)  # packs 0-2
 
 
 def test_no_domain_words_in_the_kernel():

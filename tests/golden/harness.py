@@ -28,6 +28,8 @@ VOLATILE = {"at", "ms", "elapsed", "seconds", "started", "ended", "time"}  # wal
 
 RUNS = {f"scripted-{pack}-{seed}": (pack, seed, 200, False) for pack in ("earn_online", "tech_for_good") for seed in (0, 3, 7)}
 RUNS |= {f"live-fake-{pack}": (pack, 0, 10, True) for pack in ("earn_online", "tech_for_good")}
+RUNS |= {f"scripted-trading-{seed}": ("trading", seed, 100, False) for seed in (0, 3, 7)}  # K6: settles every 24
+RUNS |= {"live-fake-trading": ("trading", 0, 30, True)}
 
 
 def _clean(value):

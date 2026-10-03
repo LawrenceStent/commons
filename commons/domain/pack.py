@@ -97,8 +97,8 @@ class Pack:
     venture_cases: tuple = ()
     grader_panel: tuple[str, ...] = ()
     scorecard: tuple = ()
-    desk: Callable[[], Desk] | None = None  # the pack's own tools and state (commons/domain/desk.py), for scripted runs
-    live_desk: Callable[[], Desk] | None = None  # the same for live runs (live data); defaults to `desk`
+    desk: Callable[[int], Desk] | None = None  # the pack's own tools and state (domain/desk.py), from the run's seed
+    live_desk: Callable[[int], Desk] | None = None  # the same for live runs (live data); defaults to `desk`
 
     @property
     def live(self) -> dict[str, Any]:

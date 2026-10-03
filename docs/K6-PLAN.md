@@ -78,13 +78,13 @@ job part today); news search; shorting or derivatives; anything with real money.
 - [x] T4.3 Smoke test against the real APIs (by hand, 3 Oct: all eight symbols quoted; US stale on a Saturday, as it should be)
 
 ### T5. Performance and the capital economy (M) — pack
-- [ ] T5.1 Returns, benchmark, maximum drawdown, Sortino per horizon
-- [ ] T5.2 Settlement: credits for risk-adjusted excess return, paid at each horizon
-- [ ] T5.3 Incentives hold: on the fake market, the reckless co-op is blocked by rule and a losing one goes quiet
+- [x] T5.1 Returns, benchmark, maximum drawdown, Sortino per horizon
+- [x] T5.2 Settlement: credits for risk-adjusted excess return, paid at each horizon
+- [x] T5.3 Incentives hold: on the fake market, the reckless co-op is blocked by rule and a losing one goes quiet
 
 ### T6. The trading pack (M)
-- [ ] T6.1 Brief, capabilities, tools, doctrines, scripted and live populations, scorecard
-- [ ] T6.2 Golden runs for the trading pack (scripted and fake-model)
+- [x] T6.1 Brief, capabilities, tools, doctrines, scripted and live populations, scorecard
+- [x] T6.2 Golden runs for the trading pack (scripted and fake-model)
 - [ ] T6.3 A dry run with fake models end to end, ticks included
 
 ### T7. Ticks and the schedule (S)

@@ -157,7 +157,7 @@ def _world(a, society, pack, m: dict, population, ledger: str) -> World:
                  gate=Gate(folder=society.folder if society else None, run=run_name),
                  archive=Archive(society.folder / "archive") if society else None,
                  ratings=Ratings(society.folder, run=run_name, every=a.rate_every) if society else None,
-                 desk=make_desk() if make_desk else None)
+                 desk=make_desk(a.seed) if make_desk else None)
 
 
 def _announce(world: World, society, population, a) -> None:

@@ -51,7 +51,8 @@ class Counter(Strategy):
 
 
 def toy(population):
-    return replace(load(), name="tallies", desk=TallyDesk, population=lambda: population, params={"jobs_per_cycle": 0})
+    return replace(load(), name="tallies", desk=lambda seed: TallyDesk(), population=lambda: population,
+                   params={"jobs_per_cycle": 0})
 
 
 def test_scripted_co_ops_use_the_desk_and_it_runs_each_cycle():

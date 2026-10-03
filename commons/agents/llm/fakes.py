@@ -21,6 +21,20 @@ def _fitted(prompt: str) -> str:
     return "\n\n".join(body)
 
 
+def _desk_starter(obs: str) -> dict | None:
+    """With a pack desk that offers a buy tool and quotes a symbol it holds none of: one small trade, with a stop."""
+    if "YOUR DESK" not in obs:
+        return None
+    desk = obs.split("YOUR DESK", 1)[1]
+    quoted = re.findall(r"(\S+) [\d,.]+(?! \(closed\))(?= ·|\n|$)", desk.split("Quotes:", 1)[-1].split("\n")[0])
+    held = set(re.findall(r"\n  (\S+): ", desk))
+    todo = [s for s in quoted if s not in held]
+    if not todo:
+        return None
+    return {"text": f"A small starter position in {todo[0]}.",
+            "tool_calls": [("buy", {"symbol": todo[0], "amount": 500, "stop_pct": 0.05})]}
+
+
 def competent(system, messages, tools):
     """A fake steward: work the jobs it holds (commission every open part it can do, submit, tick its goal);
     otherwise claim a job it could finish alone (allocated at the end of the cycle) and set a goal for it.
@@ -44,6 +58,8 @@ def competent(system, messages, tools):
                 return {"text": f"{job.group(1)} is one we can finish alone.",
                         "tool_calls": [("claim", {"job_id": job.group(1), "why": "we have every capability it needs"}),
                                        ("set_goal", {"title": f"Deliver {job.group(1)}", "steps": [f"write {c}" for c in caps]})]}
+        if starter := _desk_starter(obs):
+            return starter
         return {"tool_calls": [("end_turn", {})]}
     if rounds == 1:
         drafts = re.findall(r"draft (D\d+) for (\w+)", "\n".join(results))
