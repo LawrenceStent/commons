@@ -665,6 +665,15 @@ checklists in the plan (R0 to R12), on branch `refactor/architecture`; no featur
     - Still weak: pilots' write for the scripted co-op failed on the rubric's 350-word limit (graded 0.40: members
       don't count words); no assessment named risks (0%); cycles slow from about 1 to 4 minutes as conversations
       grow; nobody rated the work, so the scorecard's "your rating" rows are empty
+    - Part formats by rule (3 Oct, 8ee9d2a): a pack declares a word range and required sections per capability;
+      do_part and deliver refuse text that breaks them, with the reason; members are told and revise once. Tech for
+      good: assess 150-300 words with Evidence, Feasibility, Who benefits, Risks; write 200-350 words. Run 5's 0% for
+      risks came from the one paid assessment, the scripted co-op's stand-in; fieldwork's real one had a Risks section
+    - [ ] **Found 3 Oct, needs your decision:** two rules have never applied since Phase 1. `_use_capacity` and
+      `_cites_ok` return a refusing Outcome, which is falsy, so `if err := ...` never fires: a co-op with no capacity
+      left still acts, and a citation to a playbook that doesn't exist is accepted. Fixed in a trial (`is not None`):
+      every test but the golden master passes; scripted runs move a few percent (seed 0: 228 to 237 jobs paid on
+      earn online, 242 to 228 on tech for good)
 - [ ] K6 Trading pack: paper broker, forward-only, deterministic risk-adjusted evaluator, doctrine per co-op
 - [ ] K7 OSINT pack: sourcing-first evaluator, separate verify co-op, forbidden-target policy enforced in tools
 - [ ] K8 Many societies: registry, CLI, dashboard picker, per-society and total spend caps, slow-cadence scheduler
