@@ -236,7 +236,7 @@ uv run commons golden --update --approved "pay rounds down now"   # regenerate, 
 
 | Option | Meaning |
 |---|---|
-| `--update` | Regenerate every fixture (needs `--approved`) |
+| `--update` | Regenerate every fixture, the dashboard JSON included (needs `--approved`) |
 | `--approved WHY` | The approved behaviour change the new fixtures record; refused without it |
 
 Run from the repository root. Regenerating changes what counts as correct, so it is never part of refactoring.

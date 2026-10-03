@@ -30,7 +30,7 @@ class PlanningCommands(CommandBase):
         title, pitch = str(title)[:120], str(pitch)[:600]
         if why := ventures_mod.check(self.w, self.me, title, pitch, norm):
             return Outcome(False, f"the market won't consider it: {why}")
-        if err := self._use_capacity():
+        if (err := self._use_capacity()) is not None:
             return err
         fee = self.w.params.ventures.venture_fee
         try:

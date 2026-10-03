@@ -277,3 +277,19 @@ def test_scripted_stand_ins_are_judged_by_their_tag_not_the_format():
     w.jobs[job.id] = job
     assert act(w, "prime").claim(job.id)
     assert act(w, "prime").do_part(job.id, "research", tagged(0.9, " research"))
+
+
+def test_a_co_op_with_no_capacity_left_cannot_act():
+    """Since Phase 1 this check never fired (a refusing Outcome is falsy, so `if err := ...` skipped it); 3 Oct."""
+    w = world()
+    job = claimed_job_needing_build(w)
+    w.communities["prime"].capacity = 0
+    out = act(w, "prime").do_part(job.id, "research", "x")
+    assert not out and "no capacity left" in out.message and job.parts["research"].artifact is None
+
+
+def test_citing_a_playbook_that_does_not_exist_is_refused():
+    w = world()
+    job = claimed_job_needing_build(w)
+    out = act(w, "prime").do_part(job.id, "research", "x", cites=("PB999",))
+    assert not out and "unknown playbook" in out.message and job.parts["research"].artifact is None

@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 class PopulationCommands(CommandBase):
     @command()
     def propose_spawn(self, role: str) -> Outcome:
-        if err := self._use_capacity():
+        if (err := self._use_capacity()) is not None:
             return err
         return population.propose_spawn(self.w, self.me, role)
 
@@ -31,13 +31,13 @@ class PopulationCommands(CommandBase):
 
     @command()
     def fork(self, name: str, members: int, capabilities: tuple[str, ...], charter: str = "") -> Outcome:
-        if err := self._use_capacity():
+        if (err := self._use_capacity()) is not None:
             return err
         return population.fork(self.w, self.me, name, int(members), tuple(capabilities), charter)
 
     @command()
     def propose_merge(self, target: str) -> Outcome:
-        if err := self._use_capacity():
+        if (err := self._use_capacity()) is not None:
             return err
         return population.propose_merge(self.w, self.me, target)
 
@@ -47,6 +47,6 @@ class PopulationCommands(CommandBase):
 
     @command()
     def learn(self, capability: str, playbook_id: PlaybookId | None = None) -> Outcome:
-        if err := self._use_capacity():
+        if (err := self._use_capacity()) is not None:
             return err
         return population.learn(self.w, self.me, capability, playbook_id)

@@ -39,7 +39,7 @@ class MarketCommands(CommandBase):
             return Outcome(False, f"claiming {job_id} needs a {bond} bond if you win it; you can't afford it")
         if p.market.claim_allocation and self.me.name in w.board.claims.get(job_id, {}):
             return Outcome(False, f"you have already claimed {job_id}; it is allocated at the end of the cycle")
-        if err := self._use_capacity():
+        if (err := self._use_capacity()) is not None:
             return err
         if p.market.claim_allocation:
             w.board.claims.setdefault(job_id, {})[self.me.name] = w.cycle
@@ -60,11 +60,11 @@ class MarketCommands(CommandBase):
             return Outcome(False, f"the {capability} part is already done")
         if not self.me.can(capability):
             return Outcome(False, f"you lack the {capability} capability; announce a contract instead")
-        if err := self._cites_ok(tuple(cites)):
+        if (err := self._cites_ok(tuple(cites))) is not None:
             return err
         if (err := self._format_ok(part, artifact)) is not None:  # an Outcome refusal is falsy: test for None
             return err
-        if err := self._use_capacity():
+        if (err := self._use_capacity()) is not None:
             return err
         self.w.contract_net.withdraw_open(job_id, capability)
         job.fill(capability, artifact[:MAX_ARTIFACT], source="self", cites=tuple(cites))
@@ -105,7 +105,7 @@ class MarketCommands(CommandBase):
         ok, why = self.w.eligible(c.prime, self.me.name, c.capability)
         if not ok:
             return Outcome(False, f"the commons refuses your bid: {why}")
-        if err := self._use_capacity():
+        if (err := self._use_capacity()) is not None:
             return err
         if not self._send(Bid(job_id=contract_id, price=price)):
             self.me.capacity += 1
@@ -141,11 +141,11 @@ class MarketCommands(CommandBase):
         c = self._contract(contract_id)
         if c is None or c.winner != self.me.name or c.status != ContractStatus.AWARDED:
             return Outcome(False, f"you have no awarded contract {contract_id} to deliver")
-        if err := self._cites_ok(tuple(cites)):
+        if (err := self._cites_ok(tuple(cites))) is not None:
             return err
         if (job := self.w.jobs.get(c.job_id)) and (err := self._format_ok(job.parts[c.capability], artifact)) is not None:
             return err
-        if err := self._use_capacity():
+        if (err := self._use_capacity()) is not None:
             return err
         self._send(Deliver(job_id=contract_id, artifact={"text": artifact[:MAX_ARTIFACT]}, cites=list(cites)))
         for pid in cites:

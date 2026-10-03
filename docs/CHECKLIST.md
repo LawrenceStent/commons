@@ -669,7 +669,7 @@ checklists in the plan (R0 to R12), on branch `refactor/architecture`; no featur
       do_part and deliver refuse text that breaks them, with the reason; members are told and revise once. Tech for
       good: assess 150-300 words with Evidence, Feasibility, Who benefits, Risks; write 200-350 words. Run 5's 0% for
       risks came from the one paid assessment, the scripted co-op's stand-in; fieldwork's real one had a Risks section
-    - [ ] **Found 3 Oct, needs your decision:** two rules have never applied since Phase 1. `_use_capacity` and
+    - [x] **Found 3 Oct, fixed 3 Oct with your approval:** two rules have never applied since Phase 1. `_use_capacity` and
       `_cites_ok` return a refusing Outcome, which is falsy, so `if err := ...` never fires: a co-op with no capacity
       left still acts, and a citation to a playbook that doesn't exist is accepted. Fixed in a trial (`is not None`):
       every test but the golden master passes; scripted runs move a few percent (seed 0: 228 to 237 jobs paid on
