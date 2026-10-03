@@ -74,6 +74,13 @@ class Operator:
         self.all = OperatorView()
         self.errors: list[str] = []
         self.gate = GatePolicy()  # no hosts: no web
+        self.desk_tools: frozenset[str] = frozenset()  # the pack's own tools, which limits may name too
+        self.reload()
+
+    def know(self, desk_tools) -> None:
+        """The pack's desk tools: limits may forbid them by name. Re-reads the folder with them known."""
+        self.desk_tools = frozenset(desk_tools)
+        self.fingerprint = ""
         self.reload()
 
     # ── loading ────────────────────────────────────────────────
@@ -144,7 +151,7 @@ class Operator:
                 used += len(text)
         bl = b.limits
         limits = Limits(
-            forbid=bl.forbid | _expand_forbid(lim.get("forbid", [])),
+            forbid=bl.forbid | _expand_forbid(lim.get("forbid", []), self.desk_tools),
             max_price=_tighter(bl.max_price, lim.get("max_price")),
             max_jobs=_tighter(bl.max_jobs, lim.get("max_jobs")),
             thinking_budget=_tighter(bl.thinking_budget, lim.get("thinking_budget")),

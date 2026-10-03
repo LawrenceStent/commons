@@ -178,6 +178,8 @@ def _contract(c: ContractView, *, bids: bool = False, work: bool = False) -> str
 def render(obs: Observation) -> str:
     """The observation as the steward reads it: who it is, its notes, its obligations, the market, the society."""
     s = _header(obs) + _notes(obs) + _obligations(obs) + _market(obs) + _society(obs)
+    if obs.desk:
+        s += ["", "YOUR DESK", obs.desk]
     s += ["", "This is your situation, not a question. Nobody will answer you. Act now by calling tools, "
               "using the exact ids shown above; call end_turn when you are done."]
     return "\n".join(s)

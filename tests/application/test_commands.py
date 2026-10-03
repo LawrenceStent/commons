@@ -5,7 +5,7 @@ import inspect
 
 from commons.application import observation
 from commons.application.actions import Actions
-from commons.application.commands import knowledge, market, planning, population
+from commons.application.commands import desk, knowledge, market, planning, population
 
 
 def _members(protocol):
@@ -16,7 +16,7 @@ def _members(protocol):
 
 def test_the_executor_implements_every_role():
     roles = (observation.MarketActions, observation.PopulationActions, observation.KnowledgeActions,
-             observation.PlanningActions)
+             observation.PlanningActions, observation.DeskActions)
     for role in roles:
         missing = _members(role) - set(dir(Actions))
         assert not missing, f"{role.__name__}: {missing}"
@@ -25,7 +25,7 @@ def test_the_executor_implements_every_role():
 
 def test_each_area_implements_its_role():
     pairs = [(market.MarketCommands, observation.MarketActions), (population.PopulationCommands, observation.PopulationActions),
-             (knowledge.KnowledgeCommands, observation.KnowledgeActions)]
+             (knowledge.KnowledgeCommands, observation.KnowledgeActions), (desk.DeskCommands, observation.DeskActions)]
     for cls, role in pairs:
         assert _members(role) <= set(vars(cls)), cls.__name__
     assert _members(observation.PlanningActions) - {"spend"} <= set(vars(planning.PlanningCommands))

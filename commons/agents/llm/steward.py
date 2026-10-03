@@ -101,6 +101,8 @@ class LLMStrategy:
     def dispatch(self, obs: Observation, act: ActionsAPI, call: ToolCall) -> Outcome:
         a = dict(call.input)
         act.why = str(a.pop("why", "") or "")[:300]
+        if any(t["name"] == call.name for t in obs.desk_tools):
+            return act.desk_call(call.name, a)
         if call.name not in NAMES:
             return Outcome(False, f"there is no tool called {call.name}")
         if call.name == "commission" and (why := act.operator_refusal("commission", a)):
@@ -178,7 +180,7 @@ class StewardLoop:
             return False
         try:
             t = a.backend.chat(model=self.model, system=self.system, messages=self.messages,
-                               tools=steward_tools(bool(self.obs.web)), max_tokens=self.max_tokens)
+                               tools=steward_tools(bool(self.obs.web), self.obs.desk_tools), max_tokens=self.max_tokens)
         except ModelError as e:
             log.append({"kind": "error", "text": f"steward call failed: {e}"})
             return False

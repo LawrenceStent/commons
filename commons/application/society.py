@@ -54,6 +54,7 @@ from commons.domain import events as ev
 from commons.domain.archive import ArchiveIndex
 from commons.domain.community import Community
 from commons.domain.contract import Contract
+from commons.domain.desk import Desk
 from commons.domain.economy import PaymentPolicy, policy_for
 from commons.domain.goals import Plans
 from commons.domain.grading import Grader, StubGrader
@@ -84,9 +85,9 @@ class Society:
                  operator: Operator | None = None, pack: Pack | None = None, archive: ArchiveIndex | None = None,
                  ratings: Ratings | None = None, web: WebPort | None = None, gate: Gate | None = None,
                  ledger: Ledger | None = None, bus: Bus | None = None, activity: ActivityLog | None = None,
-                 payment: PaymentPolicy | None = None):
+                 payment: PaymentPolicy | None = None, desk: Desk | None = None):
         """Everything outside the society's rules can be passed in (the model-backed grader and appraiser, the web,
-        the ledger, the bus, the activity log, the economy); what isn't is built from `params`."""
+        the ledger, the bus, the activity log, the economy, the pack's desk); what isn't is built from `params`."""
         self.params = p = params or Params()
         self.pack = pack or load_pack()  # what this society is for: its work, vocabulary and seed co-ops
         self.hub = hub or Hub()
@@ -94,6 +95,7 @@ class Society:
         self.rng = random.Random(p.run.seed)
         self.cycle = 0
         self.communities = {c.name: c for c in (population or self.pack.population())}
+        self.desk = desk or (self.pack.desk() if self.pack.desk else None)  # the pack's own tools (domain/desk.py)
         self._connect(ledger, bus, grader, appraiser, operator, archive, ratings, web, gate, payment)
         self._open_records()
         self.activity = activity or ActivityLog(p.storage.activity_keep, p.storage.activity_path)
@@ -111,6 +113,8 @@ class Society:
         self.bus.standing = self.standing  # the bus rations messages by this society's trust
         self.registry = self.bus.registry
         self.operator = operator or Operator(None)
+        if self.desk:
+            self.operator.know(t["name"] for t in self.desk.tools)
         self.archive = archive or ArchiveIndex()  # the society's reference material, searched on demand
         self.ratings = ratings  # your ratings of a sample of the paid work (commons/application/ratings.py)
         self.gate = gate or Gate()

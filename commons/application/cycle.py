@@ -5,6 +5,7 @@ models or the web, and takes the lock itself only to apply what came back). Turn
 parallel: with `parallel_turns`, model calls overlap and every action still takes the lock.
 
     start         the cycle number; the operator's folder re-read; the gate's day begins; the bus's allowances reset
+    desk_open     the pack's desk, if it has one, opens the cycle (a broker marks to market, say)
     fund          the economy tops up its pool, if it keeps one
     ratings       your new ratings become evidence
     floor         the treasury tops up poor purses
@@ -20,6 +21,7 @@ parallel: with `parallel_turns`, model calls overlap and every action still take
     grade         submitted work, deliveries and audits are graded (model calls outside the lock)
     pay           work waiting for the end of the cycle is paid
     gossip        every few cycles, co-ops relay what they've seen
+    desk_close    the pack's desk closes the cycle (settles what is due, say)
     close         evidence decays, the bus compacts, old records are pruned, the cycle is recorded
 """
 
@@ -95,6 +97,7 @@ def _close(w: World) -> None:
 
 PHASES: tuple[Phase, ...] = (
     Phase("start", _start),
+    Phase("desk_open", lambda w: w.desk and w.desk.open(w)),
     Phase("fund", lambda w: w.payments.fund()),
     Phase("ratings", lambda w: w.rating_desk.apply()),
     Phase("floor", lambda w: w.upkeep.floor()),
@@ -110,6 +113,7 @@ PHASES: tuple[Phase, ...] = (
     Phase("grade", lambda w: w.grading.settle(), locked=False),
     Phase("pay", lambda w: w.payments.settle_queue()),
     Phase("gossip", _gossip),
+    Phase("desk_close", lambda w: w.desk and w.desk.close(w)),
     Phase("close", _close),
 )
 

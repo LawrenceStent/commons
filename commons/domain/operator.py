@@ -21,16 +21,17 @@ ALIASES = {"merge": {"propose_merge", "accept_merge"}, "spawn": {"propose_spawn"
            "web": {"web_search", "web_fetch"}}
 
 
-def _expand_forbid(names) -> frozenset[str]:
-    """A forbid list that names something the world doesn't know must fail loudly, never silently allow it."""
+def _expand_forbid(names, extra: frozenset[str] = frozenset()) -> frozenset[str]:
+    """A forbid list that names something the world doesn't know must fail loudly, never silently allow it. `extra`:
+    the names of the pack's desk tools (commons/domain/desk.py), which the world knows too."""
     out = set()
     for n in names:
         if n in ALIASES:
             out |= ALIASES[n]
-        elif n in ACTIONS:
+        elif n in ACTIONS or n in extra:
             out.add(n)
         else:
-            raise OperatorError(f"forbid names an unknown action {n!r}; use one of {sorted(ACTIONS | set(ALIASES))}")
+            raise OperatorError(f"forbid names an unknown action {n!r}; use one of {sorted(ACTIONS | extra | set(ALIASES))}")
     return frozenset(out)
 
 

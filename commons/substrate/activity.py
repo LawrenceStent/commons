@@ -135,6 +135,15 @@ class ActivityLog:
             self._file.close()
 
 
+def log_action(cmd, name: str, args: dict, out) -> None:
+    """One command `cmd` ran, with its outcome, in the world's activity log (and its rationale, used up)."""
+    if "artifact" in args:
+        args["artifact"] = f"({len(args['artifact'] or '')} chars)"
+    why, cmd.why = getattr(cmd, "why", ""), ""
+    cmd.w.activity.add(cmd.w.cycle, cmd.me.name, getattr(cmd, "actor", "scripted"), "action", name, out.message,
+                       out.ok, args, why)
+
+
 def logged(name: str, fn: Callable) -> Callable:
     """Wrap an actions-executor method so every call lands in the world's activity log."""
     sig = inspect.signature(fn)
@@ -146,11 +155,7 @@ def logged(name: str, fn: Callable) -> Callable:
             args = {k: v for k, v in bound.arguments.items() if k != "self"}
         except TypeError:
             args = {}
-        if "artifact" in args:
-            args["artifact"] = f"({len(args['artifact'] or '')} chars)"
-        why, self.why = getattr(self, "why", ""), ""
-        self.w.activity.add(self.w.cycle, self.me.name, getattr(self, "actor", "scripted"), "action", name,
-                            out.message, out.ok, args, why)
+        log_action(self, name, args, out)
         return out
 
     import functools

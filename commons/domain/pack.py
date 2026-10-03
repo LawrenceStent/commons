@@ -13,6 +13,7 @@ A pack supplies:
     grader_cases / venture_cases   hand-labelled calibration sets for its grader and appraiser
     grader_panel     optional lenses (what each grader of a panel looks hardest at); the part gets the median
     scorecard        mission metrics (commons/domain/scorecard.py): what success means for this society, beyond money
+    desk / live_desk optional: the pack's own tools and state, when its work isn't jobs (commons/domain/desk.py)
 
 Packs are found by name: `load("earn_online")` imports `packs.earn_online` and returns its `PACK`. The
 kernel refers to no pack except through `DEFAULT`, the one used when a world is built without saying.
@@ -33,6 +34,7 @@ from commons.domain.money import Micros
 
 if TYPE_CHECKING:
     from commons.domain.community import Community
+    from commons.domain.desk import Desk
 
 DEFAULT = "earn_online"
 
@@ -95,6 +97,8 @@ class Pack:
     venture_cases: tuple = ()
     grader_panel: tuple[str, ...] = ()
     scorecard: tuple = ()
+    desk: Callable[[], Desk] | None = None  # the pack's own tools and state (commons/domain/desk.py), for scripted runs
+    live_desk: Callable[[], Desk] | None = None  # the same for live runs (live data); defaults to `desk`
 
     @property
     def live(self) -> dict[str, Any]:

@@ -147,6 +147,7 @@ def _world(a, society, pack, m: dict, population, ledger: str) -> World:
     run_name = Path(ledger).stem
     operator = Operator(a.operator) if a.operator else None
     web = None if a.no_web or a.backend == "fake" else WebAccess.default(operator.gate.search if operator else "wikipedia")
+    make_desk = pack.desk if a.backend == "fake" else (pack.live_desk or pack.desk)  # a dry run never touches live data
     return World(Params(seed=a.seed, ledger_path=ledger, activity_path=ledger.replace(".sqlite", ".activity.jsonl"),
                         **{**pack.live, **RUN}),
                  population=population, pack=pack, grader=HybridGrader(judge),
@@ -155,7 +156,8 @@ def _world(a, society, pack, m: dict, population, ledger: str) -> World:
                  operator=operator, web=web,
                  gate=Gate(folder=society.folder if society else None, run=run_name),
                  archive=Archive(society.folder / "archive") if society else None,
-                 ratings=Ratings(society.folder, run=run_name, every=a.rate_every) if society else None)
+                 ratings=Ratings(society.folder, run=run_name, every=a.rate_every) if society else None,
+                 desk=make_desk() if make_desk else None)
 
 
 def _announce(world: World, society, population, a) -> None:

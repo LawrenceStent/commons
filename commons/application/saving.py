@@ -17,21 +17,25 @@ import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from commons.domain.pack import load as load_pack
+
 if TYPE_CHECKING:
     from commons.application.ports import ModelBackend, WebPort
+    from commons.domain.pack import Pack
     from commons.application.society import Society
 
-DETACHED = ("lock", "grader", "appraiser", "web")  # rebuilt or reattached when the society resumes
+DETACHED = ("lock", "grader", "appraiser", "web", "pack")  # rebuilt or reattached when the society resumes
 
 
 def state_of(w: Society) -> dict[str, Any]:
-    return {k: v for k, v in w.__dict__.items() if k not in DETACHED}
+    """The pack is code, not state: the save keeps its name, and resuming loads it."""
+    return {**{k: v for k, v in w.__dict__.items() if k not in DETACHED}, "pack_name": w.pack.name}
 
 
 def restore(w: Society, state: dict[str, Any]) -> None:
     w.__dict__.update(state)
     w.lock = threading.RLock()
-    w.grader = w.appraiser = w.web = None  # attached by `resume`
+    w.grader = w.appraiser = w.web = w.pack = None  # attached by `resume`
 
 
 def save(w: Society, path: str | Path) -> None:
@@ -44,11 +48,13 @@ def save(w: Society, path: str | Path) -> None:
 
 
 def resume(path: str | Path, *, grader=None, appraiser=None, web: WebPort | None = None,
-           backend: ModelBackend | None = None) -> Society:
+           backend: ModelBackend | None = None, pack: Pack | None = None) -> Society:
     """The society saved at `path`, with the outside reattached: given, or the defaults its settings imply. Every
-    co-op whose agent needs a model gets `backend`."""
+    co-op whose agent needs a model gets `backend`. The pack is loaded by the name the save recorded, unless given."""
     with open(path, "rb") as f:
         w = pickle.load(f)
+    w.pack = pack or load_pack(w.__dict__.pop("pack_name"))
+    w.__dict__.pop("pack_name", None)
     w.attach(grader, appraiser, web)
     w.activity.watch(w.hub)
     for c in w.communities.values():

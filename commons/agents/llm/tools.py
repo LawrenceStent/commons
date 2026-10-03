@@ -118,9 +118,19 @@ OFFLINE: list[dict[str, Any]] = [t for t in TOOLS if t["name"] not in WEB]  # a 
 MEMBER = ("search_archive", "read_archive", "web_search", "web_fetch")
 
 
-def steward_tools(web: bool) -> list[dict[str, Any]]:
-    """The same list object every call (it's in the cached prefix), with or without the web."""
-    return TOOLS if web else OFFLINE
+_WITH_DESK: dict[tuple, list[dict[str, Any]]] = {}
+
+
+def steward_tools(web: bool, desk: tuple[dict[str, Any], ...] = ()) -> list[dict[str, Any]]:
+    """The same list object every call (it's in the cached prefix), with or without the web, plus the pack's desk
+    tools if it has any, in name order with the rest."""
+    base = TOOLS if web else OFFLINE
+    if not desk:
+        return base
+    key = (web, tuple(t["name"] for t in desk))
+    if key not in _WITH_DESK:
+        _WITH_DESK[key] = sorted(base + list(desk), key=lambda t: t["name"])
+    return _WITH_DESK[key]
 
 
 def member_tools(archive: bool, web: bool) -> list[dict[str, Any]]:

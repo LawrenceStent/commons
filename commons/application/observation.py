@@ -184,6 +184,8 @@ class Observation:
     archive: tuple = (0, ())  # (passages, source files) of the society's reference archive
     web: str = ""  # what the operator's gate allows (empty: no web)
     grants: tuple | None = None  # grant economy: (pool now, budget per cycle); None in a market economy
+    desk: str = ""  # what I see of the pack's desk (commons/domain/desk.py); empty without one
+    desk_tools: tuple = ()  # the desk's tool schemas, offered beside the kernel's
     goals: tuple[GoalView, ...] = ()  # my active goals
     ideas: tuple[IdeaView, ...] = ()  # my most recent ideas
     params: dict[str, int | float] = field(default_factory=dict)
@@ -238,6 +240,12 @@ class PlanningActions(Protocol):
     def spend(self, amount: Micros, memo: str) -> Outcome: ...
 
 
-class ActionsAPI(MarketActions, PopulationActions, KnowledgeActions, PlanningActions, Protocol):
+class DeskActions(Protocol):
+    """The pack's own tools, if it has a desk."""
+
+    def desk_call(self, tool: str, args: dict) -> Outcome: ...
+
+
+class ActionsAPI(MarketActions, PopulationActions, KnowledgeActions, PlanningActions, DeskActions, Protocol):
     """Everything a community can do (the union of the roles above). Each call returns an Outcome the caller can read.
     An agent that needs only some of it can depend on just those roles."""

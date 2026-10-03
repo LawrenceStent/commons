@@ -132,7 +132,7 @@ class ObservationBuilder:
         )
 
     def _surroundings(self, me: Community) -> dict:
-        """What the world offers: its rules' numbers, the archive, the economy's pool, the web."""
+        """What the world offers: its rules' numbers, the archive, the economy's pool, the web, the pack's desk."""
         p = self.w.params
         return dict(
             params={"sub_share": p.contracts.sub_share, "work_cost": p.money.work_cost, "advance_frac": p.contracts.advance_frac,
@@ -144,4 +144,6 @@ class ObservationBuilder:
             archive=(len(self.w.archive), tuple(sorted({x.source for x in self.w.archive.passages.values()}))),
             grants=self.w.payment.view(self.w.payments.pool_balance()),
             web=self.w.gate.policy.describe() if self.w.web else "",
+            desk=self.w.desk.view(self.w, me.name) if self.w.desk else "",
+            desk_tools=self.w.desk.tools if self.w.desk else (),
         )

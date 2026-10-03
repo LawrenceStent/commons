@@ -62,10 +62,10 @@ job part today); news search; shorting or derivatives; anything with real money.
 - [x] T1.4 LLM co-ops resume with their drafts, journal and plans; their backends come from the run's settings
 
 ### T2. Pack desks (M) — kernel
-- [ ] T2.1 `Pack.desk`: tools, an observation section, a cycle phase, saved state
-- [ ] T2.2 Desk tools run through the command pipeline (lock, log, operator limits) and appear in the steward's
+- [x] T2.1 `Pack.desk`: tools, an observation section, a cycle phase, saved state
+- [x] T2.2 Desk tools run through the command pipeline (lock, log, operator limits) and appear in the steward's
       tool list only for that pack (the list stays byte-stable for caching)
-- [ ] T2.3 A toy pack's desk runs on the unchanged kernel (acceptance test); golden unchanged
+- [x] T2.3 A toy pack's desk runs on the unchanged kernel (acceptance test); golden unchanged
 
 ### T3. Broker (M) — pack, domain
 - [ ] T3.1 Accounts, positions, market orders, fees and slippage
