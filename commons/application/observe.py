@@ -22,6 +22,7 @@ from commons.application.observation import (
 )
 from commons.domain.community import Community
 from commons.domain.contract import Contract
+from commons.domain.format import Format
 from commons.domain.market import MarketJob
 from commons.domain.status import (
     LIVE_CONTRACT,
@@ -46,7 +47,8 @@ class ObservationBuilder:
     # ── views ──────────────────────────────────────────────────
     def _job_view(self, j: MarketJob, pending: dict) -> JobView:
         return JobView(j.id, j.title, j.reward, tuple(
-            PartView(cap, part.spec, part.rubric, part.artifact is not None, part.source, pending.get((j.id, cap)))
+            PartView(cap, part.spec, part.rubric, part.artifact is not None, part.source, pending.get((j.id, cap)),
+                     part.format)
             for cap, part in sorted(j.parts.items())), j.deadline)
 
     def _contract_view(self, name: str, c: Contract, as_prime: bool) -> ContractView:
@@ -56,7 +58,11 @@ class ObservationBuilder:
         show = as_prime and c.status != ContractStatus.OPEN or c.winner == name
         return ContractView(c.id, c.job_id, c.capability, c.prime, c.spec, c.rubric, c.max_price, c.advance_frac,
                             c.announced, bids, c.bids.get(name), c.winner, c.price,
-                            c.artifact if show else None, c.deadline, c.status)
+                            c.artifact if show else None, c.deadline, c.status, self._format(c))
+
+    def _format(self, c: Contract) -> Format:
+        job = self.w.jobs.get(c.job_id)
+        return job.parts[c.capability].format if job and c.capability in job.parts else Format()
 
     # ── sections ───────────────────────────────────────────────
     def _own(self, me: Community) -> dict:

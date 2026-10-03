@@ -16,6 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from commons.domain.errors import DomainError
+from commons.domain.format import Format
 from commons.domain.money import Micros
 from commons.domain.status import JobStatus
 
@@ -36,6 +37,7 @@ class Part:
     artifact: str | None = None
     source: str | None = None  # "self" or a contract id
     cites: tuple[str, ...] = ()
+    format: Format = field(default_factory=Format)  # checked by rule at hand-in (commons/domain/format.py)
 
 
 @dataclass

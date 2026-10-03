@@ -28,6 +28,7 @@ from commons.agents.llm.prompts import MEMBER_SYSTEM, NUDGE, steward_system
 from commons.agents.llm.render import render
 from commons.agents.llm.tools import NAMES, steward_tools
 from commons.agents.waking import members_to_wake
+from commons.application.commands.base import FORMAT_REFUSED
 from commons.application.observation import ActionsAPI, Observation, Outcome
 from commons.application.ports import ModelBackend, ModelError, ToolCall, ToolResult
 from commons.domain.ids import PlaybookId
@@ -118,8 +119,8 @@ class LLMStrategy:
             out = act.do_part(str(a["job_id"]), str(a["capability"]), d.text, d.cites)
         else:
             out = act.deliver(str(a["contract_id"]), d.text, d.cites)
-        if out:
-            self.drafts.pop(d.id, None)  # used: the part is done
+        if out or out.id == FORMAT_REFUSED:
+            self.drafts.pop(d.id, None)  # used, or refused for its format: either way, a new one is commissioned next
         return out
 
     def commission(self, obs: Observation, act: ActionsAPI, ref: str, capability: str, instructions: str,

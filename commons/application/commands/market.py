@@ -62,6 +62,8 @@ class MarketCommands(CommandBase):
             return Outcome(False, f"you lack the {capability} capability; announce a contract instead")
         if err := self._cites_ok(tuple(cites)):
             return err
+        if (err := self._format_ok(part, artifact)) is not None:  # an Outcome refusal is falsy: test for None
+            return err
         if err := self._use_capacity():
             return err
         self.w.contract_net.withdraw_open(job_id, capability)
@@ -140,6 +142,8 @@ class MarketCommands(CommandBase):
         if c is None or c.winner != self.me.name or c.status != ContractStatus.AWARDED:
             return Outcome(False, f"you have no awarded contract {contract_id} to deliver")
         if err := self._cites_ok(tuple(cites)):
+            return err
+        if (job := self.w.jobs.get(c.job_id)) and (err := self._format_ok(job.parts[c.capability], artifact)) is not None:
             return err
         if err := self._use_capacity():
             return err

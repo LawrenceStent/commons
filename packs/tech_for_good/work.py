@@ -9,6 +9,7 @@ knowledge, so every rubric asks the same thing: cite an archive passage as [arch
 (unverified). A made-up citation fails the part by rule, before any grading (see the grading service, commons/application/services/grading.py).
 """
 
+from commons.domain.format import Format
 from commons.domain.pack import TemplateWorkSource
 
 # Used when a society gives no questions of its own (and by the scripted regression runs).
@@ -56,4 +57,10 @@ TEMPLATES: dict[str, tuple[str, str]] = {  # in this order: same seed, same jobs
     ),
 }
 
-WORK_SOURCE = TemplateWorkSource(SUBJECTS, TEMPLATES)
+# The rubrics' countable lines, as rules (commons/domain/format.py): checked at hand-in, before any grader reads it.
+FORMATS = {
+    "assess": Format(150, 300, ("Evidence", "Feasibility", "Who benefits", "Risks")),
+    "write": Format(200, 350),
+}
+
+WORK_SOURCE = TemplateWorkSource(SUBJECTS, TEMPLATES, formats=FORMATS)

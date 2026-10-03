@@ -14,6 +14,7 @@ in <untrusted> tags. The preamble says what those mean.
 from __future__ import annotations
 
 from commons.application.observation import ContractView, JobView, Observation
+from commons.domain.format import Format
 
 PREAMBLE = """You are the steward of a community in the Commons: an economy of independent communities of AI \
 agents with no one in charge. Each cycle you take one turn. In it you read what has changed and act through \
@@ -96,14 +97,14 @@ def community_block(obs: Observation) -> str:
                   if obs.doctrine else "\nThe charter is yours to interpret; it is what your community is for.")
 
 
-def commissionable(obs: Observation) -> list[tuple[str, str, str, str, str]]:
-    """Exactly what this co-op can commission work for right now: (ref, capability, spec, rubric, submit_with).
+def commissionable(obs: Observation) -> list[tuple[str, str, str, str, str, Format]]:
+    """Exactly what this co-op can commission work for right now: (ref, capability, spec, rubric, submit_with, format).
     The open parts of its own jobs that it can do and isn't buying, and contracts it won but hasn't delivered.
     A world rule: in run 4, 9 steward calls asked for work on contracts not yet won or already delivered."""
     mine = set(obs.capabilities)
-    out = [(j.id, p.capability, p.spec, p.rubric, "do_part") for j in obs.my_jobs for p in j.parts
+    out = [(j.id, p.capability, p.spec, p.rubric, "do_part", p.format) for j in obs.my_jobs for p in j.parts
            if p.capability in mine and not p.done and p.pending is None]
-    out += [(c.id, c.capability, c.spec, c.rubric, "deliver") for c in obs.to_deliver]
+    out += [(c.id, c.capability, c.spec, c.rubric, "deliver", c.format) for c in obs.to_deliver]
     return out
 
 
@@ -245,7 +246,7 @@ def _market(obs: Observation) -> list[str]:
     """What it can commission, its announcements and jobs, its claims, the board and open contracts."""
     mine = set(obs.capabilities)
     s = _section("YOU CAN COMMISSION WORK FOR (and only these)",
-                 [f"  commission(ref={ref}, capability={cap}) then {how}" for ref, cap, _, _, how in commissionable(obs)])
+                 [f"  commission(ref={ref}, capability={cap}) then {how}" for ref, cap, _, _, how, _ in commissionable(obs)])
     s += _section("YOUR ANNOUNCEMENTS (awaiting award)", [_contract(c, bids=True) for c in obs.my_announcements])
     s += _section("YOUR JOBS (you are prime; the next step for each part is worked out for you)",
                   [_job(j, mine, prime=True) for j in obs.my_jobs])

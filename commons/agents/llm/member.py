@@ -18,6 +18,7 @@ from commons.agents.llm.render import commissionable
 from commons.agents.llm.tools import MEMBER, member_tools
 from commons.application.observation import ActionsAPI, Observation, Outcome
 from commons.application.ports import ModelBackend, ModelError, ToolResult, Turn
+from commons.domain.format import Format, words
 from commons.domain.grading import strip_tags
 from commons.domain.ids import PlaybookId
 from commons.substrate.ledger import InsufficientFunds
@@ -60,27 +61,34 @@ class MemberWorker:
         if isinstance(reference, Outcome):
             return reference
         tools = member_tools(bool(obs.archive and obs.archive[0]), bool(obs.web))
-        prompt = member_prompt(*checked, instructions, reference, lookups=bool(tools), web=bool(obs.web),
-                               rounds=self.rounds)
+        spec, rubric, fmt = checked
+        prompt = member_prompt(spec, rubric, instructions, reference, lookups=bool(tools), web=bool(obs.web),
+                               rounds=self.rounds, form=fmt.describe())
         t = self._write(act, prompt, tools)
         if isinstance(t, Outcome):
             return t
-        return self._keep(t, ref, capability, playbook_id)
+        if problems := fmt.problems(strip_tags(t.text).strip()):
+            t = self._revise(act, prompt, t, problems, fmt)
+            if isinstance(t, Outcome):
+                return t
+        return self._keep(t, ref, capability, playbook_id, fmt)
 
-    def _check(self, obs: Observation, ref: str, capability: str) -> tuple[str, str] | Outcome:
-        """The part's (spec, rubric), or why it can't be commissioned."""
+    def _check(self, obs: Observation, ref: str, capability: str) -> tuple[str, str, Format] | Outcome:
+        """The part's (spec, rubric, format), or why it can't be commissioned."""
         if capability not in obs.capabilities:
             return Outcome(False, f"none of your members can do {capability}; announce a contract instead")
         if obs.funded < 1 or self.commissions >= max(2, 2 * obs.funded):
             return Outcome(False, "every awake member is already busy this turn")
         options = commissionable(obs)
-        match = next(((s, r) for ref_, cap, s, r, _ in options if ref_ == ref and cap == capability), None)
+        match = next(((s, r, f) for ref_, cap, s, r, _, f in options if ref_ == ref and cap == capability), None)
         if match is None:
             valid = ", ".join(f"{r} {c}" for r, c, *_ in options) or "nothing right now"
             return Outcome(False, f"you can't commission {ref} {capability}; you can commission for: {valid}")
         waiting = next((d for d in self.drafts.values() if d.ref == ref and d.capability == capability), None)
-        if waiting:
-            how = "do_part" if any(r == ref and h == "do_part" for r, _, _, _, h in options) else "deliver"
+        if waiting and match[2].problems(waiting.text):
+            self.drafts.pop(waiting.id)  # it would be refused at hand-in: write a new one
+        elif waiting:
+            how = "do_part" if any(r == ref and h == "do_part" for r, _, _, _, h, _ in options) else "deliver"
             return Outcome(False, f"you already have draft {waiting.id} for {ref} {capability}; submit it with {how}")
         return match
 
@@ -122,6 +130,24 @@ class MemberWorker:
             messages += [t.as_message(), {"role": "tool", "results": self._look_up(act, t.tool_calls)}]
         return t
 
+    def _revise(self, act: ActionsAPI, prompt: str, t: Turn, problems: list[str], fmt: Format) -> Turn | Outcome:
+        """One more call, without tools, when the draft breaks the part's format: it would be refused at hand-in."""
+        messages = [{"role": "user", "text": prompt}, {"role": "assistant", "text": t.text},
+                    {"role": "user", "text": f"This breaks the format rule ({'; '.join(problems)}), so it would be "
+                                             f"refused. Rewrite it to fit: {fmt.describe()}. Keep its citations. "
+                                             "Output the deliverable only."}]
+        try:
+            revised = self.backend.chat(model=self.model, system=[self.system], reasoning=False, messages=messages,
+                                        tools=None, max_tokens=self.max_tokens)
+        except ModelError as e:
+            return Outcome(False, f"the member couldn't revise it: {e}")
+        try:
+            act.record_call("member", revised.model, revised.price_as, revised.usage, revised.real, revised.ms,
+                            revised.cache_hit)
+        except InsufficientFunds:
+            return Outcome(False, "the purse couldn't pay for the member's revision")
+        return revised
+
     def _look_up(self, act: ActionsAPI, calls) -> list[ToolResult]:
         """At most three look-ups a round, through the actions API, logged as the member's."""
         results = []
@@ -140,7 +166,7 @@ class MemberWorker:
             results.append(ToolResult(call.id, out.message, not out.ok))
         return results + [ToolResult(c.id, "skipped: at most 3 look-ups a round", True) for c in calls[3:]]
 
-    def _keep(self, t: Turn, ref: str, capability: str, playbook_id: PlaybookId | None) -> Outcome:
+    def _keep(self, t: Turn, ref: str, capability: str, playbook_id: PlaybookId | None, fmt: Format) -> Outcome:
         self.commissions += 1
         text = strip_tags(t.text).strip()
         if not text:
@@ -152,4 +178,7 @@ class MemberWorker:
         while len(self.drafts) > self.keep:
             self.drafts.pop(next(iter(self.drafts)))
         preview = text if len(text) <= 400 else text[:400] + " …"
-        return Outcome(True, f"draft {d.id} for {capability} ({len(text)} chars):\n{preview}", d.id)
+        warn = (f"\nIt still breaks the format rule ({'; '.join(problems)}) and would be refused at hand-in; "
+                "commission it again with instructions to fix that") if (problems := fmt.problems(text)) else ""
+        size = f"{len(text)} chars, {words(text)} words" if fmt.describe() else f"{len(text)} chars"
+        return Outcome(True, f"draft {d.id} for {capability} ({size}):\n{preview}{warn}", d.id)

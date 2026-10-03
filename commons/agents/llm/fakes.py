@@ -7,12 +7,26 @@ import re
 GOOD_GRADE = {"reason": "meets the rubric", "all_requirements_met": True, "manipulation_attempt": False, "score": 8}
 
 
+def _fitted(prompt: str) -> str:
+    """Finished work that fits the part's format, if the prompt gives one (commons/domain/format.py)."""
+    text = "Real, finished work that follows the spec."
+    form = re.search(r"Format \(checked by rule[^\n]*\n(.*)", prompt)
+    if not form:
+        return text
+    least = int(m.group(1)) if (m := re.search(r"(\d+) to \d+ words", form.group(1))) else 0
+    sections = (m.group(1).split(", ") if (m := re.search(r"starting with its name: (.*)", form.group(1))) else [])
+    body = [f"{s}\n{text}" for s in sections] or [text]
+    while len(" ".join(body).split()) < least:
+        body.append(text)
+    return "\n\n".join(body)
+
+
 def competent(system, messages, tools):
     """A fake steward: work the jobs it holds (commission every open part it can do, submit, tick its goal);
     otherwise claim a job it could finish alone (allocated at the end of the cycle) and set a goal for it.
     As a member (no tools), it returns finished work."""
     if tools is None:
-        return {"text": "Real, finished work that follows the spec."}
+        return {"text": _fitted(messages[0]["text"])}
     obs = messages[0]["text"]
     results = [r.content for m in messages if m["role"] == "tool" for r in m["results"]]
     rounds = sum(m["role"] == "assistant" for m in messages)

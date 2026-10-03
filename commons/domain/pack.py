@@ -26,6 +26,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
+from commons.domain.format import Format
 from commons.domain.ids import JobId
 from commons.domain.market import MarketJob, Part
 from commons.domain.money import Micros
@@ -60,6 +61,7 @@ class TemplateWorkSource:
     subjects: Sequence[str]
     templates: dict[str, tuple[str, str]]  # capability -> (spec, rubric), each with a {subject} slot
     title: str = "{subject}"
+    formats: dict[str, Format] = field(default_factory=dict)  # capability -> what its text must look like, by rule
 
     def new_job(self, rng, job_id, cycle, reward, board_ttl, parts):
         subject = rng.choice(self.subjects)
@@ -68,8 +70,8 @@ class TemplateWorkSource:
             id=job_id,
             title=self.title.format(subject=subject),
             reward=reward,
-            parts={c: Part(c, self.templates[c][0].format(subject=subject), self.templates[c][1].format(subject=subject))
-                   for c in caps},
+            parts={c: Part(c, self.templates[c][0].format(subject=subject), self.templates[c][1].format(subject=subject),
+                           format=self.formats.get(c, Format())) for c in caps},
             posted=cycle,
             deadline=cycle + board_ttl,
         )

@@ -455,3 +455,51 @@ def test_lmstudio_counts_a_repeated_prompt_prefix_as_cached():
         {"role": "assistant", "text": "thinking"}, {"role": "user", "text": "more"}])
     assert t1.usage.cache_read_input_tokens == 0 and t1.usage.input_tokens == 1000
     assert t2.usage.cache_read_input_tokens > 900 and t2.usage.input_tokens + t2.usage.cache_read_input_tokens == 1000
+
+
+def t4g_world(member_text):
+    """A tech-for-good society with one LLM co-op whose members write `member_text(messages)`."""
+    from commons.agents.llm.fakes import competent
+    from commons.domain.pack import load
+
+    seen = []
+
+    def converse(system, messages, tools):
+        if tools is None:
+            seen.append(messages)
+            return {"text": member_text(messages)}
+        return competent(system, messages, tools)
+
+    pack = load("tech_for_good")
+    llm = Community("llm-a", 3, {"scout", "assess", "design", "write"}, LLMStrategy(FakeBackend(converse=converse)))
+    grader = HybridGrader(LLMGrader(FakeBackend(respond=lambda *a: GOOD)))
+    w = World(Params(seed=0, verify=False), pack=pack, population=[llm] + pack.population()[:2], grader=grader)
+    return w, seen
+
+
+def entries(w, name="llm-a"):
+    return [e for t in w.transcripts[name] for e in t["entries"]]
+
+
+def test_a_member_revises_a_draft_that_breaks_the_format_once():
+    from commons.agents.llm.fakes import _fitted
+
+    def member(messages):
+        revising = "This breaks the format rule" in messages[-1]["text"]
+        return _fitted(messages[0]["text"]) if revising else "too short"
+
+    w, seen = t4g_world(member)
+    w.run(4)
+    formatted = [m for m in seen if "Format (checked by rule" in m[0]["text"]]
+    assert formatted, "an assess or write part should have been commissioned"
+    assert any("This breaks the format rule" in m[-1]["text"] for m in seen)
+    assert not any("refused by the format rule" in str(e.get("result", "")) for e in entries(w))
+
+
+def test_a_draft_refused_for_its_format_is_dropped_so_a_new_one_can_be_commissioned():
+    w, _ = t4g_world(lambda messages: "too short")
+    w.run(4)
+    log = entries(w)
+    assert any("refused by the format rule" in str(e.get("result", "")) for e in log)
+    assert any("still breaks the format rule" in str(e.get("result", "")) for e in log)
+    assert not any("you already have draft" in str(e.get("result", "")) for e in log)

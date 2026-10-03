@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from commons.domain.format import Format
 from commons.domain.ids import ContractId, GoalId, IdeaId, JobId, PassageId, PlaybookId, ProposalId
 from commons.domain.money import Micros
 
@@ -41,6 +42,7 @@ class PartView:
     done: bool
     source: str | None  # "self" or a contract id
     pending: str | None = None  # status of the contract in flight for this part: open | awarded | delivered
+    format: Format = Format()  # what its text must look like, checked by rule at hand-in
 
 
 @dataclass(frozen=True)
@@ -84,6 +86,7 @@ class ContractView:
     artifact: str | None = None  # visible to the prime once delivered, and to the contractor
     deadline: int | None = None
     status: str = "open"  # open | awarded | delivered | accepted | rejected | failed | defaulted | expired | withdrawn
+    format: Format = Format()  # what the delivery's text must look like, checked by rule at hand-in
 
 
 @dataclass(frozen=True)

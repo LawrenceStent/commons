@@ -241,3 +241,39 @@ def test_doing_a_part_yourself_closes_its_open_contracts():
     c = w.contracts[cid]
     assert c.status == "withdrawn" and c.closed == w.cycle
     assert [e.fields["stage"] for e in w.hub.recent("contract.stage") if e.fields["id"] == cid][-1] == "withdrawn"
+
+
+def test_a_hand_in_that_breaks_the_parts_format_is_refused_by_rule():
+    from commons.application.commands.base import FORMAT_REFUSED
+    from commons.domain.format import Format
+
+    w = world()
+    fmt = Format(max_words=5, sections=("Risks",))
+    job = MarketJob("T3", "kit", 80_000, {c: Part(c, f"do {c}", "rubric", format=fmt) for c in ("research", "build")},
+                    posted=w.cycle, deadline=w.cycle + 3)
+    w.jobs[job.id] = job
+    assert act(w, "prime").claim(job.id)
+    capacity = w.communities["prime"].capacity
+    out = act(w, "prime").do_part(job.id, "research", "far too many words for this part to be accepted")
+    assert not out and out.id == FORMAT_REFUSED and "the most is 5" in out.message and "Risks" in out.message
+    assert job.parts["research"].artifact is None and w.communities["prime"].capacity == capacity  # nothing used
+    assert act(w, "prime").do_part(job.id, "research", "Risks\nfew words")
+    # a contractor's delivery meets the same rule
+    cid = act(w, "prime").announce(job.id, "build", 30_000, 0.5).id
+    assert act(w, "sub").bid(cid, 20_000)
+    w.step()
+    assert act(w, "prime").award(cid, "sub")
+    refused = act(w, "sub").deliver(cid, "no risks section in this delivery at all")
+    assert not refused and refused.id == FORMAT_REFUSED
+    assert act(w, "sub").deliver(cid, "Risks\nbuilt it")
+
+
+def test_scripted_stand_ins_are_judged_by_their_tag_not_the_format():
+    from commons.domain.format import Format
+
+    w = world()
+    job = MarketJob("T4", "kit", 80_000, {"research": Part("research", "do it", "rubric", format=Format(min_words=100))},
+                    posted=w.cycle, deadline=w.cycle + 3)
+    w.jobs[job.id] = job
+    assert act(w, "prime").claim(job.id)
+    assert act(w, "prime").do_part(job.id, "research", tagged(0.9, " research"))

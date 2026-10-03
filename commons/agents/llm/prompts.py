@@ -33,8 +33,9 @@ def sources_reference(sources: list[tuple[str, str]]) -> str:
 
 
 def member_prompt(spec: str, rubric: str, instructions: str, reference: str, *, lookups: bool, web: bool,
-                  rounds: int) -> str:
-    prompt = f"Spec:\n{spec}\n\nRubric:\n{rubric}\n\nSteward's instructions:\n{instructions[:1000]}{reference}"
+                  rounds: int, form: str = "") -> str:
+    rule = f"\n\nFormat (checked by rule before any grader reads it; work that breaks it is refused):\n{form}" if form else ""
+    prompt = f"Spec:\n{spec}\n\nRubric:\n{rubric}{rule}\n\nSteward's instructions:\n{instructions[:1000]}{reference}"
     if lookups:
         prompt += ("\n\nYou may look things up first (search_archive, read_archive"
                    + (", web_search, web_fetch" if web else "") + f"), at most {rounds} rounds, "
