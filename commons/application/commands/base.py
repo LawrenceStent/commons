@@ -16,9 +16,15 @@ if TYPE_CHECKING:
     from commons.domain.contract import Contract
     from commons.domain.market import Part
 
-MAX_ARTIFACT = 4000
+MAX_ARTIFACT = 12_000  # characters of work, a playbook or a delivery; longer is refused, never cut off (3 Oct)
 MAX_NOTE = 500
 FORMAT_REFUSED = "format"  # the Outcome id of a hand-in the format rule refused: the draft needs revising, not resending
+
+
+def size_problems(text: str) -> list[str]:
+    """What's wrong with the length of a piece of work, whatever its part asks: it must fit `MAX_ARTIFACT`. Work used
+    to be cut off at the cap without a word, which could drop its last section."""
+    return [f"it is {len(text)} characters; the most is {MAX_ARTIFACT}"] if len(text) > MAX_ARTIFACT else []
 
 
 class CommandBase:
@@ -45,10 +51,18 @@ class CommandBase:
     def _contract(self, contract_id: ContractId) -> Contract | None:
         return self.w.contracts.get(contract_id)
 
+    def _size_ok(self, text: str) -> Outcome | None:
+        if problems := size_problems(text):
+            return Outcome(False, f"refused: {problems[0]}. Shorten it and hand it in again", FORMAT_REFUSED)
+        return None
+
     def _format_ok(self, part: Part, artifact: str) -> Outcome | None:
-        """The part's format, by rule (commons/domain/format.py). Scripted stand-ins (quality-tagged) are judged by
-        their tag, as the grader judges them; model-written text never carries a tag (the runtime strips them)."""
-        if is_tagged(artifact) or not (problems := part.format.problems(artifact[:MAX_ARTIFACT])):
+        """The size cap, then the part's format, by rule (commons/domain/format.py). Scripted stand-ins (quality-tagged)
+        are judged by their tag, as the grader judges them; model-written text never carries a tag (the runtime strips
+        them)."""
+        if (err := self._size_ok(artifact)) is not None:
+            return err
+        if is_tagged(artifact) or not (problems := part.format.problems(artifact)):
             return None
         return Outcome(False, f"refused by the format rule for {part.capability}: {'; '.join(problems)}. "
                               f"Revise it ({part.format.describe()}) and hand it in again", FORMAT_REFUSED)

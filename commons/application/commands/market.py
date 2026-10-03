@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from commons.application.commands.base import MAX_ARTIFACT, CommandBase
+from commons.application.commands.base import CommandBase
 from commons.application.commands.pipeline import command
 from commons.application.observation import Outcome
 from commons.domain.ids import ContractId, JobId
@@ -67,7 +67,7 @@ class MarketCommands(CommandBase):
         if (err := self._use_capacity()) is not None:
             return err
         self.w.contract_net.withdraw_open(job_id, capability)
-        job.fill(capability, artifact[:MAX_ARTIFACT], source="self", cites=tuple(cites))
+        job.fill(capability, artifact, source="self", cites=tuple(cites))
         self.w.grading.maybe_submit(job)
         return Outcome(True, f"{capability} part of {job_id} done")
 
@@ -143,14 +143,16 @@ class MarketCommands(CommandBase):
             return Outcome(False, f"you have no awarded contract {contract_id} to deliver")
         if (err := self._cites_ok(tuple(cites))) is not None:
             return err
-        if (job := self.w.jobs.get(c.job_id)) and (err := self._format_ok(job.parts[c.capability], artifact)) is not None:
+        job = self.w.jobs.get(c.job_id)
+        err = self._format_ok(job.parts[c.capability], artifact) if job else self._size_ok(artifact)
+        if err is not None:
             return err
         if (err := self._use_capacity()) is not None:
             return err
-        self._send(Deliver(job_id=contract_id, artifact={"text": artifact[:MAX_ARTIFACT]}, cites=list(cites)))
+        self._send(Deliver(job_id=contract_id, artifact={"text": artifact}, cites=list(cites)))
         for pid in cites:
             self._send(Cite(playbook_id=pid, job_id=contract_id))
-        self.w.contract_net.deliver(c, artifact[:MAX_ARTIFACT], tuple(cites))
+        self.w.contract_net.deliver(c, artifact, tuple(cites))
         return Outcome(True, f"delivered {contract_id}; {c.prime} reviews by cycle {c.deadline}")
 
     @command()

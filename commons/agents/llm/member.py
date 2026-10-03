@@ -16,12 +16,18 @@ from commons.agents.llm.prompts import (
 )
 from commons.agents.llm.render import commissionable
 from commons.agents.llm.tools import MEMBER, member_tools
+from commons.application.commands.base import size_problems
 from commons.application.observation import ActionsAPI, Observation, Outcome
 from commons.application.ports import ModelBackend, ModelError, ToolResult, Turn
 from commons.domain.format import Format, words
 from commons.domain.grading import strip_tags
 from commons.domain.ids import PlaybookId
 from commons.substrate.ledger import InsufficientFunds
+
+
+def _problems(fmt: Format, text: str) -> list[str]:
+    """Why a draft would be refused at hand-in: its part's format, or the size cap every piece of work has."""
+    return fmt.problems(text) + size_problems(text)
 
 
 @dataclass(frozen=True)
@@ -67,7 +73,7 @@ class MemberWorker:
         t = self._write(act, prompt, tools)
         if isinstance(t, Outcome):
             return t
-        if problems := fmt.problems(strip_tags(t.text).strip()):
+        if problems := _problems(fmt, strip_tags(t.text).strip()):
             t = self._revise(act, prompt, t, problems, fmt)
             if isinstance(t, Outcome):
                 return t
@@ -85,7 +91,7 @@ class MemberWorker:
             valid = ", ".join(f"{r} {c}" for r, c, *_ in options) or "nothing right now"
             return Outcome(False, f"you can't commission {ref} {capability}; you can commission for: {valid}")
         waiting = next((d for d in self.drafts.values() if d.ref == ref and d.capability == capability), None)
-        if waiting and match[2].problems(waiting.text):
+        if waiting and _problems(match[2], waiting.text):
             self.drafts.pop(waiting.id)  # it would be refused at hand-in: write a new one
         elif waiting:
             how = "do_part" if any(r == ref and h == "do_part" for r, _, _, _, h, _ in options) else "deliver"
@@ -134,7 +140,7 @@ class MemberWorker:
         """One more call, without tools, when the draft breaks the part's format: it would be refused at hand-in."""
         messages = [{"role": "user", "text": prompt}, {"role": "assistant", "text": t.text},
                     {"role": "user", "text": f"This breaks the format rule ({'; '.join(problems)}), so it would be "
-                                             f"refused. Rewrite it to fit: {fmt.describe()}. Keep its citations. "
+                                             f"refused. Rewrite it to fit{': ' + fmt.describe() if fmt.describe() else ''}. Keep its citations. "
                                              "Output the deliverable only."}]
         try:
             revised = self.backend.chat(model=self.model, system=[self.system], reasoning=False, messages=messages,
@@ -179,6 +185,6 @@ class MemberWorker:
             self.drafts.pop(next(iter(self.drafts)))
         preview = text if len(text) <= 400 else text[:400] + " …"
         warn = (f"\nIt still breaks the format rule ({'; '.join(problems)}) and would be refused at hand-in; "
-                "commission it again with instructions to fix that") if (problems := fmt.problems(text)) else ""
+                "commission it again with instructions to fix that") if (problems := _problems(fmt, text)) else ""
         size = f"{len(text)} chars, {words(text)} words" if fmt.describe() else f"{len(text)} chars"
         return Outcome(True, f"draft {d.id} for {capability} ({size}):\n{preview}{warn}", d.id)

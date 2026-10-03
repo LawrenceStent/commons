@@ -293,3 +293,17 @@ def test_citing_a_playbook_that_does_not_exist_is_refused():
     job = claimed_job_needing_build(w)
     out = act(w, "prime").do_part(job.id, "research", "x", cites=("PB999",))
     assert not out and "unknown playbook" in out.message and job.parts["research"].artifact is None
+
+
+def test_work_over_the_size_cap_is_refused_not_cut_off():
+    from commons.application.commands.base import FORMAT_REFUSED, MAX_ARTIFACT
+
+    w = world()
+    job = claimed_job_needing_build(w)
+    long = "word " * (MAX_ARTIFACT // 5 + 1)
+    out = act(w, "prime").do_part(job.id, "research", long)
+    assert not out and out.id == FORMAT_REFUSED and f"the most is {MAX_ARTIFACT}" in out.message
+    assert job.parts["research"].artifact is None
+    fits = "x" * MAX_ARTIFACT
+    assert act(w, "prime").do_part(job.id, "research", fits) and job.parts["research"].artifact == fits  # whole
+    assert not act(w, "prime").publish("research", "a method", long)

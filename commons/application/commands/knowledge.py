@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 from typing import TYPE_CHECKING
 
-from commons.application.commands.base import MAX_ARTIFACT, CommandBase
+from commons.application.commands.base import CommandBase
 from commons.application.commands.pipeline import command
 from commons.application.observation import Outcome
 from commons.domain.ids import PassageId, PlaybookId
@@ -25,6 +25,8 @@ class KnowledgeCommands(CommandBase):
             return Outcome(False, "you can only publish methods for capabilities you have")
         if any(p.author == self.me.name and p.capability == capability for p in self.w.library.values()):
             return Outcome(False, f"you already have a {capability} playbook in the library")
+        if (err := self._size_ok(text)) is not None:
+            return err
         cost = self.w.params.knowledge.publish_cost
         pid = hashlib.sha256(f"{self.me.name}:{capability}:{text}".encode()).hexdigest()[:10]
         if not self._send(Publish(playbook_id=pid, capability=capability, title=title[:120], content_hash=pid)):
@@ -33,7 +35,7 @@ class KnowledgeCommands(CommandBase):
             self.w.meter.charge(self.me.name, cost, cycle=self.w.cycle, memo=f"publish {pid}")
         except InsufficientFunds:
             return Outcome(False, f"publishing costs {cost}; you can't afford it")
-        self.w.add_playbook(pid, self.me.name, capability, title[:120], text[:MAX_ARTIFACT])
+        self.w.add_playbook(pid, self.me.name, capability, title[:120], text)
         return Outcome(True, f"published playbook {pid}; you earn royalties whenever it is cited", pid)
 
     @command()
