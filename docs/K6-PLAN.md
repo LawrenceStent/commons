@@ -68,9 +68,9 @@ job part today); news search; shorting or derivatives; anything with real money.
 - [x] T2.3 A toy pack's desk runs on the unchanged kernel (acceptance test); golden unchanged
 
 ### T3. Broker (M) — pack, domain
-- [ ] T3.1 Accounts, positions, market orders, fees and slippage
-- [ ] T3.2 Limits: stop with every buy, position cap, no shorting or leverage, daily loss pause, kill criterion
-- [ ] T3.3 Stops triggered on fresh quotes; stale quotes refuse orders
+- [x] T3.1 Accounts, positions, market orders, fees and slippage
+- [x] T3.2 Limits: stop with every buy, position cap, no shorting or leverage, daily loss pause, kill criterion
+- [x] T3.3 Stops triggered on fresh quotes; stale quotes refuse orders
 
 ### T4. Prices (M) — pack, adapters
 - [ ] T4.1 The price port and the fake market (seeded, deterministic)
