@@ -150,7 +150,7 @@ class Account:
         elif self.paused != day and self.day_start and now < self.day_start * (1 - limits.daily_loss):
             told += self._close_all(quotes, costs, f"daily loss limit: down {1 - now / self.day_start:.1%} today")
             self.paused = day
-            told.append(f"daily loss limit reached: everything sold, trading paused until the next day")
+            told.append("daily loss limit reached: everything sold, trading paused until the next day")
         return told
 
     def _close_all(self, quotes: dict[str, Quote], costs: Costs, why: str) -> list[str]:

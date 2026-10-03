@@ -26,7 +26,7 @@ after each stage. The golden master moves only where a stage says so.
 
 **The trading pack (`packs/trading/`):**
 - **Prices**: a port with three adapters. A fake market (seeded random walk) for tests and the golden master;
-  Coinbase spot (crypto, public API, no key); Stooq (US ETFs and stocks, delayed, no key). Both live adapters go
+  Coinbase spot (crypto, public API, no key); Yahoo's chart API (US ETFs and stocks, no key, unofficial; Stooq, the first choice, put its quotes behind a browser check on 3 Oct). Both live adapters go
   through the kernel's safe fetcher and its allowlist. A quote older than its market allows (the US market is shut)
   can't be traded on, and stops aren't triggered on it.
 - **Broker** (pure rules, the domain): a paper account per co-op (cash, positions), market orders filled at the quote
@@ -73,9 +73,9 @@ job part today); news search; shorting or derivatives; anything with real money.
 - [x] T3.3 Stops triggered on fresh quotes; stale quotes refuse orders
 
 ### T4. Prices (M) — pack, adapters
-- [ ] T4.1 The price port and the fake market (seeded, deterministic)
-- [ ] T4.2 Coinbase spot and Stooq adapters through the safe fetcher; quote ages and US market hours
-- [ ] T4.3 Smoke test against the real APIs (by hand, once)
+- [x] T4.1 The price port and the fake market (seeded, deterministic)
+- [x] T4.2 Coinbase spot and Yahoo (was Stooq) adapters through the safe fetcher; quote ages and US market hours
+- [x] T4.3 Smoke test against the real APIs (by hand, 3 Oct: all eight symbols quoted; US stale on a Saturday, as it should be)
 
 ### T5. Performance and the capital economy (M) — pack
 - [ ] T5.1 Returns, benchmark, maximum drawdown, Sortino per horizon

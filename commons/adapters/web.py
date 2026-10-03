@@ -192,6 +192,11 @@ class Fetcher:
         title, text = html_to_text(raw) if "html" in ctype else ("", raw)
         return Page(final, title or final, text[: self.max_chars])
 
+    def text(self, url: str) -> str:
+        """An API call's body as text (a price feed's CSV, say). APIs are meant for programs: robots.txt doesn't apply."""
+        _, _, body = self._get(url)
+        return body.decode("utf-8", "replace")
+
     def json(self, url: str) -> dict:
         """A JSON API call (search providers). APIs are meant for programs, so robots.txt doesn't apply."""
         _, _, body = self._get(url)
