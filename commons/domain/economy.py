@@ -1,7 +1,7 @@
 """Economies: how passing work is paid. A society's economy is chosen once, from its settings (`policy_for`); nothing
 else in the code asks which economy it is. Adding one (trading's capital economy, say) means adding a class here.
 
-    MarketPayment  an outside buyer (the mock market) pays each passing job its value at once
+    MarketPayment  an outside payer (the mock market) pays each passing job its value at once
     GrantPayment   a funder puts a budget into a pool each cycle (at most `cap_cycles` budgets banked); at the end of
                    the cycle, passing work shares the pool by value, never more than its value
 """
@@ -20,7 +20,7 @@ class PaymentPolicy(Protocol):
     pays_at_once: bool  # False: passing work waits for `shares` at the end of the cycle
     pool: str | None  # the ledger account it pays from and funds, if it keeps one
     funder: str | None  # the outside account that funds the pool
-    source: str | None  # where revenue comes from in the ledger (None: the ledger's default outside buyer)
+    source: str | None  # where revenue comes from in the ledger (None: the ledger's default outside payer)
     payer: str  # how it's named when a co-op is told it was paid
     queued: str  # what a co-op is told when its passing work waits
 

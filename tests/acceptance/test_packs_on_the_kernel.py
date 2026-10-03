@@ -10,7 +10,7 @@ from commons.application.society import Params, World
 from commons.domain.pack import TemplateWorkSource, load
 from tests.paths import ROOT
 
-KERNEL = ["sim", "society", "runtime", "substrate", "protocol", "console"]
+KERNEL = ["commons", "sim"]  # every layer of the kernel, and the old commands' shims
 DOMAIN = re.compile(r'"(research|build|design|write)"|product|bike|espresso|buyer|marketplace|launch kit|'
                     r'coop-[abc]|"studio"|"lab"|tagline|'
                     r'"(scout|assess)"|drinking water|volunteer|funder or council', re.IGNORECASE)  # packs 0 and 1
