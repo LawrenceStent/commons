@@ -2,6 +2,7 @@
 folder (societies/ and runs/ are relative to where commands run)."""
 
 import importlib
+import json
 import shutil
 
 import pytest
@@ -121,3 +122,22 @@ def test_a_run_stops_when_every_model_call_in_a_cycle_failed():
     hub.emit("llm.turn", 3, ok=0, errors=["steward call failed: LM Studio returned 400: stuck"])
     assert "LM Studio returned 400: stuck" in live._model_down(hub, 3)
     assert live._model_down(hub, 4) is None  # no LLM turns at all is not a failure
+
+
+def test_ticks_build_a_society_then_resume_it(tmp_path, monkeypatch, capsys):
+    from commons.interfaces.cli import live
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(live, "PID", tmp_path / "runs" / "live.pid")
+    cli.main(["tick", "paper", "--pack", "trading", "--backend", "fake", "--cycles", "2"])
+    state = tmp_path / "runs" / "ticks" / "paper" / "state"
+    assert (state / "society.save").exists() and (state / "ledger.sqlite").exists()
+    cli.main(["tick", "paper", "--pack", "trading", "--backend", "fake", "--cycles", "23"])
+    out = capsys.readouterr().out
+    assert "cycles 1-2 played" in out and "cycles 3-25 played" in out and "windows settled" in out
+    turns = (state / "turns.jsonl").read_text().splitlines()
+    assert {json.loads(t)["cycle"] for t in turns} == set(range(1, 26))  # every cycle's turns, across ticks
+    from commons.application.society import World
+
+    w = World.resume(state / "society.save", backend=object())  # no model needed to look
+    assert w.cycle == 25 and w.desk.settlements and w.ledger.check() is None

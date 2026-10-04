@@ -129,8 +129,9 @@ def _lock() -> None:
     if PID.exists():
         try:
             other = int(PID.read_text())
-            os.kill(other, 0)
-            sys.exit(f"another live run is active (pid {other}); stop it first: kill -INT {other}")
+            if other != os.getpid():  # this process may take its own lock again (ticks in one test, say)
+                os.kill(other, 0)
+                sys.exit(f"another live run is active (pid {other}); stop it first: kill -INT {other}")
         except (ValueError, ProcessLookupError, PermissionError):
             pass  # a stale file from a run that died
     PID.parent.mkdir(parents=True, exist_ok=True)
@@ -139,21 +140,29 @@ def _lock() -> None:
     atexit.register(lambda: lock.exists() and lock.read_text() == str(os.getpid()) and lock.unlink())
 
 
-def _world(a, society, pack, m: dict, population, ledger: str) -> World:
+def judges(a, pack, m: dict) -> tuple:
+    """The grader and the appraiser this run's models give: built for a new society, reattached to a resumed one."""
     if a.panel and not pack.grader_panel:
         sys.exit(f"the {pack.name} pack has no grader panel")
     judge = (PanelGrader.of(m["backend"], m["grader"], m["grader_tokens"], pack.grader_system, pack.grader_panel) if a.panel
              else LLMGrader(m["backend"], model=m["grader"], max_tokens=m["grader_tokens"], system=pack.grader_system))
+    return HybridGrader(judge), LLMAppraiser(m["backend"], model=m["grader"], max_tokens=m["grader_tokens"],
+                                             system=pack.appraiser_system)
+
+
+def web_for(a, operator: Operator | None) -> WebAccess | None:
+    return None if a.no_web or a.backend == "fake" else WebAccess.default(operator.gate.search if operator else "wikipedia")
+
+
+def _world(a, society, pack, m: dict, population, ledger: str) -> World:
+    grader, appraiser = judges(a, pack, m)
     run_name = Path(ledger).stem
     operator = Operator(a.operator) if a.operator else None
-    web = None if a.no_web or a.backend == "fake" else WebAccess.default(operator.gate.search if operator else "wikipedia")
     make_desk = pack.desk if a.backend == "fake" else (pack.live_desk or pack.desk)  # a dry run never touches live data
     return World(Params(seed=a.seed, ledger_path=ledger, activity_path=ledger.replace(".sqlite", ".activity.jsonl"),
                         **{**pack.live, **RUN}),
-                 population=population, pack=pack, grader=HybridGrader(judge),
-                 appraiser=LLMAppraiser(m["backend"], model=m["grader"], max_tokens=m["grader_tokens"],
-                                        system=pack.appraiser_system),
-                 operator=operator, web=web,
+                 population=population, pack=pack, grader=grader, appraiser=appraiser,
+                 operator=operator, web=web_for(a, operator),
                  gate=Gate(folder=society.folder if society else None, run=run_name),
                  archive=Archive(society.folder / "archive") if society else None,
                  ratings=Ratings(society.folder, run=run_name, every=a.rate_every) if society else None,

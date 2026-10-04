@@ -72,6 +72,45 @@ a society folder (re-read every cycle).
 a model call in flight finishes first. Real money needs `--yes-spend`, and the real-dollar kill-switch halts at
 `--real-ceiling`. Web reads follow the operator's `[gate]` policy (default: each waits for your approval).
 
+## commons tick
+
+Resumes a saved society, plays a few cycles, saves it and stops: for forward tests that run for weeks on a schedule
+(K6), so the machine is only busy for minutes at a time. The first tick builds the society exactly as `commons run`
+would, with the same options; every later tick resumes it with that tick's models.
+
+```sh
+uv run commons tick paper --pack trading --backend fake --cycles 24          # a free dry run: a day of ticks at once
+uv run commons tick paper --pack trading --backend lmstudio --model qwen/qwen3.5-35b-a3b
+scripts/tick.sh paper                                                         # what the schedule runs
+```
+
+| Option | Default | Meaning |
+|---|---|---|
+| `NAME` | | The society: `societies/NAME` if it was founded, else `runs/ticks/NAME` |
+| `--cycles N` | 1 | Cycles to play this tick |
+| everything `commons run` takes | | Backend, models, `--pack`, `--operator`, `--no-web`, … (used to build it, then to reattach models) |
+
+**Reads and writes** `STATE/`: `society.save` (the society, written then moved into place), `ledger.sqlite`,
+`ledger.activity.jsonl`, `turns.jsonl`. STATE is `societies/NAME/state/` or `runs/ticks/NAME/state/`.
+**Safety:** the same one-live-run lock as `commons run`. A save resumes only with the same code (it isn't an archive
+format); resuming refuses a ledger that changed since the save. If every model call in a tick failed (a stuck
+engine), the tick stops and saves, and the next tick tries again.
+
+### The schedule
+
+`scripts/tick.sh NAME [MODEL] [CYCLES]` checks first and skips, touching nothing, if less than 60% of memory is
+free (`MIN_FREE=...` to change it), if any model is already loaded in LM Studio (yours is never unloaded), or if a
+live run holds the lock. Otherwise it loads the model, ticks, unloads it and stops the server. It logs to
+`runs/ticks/NAME/tick.log`; `PACK=...` picks the pack (default trading).
+
+`scripts/commons.tick.plist` runs it every hour with launchd. It is off until you load it:
+
+```sh
+cp scripts/commons.tick.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/commons.tick.plist      # on
+launchctl unload ~/Library/LaunchAgents/commons.tick.plist    # off
+```
+
 ## commons sim
 
 Runs a scripted society (no models, no spend) and prints a summary and its scorecard. This is how incentive rules are

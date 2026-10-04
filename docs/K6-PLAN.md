@@ -85,12 +85,12 @@ job part today); news search; shorting or derivatives; anything with real money.
 ### T6. The trading pack (M)
 - [x] T6.1 Brief, capabilities, tools, doctrines, scripted and live populations, scorecard
 - [x] T6.2 Golden runs for the trading pack (scripted and fake-model)
-- [ ] T6.3 A dry run with fake models end to end, ticks included
+- [x] T6.3 A dry run with fake models end to end, ticks included
 
 ### T7. Ticks and the schedule (S)
-- [ ] T7.1 `commons tick NAME --cycles N`
-- [ ] T7.2 `scripts/tick.sh`: skip if memory is short or a live run holds the lock; load, tick, unload
-- [ ] T7.3 A launchd plist, off until you turn it on; COMMANDS.md
+- [x] T7.1 `commons tick NAME --cycles N`
+- [x] T7.2 `scripts/tick.sh`: skip if memory is short or a live run holds the lock; load, tick, unload
+- [x] T7.3 A launchd plist, off until you turn it on; COMMANDS.md
 
 ### T8. The forward test (L, mostly waiting)
 - [ ] T8.1 Found a trading society; first live ticks with Qwen, watched
