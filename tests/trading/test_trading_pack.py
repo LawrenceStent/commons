@@ -71,3 +71,29 @@ def test_the_live_pack_uses_live_prices_and_pays_more_per_point():
     assert type(live.market).__name__ == "LiveMarket" and type(fake.market).__name__ == "FakeMarket"
     assert live.per_return > fake.per_return
     assert replace(pack).name == "trading"
+
+
+def test_kernel_actions_the_society_lacks_are_not_offered_and_refused_by_rule():
+    seen = {}
+
+    def steward(system, messages, tools):
+        seen["tools"] = {t["name"] for t in tools}
+        if len([m for m in messages if m["role"] == "assistant"]) == 0:
+            return {"tool_calls": [("publish", {"capability": "risk", "title": "t", "text": "x"})]}
+        return {"tool_calls": [("end_turn", {})]}
+
+    llm = Community("trend", 3, {"risk"}, LLMStrategy(FakeBackend(converse=steward)))
+    w = society([llm], cycles=1)
+    assert {"buy", "sell", "raise_stop", "note", "end_turn"} <= seen["tools"]
+    assert not seen["tools"] & {"claim", "publish", "propose_venture", "commission", "fork", "search_archive"}
+    refused = [e for e in w.activity.recent(20) if e.name == "publish"]
+    assert refused and not refused[0].ok and "this society has no publish" in refused[0].text
+    assert w.library == {}
+
+
+def test_a_refused_buy_says_how_much_would_fit():
+    w = society([Community("sitter", 2, {"risk"}, Sitter())], cycles=1)
+    from commons.application.actions import Actions
+
+    out = Actions(w, w.communities["sitter"]).desk_call("buy", {"symbol": "BTC-USD", "amount": 2_500, "stop_pct": 0.1})
+    assert not out and "at most 2,000.00 more" in out.message

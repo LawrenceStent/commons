@@ -69,6 +69,10 @@ class RuntimeHooks(CommandBase):
 
     @command(log=False)
     def operator_refusal(self, action: str, args: dict) -> str | None:
+        """A rule refusing this action before it runs: the pack's (an action this society doesn't have), then your
+        operator's limits."""
+        if action in self.w.pack.without:
+            return f"this society has no {action.replace('_', ' ')}"
         held = sum(j.prime == self.me.name and j.status == JobStatus.CLAIMED for j in self.w.jobs.values())
         return self.w.operator.check(self.me.name, action, args, held)
 

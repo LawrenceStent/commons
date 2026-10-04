@@ -103,6 +103,11 @@ PACK = Pack(
     live_params={"jobs_per_cycle": 0, "treasury_seed": 50_000_000},
     scorecard=SCORECARD,
     desk=lambda seed: TradingDesk(FakeMarket(seed=seed)),
+    # no job board, contracts, members' drafts, ventures, library or archive in stage 1; no new desks either (a spawn
+    # or fork would mint a fresh paper account). The first live tick (4 Oct) paid for two playbooks and a venture.
+    without=frozenset({"claim", "do_part", "announce", "bid", "award", "deliver", "review", "attest", "dispute",
+                       "commission", "propose_venture", "publish", "read_playbook", "learn", "search_archive",
+                       "read_archive", "propose_spawn", "second_spawn", "fork", "propose_merge", "accept_merge"}),
     # live: a window's thinking costs a model-backed desk about 1-2M µcr, so a point of score (1% of risk-adjusted
     # excess return) pays about that
     live_desk=lambda seed: TradingDesk(LiveMarket(), per_return=200_000_000),

@@ -153,6 +153,7 @@ class StewardLoop:
     cost: int = 0
     spent: int = 0
     nudged: bool = False
+    without: frozenset = frozenset()  # kernel actions the pack's society doesn't have (not offered)
 
     def run(self) -> None:
         started = time.time()
@@ -160,6 +161,7 @@ class StewardLoop:
         act.actor = "steward"
         op, pack = act.operator_view(), act.pack()
         self.system = steward_system(pack, self.obs, op)
+        self.without = pack.without
         rt = op.runtime  # per-co-op runtime settings from the operator override the defaults for this turn
         self.model = rt.get("steward_model", a.steward_model)
         self.max_tokens = int(rt.get("max_tokens", a.max_tokens))
@@ -180,7 +182,8 @@ class StewardLoop:
             return False
         try:
             t = a.backend.chat(model=self.model, system=self.system, messages=self.messages,
-                               tools=steward_tools(bool(self.obs.web), self.obs.desk_tools), max_tokens=self.max_tokens)
+                               tools=steward_tools(bool(self.obs.web), self.obs.desk_tools, self.without),
+                               max_tokens=self.max_tokens)
         except ModelError as e:
             log.append({"kind": "error", "text": f"steward call failed: {e}"})
             return False

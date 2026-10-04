@@ -79,8 +79,10 @@ class Account:
             return False, f"not enough cash: {self.cash:.2f} available (no leverage)"
         held = self.positions.get(symbol)
         worth = (held.qty * quote.price if held else 0.0) + notional
-        if worth > limits.position_cap * self.value({symbol: quote}):
-            return False, f"that would put more than {limits.position_cap:.0%} of the account in {symbol}"
+        room = limits.position_cap * self.value({symbol: quote}) - (worth - notional)
+        if notional > room:
+            return False, (f"that would put more than {limits.position_cap:.0%} of the account in {symbol}: "
+                           f"at most {max(0.0, room):,.2f} more")
         fill = quote.price * (1 + costs.slippage)
         fee = notional * costs.fee
         qty = (notional - fee) / fill

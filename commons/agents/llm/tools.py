@@ -121,15 +121,16 @@ MEMBER = ("search_archive", "read_archive", "web_search", "web_fetch")
 _WITH_DESK: dict[tuple, list[dict[str, Any]]] = {}
 
 
-def steward_tools(web: bool, desk: tuple[dict[str, Any], ...] = ()) -> list[dict[str, Any]]:
+def steward_tools(web: bool, desk: tuple[dict[str, Any], ...] = (), without: frozenset[str] = frozenset()
+                  ) -> list[dict[str, Any]]:
     """The same list object every call (it's in the cached prefix), with or without the web, plus the pack's desk
-    tools if it has any, in name order with the rest."""
+    tools if it has any, in name order with the rest, less the kernel actions the pack's society doesn't have."""
     base = TOOLS if web else OFFLINE
-    if not desk:
+    if not desk and not without:
         return base
-    key = (web, tuple(t["name"] for t in desk))
+    key = (web, tuple(t["name"] for t in desk), tuple(sorted(without)))
     if key not in _WITH_DESK:
-        _WITH_DESK[key] = sorted(base + list(desk), key=lambda t: t["name"])
+        _WITH_DESK[key] = sorted([t for t in base if t["name"] not in without] + list(desk), key=lambda t: t["name"])
     return _WITH_DESK[key]
 
 

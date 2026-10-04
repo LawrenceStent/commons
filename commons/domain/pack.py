@@ -14,6 +14,7 @@ A pack supplies:
     grader_panel     optional lenses (what each grader of a panel looks hardest at); the part gets the median
     scorecard        mission metrics (commons/domain/scorecard.py): what success means for this society, beyond money
     desk / live_desk optional: the pack's own tools and state, when its work isn't jobs (commons/domain/desk.py)
+    without          kernel actions this society doesn't have (a trading desk has no job board): not offered, refused
 
 Packs are found by name: `load("earn_online")` imports `packs.earn_online` and returns its `PACK`. The
 kernel refers to no pack except through `DEFAULT`, the one used when a world is built without saying.
@@ -99,6 +100,7 @@ class Pack:
     scorecard: tuple = ()
     desk: Callable[[int], Desk] | None = None  # the pack's own tools and state (domain/desk.py), from the run's seed
     live_desk: Callable[[int], Desk] | None = None  # the same for live runs (live data); defaults to `desk`
+    without: frozenset[str] = frozenset()  # kernel actions this society doesn't have: not offered, refused by rule
 
     @property
     def live(self) -> dict[str, Any]:
