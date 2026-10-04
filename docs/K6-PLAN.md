@@ -93,6 +93,10 @@ job part today); news search; shorting or derivatives; anything with real money.
 - [x] T7.3 A launchd plist, off until you turn it on; COMMANDS.md
 
 ### T8. The forward test (L, mostly waiting)
-- [ ] T8.1 Found a trading society; first live ticks with Qwen, watched
+- [x] T8.1 First live ticks with Qwen, watched (4 Oct, `runs/ticks/paper/`): two ticks through `scripts/tick.sh`
+      (cycles 1-2, then 3 resumed from the save), about 3.5 minutes each with the model loaded. Real prices
+      (crypto; US closed on a Sunday); all three model-backed desks bought with stops; the 20% cap refused
+      oversized orders. Found and fixed: desks paid for playbooks and a venture and searched a missing archive
+      (now `Pack.without`), and a cap refusal didn't say how much would fit
 - [ ] T8.2 Schedule on (your go-ahead); 30+ cycles with performance settled per horizon
 - [ ] T8.3 Findings in CHECKLIST.md; graduation criteria for stage 2 written down before anyone looks at results

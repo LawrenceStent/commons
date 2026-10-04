@@ -678,7 +678,10 @@ checklists in the plan (R0 to R12), on branch `refactor/architecture`; no featur
       every test but the golden master passes; scripted runs move a few percent (seed 0: 228 to 237 jobs paid on
       earn online, 242 to 228 on tech for good)
 - [ ] K6 Trading pack: paper broker, forward-only, deterministic risk-adjusted evaluator, doctrine per co-op
-  - Stage 1 in progress (from 3 Oct): plan and checklists in `docs/K6-PLAN.md`
+  - Stage 1 in progress (from 3 Oct): plan and checklists in `docs/K6-PLAN.md`. T0-T7 done and T8.1 done (4 Oct):
+    save and resume, pack desks, the paper broker, prices (Coinbase, Yahoo), performance and the capital economy,
+    the trading pack, `commons tick` and the schedule (off), first live ticks. Waiting on you: turning the schedule
+    on, and the graduation criteria for stage 2, written down before anyone looks at results
 - [ ] K7 OSINT pack: sourcing-first evaluator, separate verify co-op, forbidden-target policy enforced in tools
 - [ ] K8 Many societies: registry, CLI, dashboard picker, per-society and total spend caps, slow-cadence scheduler
 
