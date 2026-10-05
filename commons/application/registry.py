@@ -3,7 +3,8 @@
 A society is a folder: `societies/NAME` if it was founded (commons/application/founding.py), `runs/ticks/NAME` if it
 was started by `commons tick`. A ticked society keeps its state in `STATE/` (`state/` inside its folder) with a
 `status.json` written at every save: its pack, cycle, last tick and spend, so listing never has to load a society.
-A `paused` file in the folder pauses it: ticks skip it until it's removed (`commons resume NAME`).
+A `paused` file in the folder pauses it: ticks skip it until it's removed (`commons resume NAME`). A `pace` file sets
+the minutes between its ticks (`commons pace NAME MINUTES`), so societies can keep different schedules.
 """
 
 from __future__ import annotations
@@ -33,6 +34,18 @@ class Entry:
     @property
     def state(self) -> Path:
         return self.folder / STATE
+
+    @property
+    def pace(self) -> int:
+        """Minutes between its ticks (a `pace` file; none means every round of the schedule)."""
+        try:
+            return int((self.folder / "pace").read_text().strip())
+        except (OSError, ValueError):
+            return 0
+
+    def due(self, now: float | None = None) -> bool:
+        last = self.status.get("last_tick")
+        return not last or (now or time.time()) - last >= self.pace * 60 - 30  # a little slack for the schedule
 
 
 def folder_of(name: str) -> Path:
@@ -83,6 +96,14 @@ def _spend() -> dict:
         return json.loads(SPEND.read_text())
     except (OSError, ValueError):
         return {}
+
+
+def set_pace(name: str, minutes: int) -> Path:
+    folder = folder_of(name)
+    if not folder.exists():
+        raise ValueError(f"no society called {name!r} (commons list shows them)")
+    (folder / "pace").write_text(f"{max(0, minutes)}\n")
+    return folder
 
 
 def pause(name: str) -> Path:

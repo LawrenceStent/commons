@@ -6,6 +6,8 @@ Since the refactor (R3, 1 Oct) there is one command, `commons`, with a subcomman
 | Command | What it does | Costs | Section |
 |---|---|---|---|
 | `uv run commons run` | Runs a live society (LLM co-ops) | Fake: nothing. LM Studio: your machine. Anthropic: real money | [run](#commons-run) |
+| `uv run commons tick` | Resumes a saved society, plays a few cycles, saves it; `tick-all` does every unpaused one | As `run` | [tick](#commons-tick) |
+| `uv run commons list` | Every society on this machine; `pause`, `resume` and `pace` one | Nothing | [list](#commons-list-pause-resume-pace) |
 | `uv run commons sim` | Runs a scripted society (no models) | Nothing | [sim](#commons-sim) |
 | `uv run commons found` | Founds a society from your brief; approves its blueprints | One model call (or none with `fake`) | [found](#commons-found) |
 | `uv run commons approve` | Decides what agents asked the gate for (web reads) | Nothing | [approve](#commons-approve) |
@@ -57,6 +59,7 @@ uv run commons run --backend anthropic --yes-spend --real-ceiling 1.00 --cycles 
 | `--max-minutes M` | 30 | Stop after M minutes of wall time (checked between cycles) |
 | `--seed N` | 0 (a society's own seed with `--society`) | Random seed: same seed, same jobs |
 | `--real-ceiling D` | 1.00 | Real dollars per day before the kill-switch halts everything |
+| `--total-ceiling D` | 2.00 | Real dollars per calendar day across every society on this machine (`runs/spend.json`): a run doesn't start once today's total reaches it, and its kill-switch is tightened to what's left |
 | `--serve` | off | Shows the run on the dashboard at http://localhost:8000; pauses at the cycle limit |
 | `--panel` | off | Grades every part with the pack's panel of lenses (median); one call per lens |
 | `--rate-every N` | 3 | With `--society`: sets every Nth paid job aside for you to rate |
@@ -96,20 +99,39 @@ scripts/tick.sh paper                                                         # 
 format); resuming refuses a ledger that changed since the save. If every model call in a tick failed (a stuck
 engine), the tick stops and saves, and the next tick tries again.
 
+`commons tick-all [tick options]` ticks every unpaused society that is due (see `pace` below), one after another in
+one process, under one lock; each keeps its own pack, so it takes no `--pack`. A tick skips a paused society, and
+any tick or run stops once today's real spend across every society reaches `--total-ceiling`.
+
 ### The schedule
 
-`scripts/tick.sh NAME [MODEL] [CYCLES]` checks first and skips, touching nothing, if less than 60% of memory is
-free (`MIN_FREE=...` to change it), if any model is already loaded in LM Studio (yours is never unloaded), or if a
-live run holds the lock. Otherwise it loads the model, ticks, unloads it and stops the server. It logs to
-`runs/ticks/NAME/tick.log`; `PACK=...` picks the pack (default trading).
+`scripts/tick.sh NAME [MODEL] [CYCLES]`, or `scripts/tick.sh all ...` for every due society, checks first and skips,
+touching nothing, if less than 60% of memory is free (`MIN_FREE=...` to change it), if any model is already loaded in
+LM Studio (yours is never unloaded), or if a live run holds the lock. Otherwise it loads the model once, ticks,
+unloads it and stops the server. It logs to `runs/ticks/NAME/tick.log`; `PACK=...` sets the pack for a society's
+first tick only.
 
-`scripts/commons.tick.plist` runs it every hour with launchd. It is off until you load it:
+`scripts/commons.tick.plist` runs `tick.sh all` every hour with launchd. It is off until you load it:
 
 ```sh
 cp scripts/commons.tick.plist ~/Library/LaunchAgents/
 launchctl load ~/Library/LaunchAgents/commons.tick.plist      # on
 launchctl unload ~/Library/LaunchAgents/commons.tick.plist    # off
 ```
+
+## commons list, pause, resume, pace
+
+Every society on this machine (K8): founded ones (`societies/NAME`) and ticked ones (`runs/ticks/NAME`).
+
+```sh
+uv run commons list                # pack, cycle, last tick, pace, real spend, and paused or halted
+uv run commons pause paper         # ticks skip it (a paused file in its folder)
+uv run commons resume paper
+uv run commons pace probe 180      # at most one tick every 3 hours; 0: every round of the schedule
+```
+
+**Reads** each society's `state/status.json` (written at every save) and its `paused` and `pace` files; **writes**
+those two files. Nothing is loaded or run.
 
 ## commons sim
 
@@ -246,6 +268,10 @@ uv run commons console --pack tech_for_good --seed 3 --port 8123
 | `--pack NAME` | `earn_online` | Which pack |
 | `--seed N` | 0 | Random seed |
 | `--port N` | 8000 | Where it listens |
+| `--open NAME` | | Opens a saved society (see `commons list`) to look at, read only |
+
+The society picker at the top of the page opens any saved society the same way. An opened society is read only:
+nothing on the page steps, steers or approves it; it moves only when it is ticked.
 
 The page has controls (pause, resume, step, speed, pull and reset the kill-switch), every component's panel, the
 scorecard, the Gate panel (approve requests in batches, standing approvals, revoke) and the Operator panel (edit

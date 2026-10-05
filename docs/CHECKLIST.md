@@ -686,7 +686,9 @@ checklists in the plan (R0 to R12), on branch `refactor/architecture`; no featur
       co-op, once the others are done, given their work), the screen (no people, no personal data, passive only)
       at founding, before the gate and at hand-in, halting the society on any refusal. Done-when met by test
   - K7, K8 and R13 next, then Phase 2 (your order, 5 Oct): plan and checklists in `docs/K7-K8-PLAN.md`
-- [ ] K8 Many societies: registry, CLI, dashboard picker, per-society and total spend caps, slow-cadence scheduler
+- [x] K8 Many societies (5 Oct): the registry and `commons list`, `pause`, `resume`, `pace`; a real-dollar cap across
+      every society per calendar day; `commons tick-all` and `scripts/tick.sh all` (one model load, one society
+      after another); the dashboard opens any saved society read only. Done-when met by test
 
 Recommended order: a minimal 1.5 (one capable model trading), then K1–K3, K4, K5, Phase 2 as pack 0's
 live mode, then K6, K7, K8.

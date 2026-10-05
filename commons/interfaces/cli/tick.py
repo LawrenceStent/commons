@@ -93,8 +93,10 @@ def main_all(argv: list[str] | None = None) -> None:
         sys.exit("tick-all takes no --pack: each society keeps its own")
     entries = registry.societies()
     paused = [e.name for e in entries if e.paused]
-    due = [e.name for e in entries if not e.paused]
-    print(f"tick-all: {len(due)} societies{f' ({len(paused)} paused: ' + ', '.join(paused) + ')' if paused else ''}")
+    waiting = [e.name for e in entries if not e.paused and not e.due()]
+    due = [e.name for e in entries if not e.paused and e.due()]
+    print(f"tick-all: {len(due)} societies" + (f" ({len(paused)} paused: {', '.join(paused)})" if paused else "")
+          + (f" ({len(waiting)} not due yet: {', '.join(waiting)})" if waiting else ""))
     for name in due:
         main([name, *argv])
 
