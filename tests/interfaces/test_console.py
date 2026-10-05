@@ -83,3 +83,25 @@ def test_dashboard_separates_real_money_from_credits():
     assert snap["money"]["currency"] == "SIM"
     assert snap["money"]["real"] == {"capital_in": 1000, "revenue": 0, "api_spend": 1000, "fees": 0}
     assert snap["ledger"]["flows"].get("api", 0) == 0  # the real bill isn't mixed into credit flows
+
+
+def test_the_page_opens_a_saved_society_read_only(tmp_path, monkeypatch):
+    from commons.interfaces.cli import live
+    from commons.interfaces.cli import main as cli
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(live, "PID", tmp_path / "runs" / "live.pid")
+    cli.main(["tick", "paper", "--pack", "trading", "--backend", "fake", "--cycles", "3"])
+    app = create_app(World(Params(seed=0)), autostart=False)
+    with TestClient(app) as client:
+        listed = client.get("/api/societies").json()
+        assert listed["open"] is None and [s["name"] for s in listed["societies"]] == ["paper"]
+        assert client.post("/api/open/nobody").status_code == 404
+        opened = client.post("/api/open/paper").json()
+        assert opened == {"ok": True, "open": "paper", "cycle": 3}
+        assert client.get("/api/snapshot").json()["run"]["cycle"] == 3
+        assert client.post("/control/resume").status_code == 400  # read only
+        client.post("/control/step")
+        assert client.get("/api/snapshot").json()["run"]["cycle"] == 3  # nothing steps it here
+        assert client.post("/api/gate", json={"ids": []}).status_code == 409
+        assert client.get("/api/societies").json()["open"] == "paper"

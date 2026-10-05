@@ -21,7 +21,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 
-from commons.application import queries
+from commons.application import queries, registry
 from commons.application.queries import community_detail
 from commons.application.society import Params, World
 from commons.domain import events as ev
@@ -56,6 +56,8 @@ def create_app(world: World | None = None, cycles_per_second: float = 4.0, autos
     app.add_api_route("/api/gate", routes.gate, methods=["POST"])
     app.add_api_route("/stream", routes.stream, methods=["GET"])
     app.add_api_route("/control/{action}", routes.control, methods=["POST"])
+    app.add_api_route("/api/societies", routes.societies, methods=["GET"])
+    app.add_api_route("/api/open/{name}", routes.open_saved, methods=["POST"])
     return app
 
 
@@ -71,6 +73,21 @@ class Routes:
     async def snapshot(self):
         return JSONResponse(await self.run.snapshot())
 
+    async def societies(self):
+        """Every saved society on this machine (commons/application/registry.py), and which one is open."""
+        found = [{"name": e.name, "pack": e.status.get("pack"), "cycle": e.status.get("cycle"), "paused": e.paused}
+                 for e in registry.societies() if (e.state / "society.save").exists()]
+        return {"open": self.run.viewing, "societies": found}
+
+    async def open_saved(self, name: str):
+        """Open a saved society to look at, read only."""
+        save = registry.folder_of(name) / registry.STATE / "society.save"
+        if not save.exists():
+            return JSONResponse({"error": f"no saved society called {name}"}, status_code=404)
+        world = await asyncio.to_thread(open_saved, save)
+        self.run.open_saved(name, world)
+        return {"ok": True, "open": name, "cycle": world.cycle}
+
     async def community(self, name: str):
         if name not in self.run.world.communities:
             return JSONResponse({"error": f"no community {name}"}, status_code=404)
@@ -78,6 +95,8 @@ class Routes:
 
     async def operator(self, request: Request):
         """Set directives for one co-op (`coop`) or for all (`coop` null). They apply from the next turn."""
+        if self.run.viewing:
+            return JSONResponse({"error": f"{self.run.viewing} is open read only"}, status_code=409)
         body, w = await request.json(), self.run.world
         coop = body.get("coop")
         if coop is not None and coop not in w.communities:
@@ -97,6 +116,8 @@ class Routes:
         """Approve or deny gate requests (`ids`), optionally `always` (a standing approval for co-op and host), or
         `revoke` a standing approval ({coop, host}). Approved requests run at the start of the next cycle."""
         body, w, run = await request.json(), self.run.world, self.run
+        if run.viewing:
+            return JSONResponse({"error": f"{run.viewing} is open read only: decide with commons approve"}, status_code=409)
         if "revoke" in body:
             rv = body["revoke"] or {}
             return {"ok": await asyncio.to_thread(run.locked, w.gate.revoke, str(rv.get("coop")), str(rv.get("host")))}
@@ -129,6 +150,17 @@ class Routes:
         return (await self.run.snapshot())["run"]
 
 
-__all__ = ["create_app", "snapshot", "community_detail", "app"]
+class _NoModel:
+    """What a society opened to look at gets in place of a model: it never thinks while it's open here."""
+
+    def __getattr__(self, name):
+        raise RuntimeError("a society opened read only has no model")
+
+
+def open_saved(save: Path) -> World:
+    return World.resume(save, backend=_NoModel())
+
+
+__all__ = ["create_app", "snapshot", "community_detail", "app", "open_saved"]
 
 app = create_app()

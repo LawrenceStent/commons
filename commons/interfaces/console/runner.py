@@ -19,6 +19,13 @@ class Runner:
         self.world, self.speed, self.running = world, speed, running
         self.reason: str | None = None
         self.rss_limit, self.host_every, self.stop_at = rss_limit, host_every, stop_at
+        self.viewing: str | None = None  # a saved society opened to look at: read only (ticks drive it, not this page)
+
+    def open_saved(self, name: str, world: World) -> None:
+        """Show a saved society instead, read only: nothing here steps, steers or approves it."""
+        with self.world.lock:
+            self.world, self.viewing = world, name
+            self.pause(f"viewing {name}, read only (it moves only when it is ticked)")
 
     def view(self) -> dict[str, Any]:
         """The controls, as the dashboard shows them."""
@@ -32,6 +39,8 @@ class Runner:
         self.running, self.reason = True, None
 
     def step(self) -> None:
+        if self.viewing:
+            return
         # the world takes its own lock: for the whole cycle normally, per action with parallel turns,
         # so with parallel turns the page updates while communities are still thinking
         try:
@@ -72,6 +81,8 @@ class Runner:
     def control(self, action: str, value: float | None) -> str | None:
         """A button on the page. An error message, or None."""
         w = self.world
+        if self.viewing and action != "pause":
+            return f"{self.viewing} is open read only here; it moves only when it is ticked (commons tick {self.viewing})"
         if action == "pause":
             self.pause("paused from the dashboard")
         elif action == "resume":

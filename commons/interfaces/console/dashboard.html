@@ -131,6 +131,7 @@ pre { margin:0; font:12px/1.55 var(--mono); white-space:pre-wrap; }
     <div class="bar">
       <h1>Commons</h1>
       <span id="state" class="mono muted">connecting…</span>
+      <label class="muted">society <select id="society" title="open a saved society, read only"><option value="">this run</option></select></label>
       <span style="flex:1"></span>
       <button data-a="pause">pause</button>
       <button data-a="resume">resume</button>
@@ -527,6 +528,20 @@ $("theme").onclick = () => {
 $("scan").onclick = () => { pref("scan", document.body.classList.toggle("scan") ? "on" : "off"); };
 syncTheme();
 $("speed").onchange = e => fetch("/control/speed?value=" + e.target.value, {method: "POST"});
+
+async function societies() {
+  const d = await (await fetch("/api/societies")).json();
+  const pick = $("society");
+  pick.innerHTML = `<option value="">${d.open ? "(choose)" : "this run"}</option>` + d.societies.map(s =>
+    `<option value="${esc(s.name)}" ${s.name === d.open ? "selected" : ""}>${esc(s.name)} · ${esc(s.pack || "?")} · cycle ${s.cycle ?? "?"}${s.paused ? " · paused" : ""}</option>`).join("");
+}
+$("society").onchange = async e => {
+  if (!e.target.value) return;
+  const res = await fetch("/api/open/" + encodeURIComponent(e.target.value), {method: "POST"});
+  if (!res.ok) alert((await res.json()).error);
+  societies();
+};
+societies();
 
 function connect() {
   const es = new EventSource("/stream");
