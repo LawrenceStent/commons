@@ -45,3 +45,17 @@ def test_what_a_model_wrote_is_set_as_text_never_run_as_markup():
 def test_headings_are_short_lines_that_dont_end_a_sentence():
     kinds = [b["kind"] for b in files.blocks("Day 1\n\nRead John 1.\n\nWhat did you notice?")]
     assert kinds == ["heading", "text", "text"]
+
+
+def test_tick_boxes_and_writing_lines():
+    content = "Week 1\n\nThis week, pray daily.\n- [ ] Monday\n- [ ] Tuesday\n[write 3]\n\nNotes for your group."
+    assert files.blocks(content) == [
+        {"kind": "heading", "text": "Week 1"},
+        {"kind": "text", "text": "This week, pray daily."},
+        {"kind": "checklist", "items": ["Monday", "Tuesday"]},
+        {"kind": "lines", "count": 3},
+        {"kind": "text", "text": "Notes for your group."},
+    ]
+    assert files.blocks("[write 99]") == [{"kind": "lines", "count": 30}]
+    assert files.blocks('"Pray without ceasing." 1 Thessalonians 5:17 (KJV)')[0]["kind"] == "verse"
+    assert files.pdf("A planner", content).startswith(b"%PDF")

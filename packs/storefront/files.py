@@ -13,6 +13,7 @@ before you approve it.
 from __future__ import annotations
 
 import json
+import re
 import tempfile
 from pathlib import Path
 from typing import Literal
@@ -51,6 +52,20 @@ PDF_TEMPLATE = """
   if b.kind == "heading" {
     v(6pt)
     block(below: 8pt, text(size: 15pt, weight: "bold", fill: accent)[#b.text])
+  } else if b.kind == "verse" {
+    v(8pt)
+    align(center, block(width: 80%, text(size: 13pt, style: "italic", fill: accent)[#b.text]))
+    v(8pt)
+  } else if b.kind == "checklist" {
+    for item in b.items {
+      block(above: 7pt, below: 7pt)[#box(width: 9pt, height: 9pt, stroke: 0.7pt + ink, baseline: 1pt) #h(7pt) #item]
+    }
+  } else if b.kind == "lines" {
+    for i in range(b.count) {
+      v(16pt)
+      line(length: 100%, stroke: 0.5pt + muted)
+    }
+    v(6pt)
   } else {
     par[#b.text]
   }
@@ -83,13 +98,41 @@ def credit(text: str) -> str:
     return ""
 
 
+TICK = re.compile(r"^\s*[-*]?\s*\[ ?\]\s+(.+)$")  # "- [ ] pray for a neighbour": a box to tick
+WRITE = re.compile(r"^\s*\[(?:write|lines)\s*:?\s*(\d{1,2})\]\s*$", re.I)  # "[write 4]": four lines to write on
+
+
 def blocks(content: str) -> list[dict]:
-    """Paragraphs as written; a short line on its own that doesn't end a sentence is a heading."""
-    out = []
-    for b in (b.strip() for b in content.split("\n\n")):
-        if b:
-            heading = len(b) < 70 and "\n" not in b and not b.endswith((".", "?", "!", ":"))
-            out.append({"kind": "heading" if heading else "text", "text": b})
+    """Paragraphs as written; a short line on its own that doesn't end a sentence is a heading; "- [ ] ..." lines are
+    tick boxes; "[write N]" is N lines to write on (at most 30). Everything stays data: none of it is markup."""
+    out: list[dict] = []
+    for chunk in (c.strip() for c in content.split("\n\n")):
+        if not chunk:
+            continue
+        lines, text = chunk.splitlines(), []
+        if chunk.startswith(('"', "\u201c")) and len(lines) <= 3:
+            out.append({"kind": "verse", "text": " ".join(line.strip() for line in lines)})
+            continue
+        if len(lines) == 1 and not TICK.match(chunk) and not WRITE.match(chunk) and len(chunk) < 70 \
+                and not chunk.endswith((".", "?", "!", ":")):
+            out.append({"kind": "heading", "text": chunk})
+            continue
+        for line in lines:
+            tick, write = TICK.match(line), WRITE.match(line)
+            if not tick and not write:
+                text.append(line.strip())
+                continue
+            if text:
+                out.append({"kind": "text", "text": " ".join(text)})
+                text = []
+            if tick and out and out[-1]["kind"] == "checklist":
+                out[-1]["items"].append(tick.group(1).strip())
+            elif tick:
+                out.append({"kind": "checklist", "items": [tick.group(1).strip()]})
+            elif write:
+                out.append({"kind": "lines", "count": min(30, int(write.group(1)))})
+        if text:
+            out.append({"kind": "text", "text": " ".join(text)})
     return out
 
 

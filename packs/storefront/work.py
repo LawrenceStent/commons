@@ -37,7 +37,9 @@ TEMPLATES: dict[str, tuple[str, str]] = {  # in this order: same seed, same jobs
     "content": (
         "Write the full content of {subject}, complete and ready to lay out.",
         "Complete: every page, day, card or entry the product promises is there; scripture quoted exactly, with book, "
-        "chapter, verse and translation; accurate history and civics; warm, plain language. " + HONEST,
+        "chapter, verse and translation; accurate history and civics; warm, plain language. Where the buyer fills "
+        "something in, mark it: a line '- [ ] item' is a box to tick, a line '[write 4]' is four lines to write on. "
+        + HONEST,
     ),
     "layout": (
         "Specify the layout of {subject} as a printable PDF.",
