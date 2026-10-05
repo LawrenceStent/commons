@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from commons.domain.status import RequestStatus
 
-RISKS = ("read", "contact", "publish", "spend")
+RISKS = ("read", "contact", "publish", "spend", "govern")  # govern: a co-op changing its own constitution
 TOOLS = {"web_search": "read", "web_fetch": "read"}  # tool -> risk class
 POLICIES = ("ask", "allow", "deny")
 SEARCH = ("wikipedia", "none")
@@ -22,6 +22,7 @@ class GatePolicy:
     contact: str = "deny"
     publish: str = "deny"
     spend: str = "deny"
+    govern: str = "ask"
     allow_hosts: tuple[str, ...] = ()
     search: str = "wikipedia"
     per_cycle: int = 6
@@ -68,13 +69,14 @@ class Request:
     actor: str
     tool: str
     risk: str
-    target: str  # the url, or the search query
+    target: str  # the url, the search query, or what is acted on (an item, a co-op)
     host: str
     cycle: int
     status: RequestStatus = RequestStatus.PENDING
     always: bool = False
     reason: str = ""
     result: str = ""
+    detail: str = ""  # everything that would go public or take effect, for you to read before deciding
 
     @property
     def group(self) -> tuple[str, str, str]:

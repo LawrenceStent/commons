@@ -15,7 +15,7 @@ parallel: with `parallel_turns`, model calls overlap and every action still take
     post          new jobs go up on the board
     order         a random turn order (turn order must not decide who wins)
     appraise      venture proposals are appraised (outside the lock)
-    web           requests the operator approved run (outside the lock)
+    approved      requests the operator approved run: web reads, listings, charter changes (outside the lock)
     turns         each active co-op sees an observation and acts
     allocate      claims are allocated: most trusted, best fitting, least loaded
     grade         submitted work, deliveries and audits are graded (model calls outside the lock)
@@ -113,7 +113,7 @@ PHASES: tuple[Phase, ...] = (
     Phase("post", lambda w: w.board.post()),
     Phase("order", _order),
     Phase("appraise", lambda w: w.venture_desk.appraise(), locked=False),
-    Phase("web", lambda w: w.web_desk.run_approved(), locked=False),
+    Phase("approved", lambda w: w.approvals.run(), locked=False),
     Phase("turns", _turns, locked=False),
     Phase("allocate", lambda w: w.board.allocate()),
     Phase("grade", lambda w: w.grading.settle(), locked=False),

@@ -10,4 +10,4 @@ def test_the_phases_run_in_the_documented_order():
 
 
 def test_only_waiting_phases_run_outside_the_lock():
-    assert {p.name for p in cycle.PHASES if not p.locked} == {"appraise", "web", "turns", "grade"}
+    assert {p.name for p in cycle.PHASES if not p.locked} == {"appraise", "approved", "turns", "grade"}

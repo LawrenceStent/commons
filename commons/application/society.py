@@ -40,6 +40,7 @@ from commons.application.operator import Operator
 from commons.application.params import Params
 from commons.application.ports import WebPort
 from commons.application.ratings import Ratings
+from commons.application.services.approvals import Approvals
 from commons.application.services.board import JobBoard
 from commons.application.services.contract_net import ContractNet
 from commons.application.services.gossip import GossipService
@@ -162,6 +163,7 @@ class Society:
         self.gossip = GossipService(self)
         self.upkeep = Upkeep(self)
         self.web_desk = WebDesk(self)
+        self.approvals = Approvals(self)
         self.rating_desk = RatingDesk(self)
         self.payments = Payments(self)
         self.venture_desk = VentureDesk(self)

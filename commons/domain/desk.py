@@ -32,3 +32,6 @@ class Desk(Protocol):
     def close(self, world: World, /) -> None:
         """The end of a cycle, under the lock."""
         ...
+
+# A desk may also have `carry_out(world, request) -> (ok, message)`: what it does when you approve a request it made
+# through the gate (commons/application/services/approvals.py). It runs outside the lock; take it to change state.

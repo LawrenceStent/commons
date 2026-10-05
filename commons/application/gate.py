@@ -7,8 +7,11 @@ Every outside-world tool has a risk class:
 
     read      searching and reading public web pages (web_search, web_fetch)
     contact   messaging or emailing anyone                      (no tools yet: always ask or deny)
-    publish   posting, listing or submitting anything anywhere  (no tools yet: always ask or deny)
+    publish   posting, listing or submitting anything anywhere  (a pack's desk: listings, prices, drops; ask or deny)
     spend     paying for anything                               (no tools yet: always ask or deny)
+    govern    a co-op changing its own charter                  (requests for comment, then you; ask by default)
+
+A request that isn't a read carries `detail`: everything that would go public or take effect, for you to read.
 
 Your policy, in the operator folder's config.toml:
 
@@ -35,7 +38,7 @@ from collections import Counter
 from dataclasses import asdict
 from pathlib import Path
 
-from commons.domain.gate import TOOLS, GatePolicy, Request
+from commons.domain.gate import RISKS, TOOLS, GatePolicy, Request
 from commons.domain.status import RequestStatus
 from commons.substrate.jsonl import JsonlLog
 
@@ -80,6 +83,24 @@ class Gate:
         if policy == "allow" or (coop, host) in self.standing:
             r.status, r.reason = RequestStatus.APPROVED, "allowed by policy" if policy == "allow" else "standing approval"
             return "allow", r
+        self._write(r)
+        return "pending", r
+
+    def propose(self, coop: str, actor: str, tool: str, risk: str, target: str, detail: str,
+                cycle: int) -> tuple[str, Request | str]:
+        """Anything but a read: ("pending", request), always for you to decide (only reads may be "allow"), or
+        ("deny", reason). The same request waiting already is returned, not made twice."""
+        if risk not in RISKS or risk == "read":
+            return "deny", f"{risk} is not a risk class the gate takes proposals for"
+        if getattr(self.policy, risk) == "deny":
+            return "deny", f"the operator doesn't allow {risk} requests (their [gate] {risk} is \"deny\")"
+        waiting = next((r for r in self.requests.values() if r.status in (RequestStatus.PENDING, RequestStatus.APPROVED)
+                        and r.coop == coop and r.tool == tool and r.target == target), None)
+        if waiting:
+            return "pending", waiting
+        self._seq += 1
+        r = Request(f"G{self._seq}", coop, actor, tool, risk, target, "", cycle, detail=detail[:4000])
+        self.requests[r.id] = r
         self._write(r)
         return "pending", r
 

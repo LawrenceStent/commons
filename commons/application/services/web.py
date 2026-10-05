@@ -76,15 +76,6 @@ class WebDesk:
                                   f"later cycle and you'll be told the result; don't ask again.", r.id)
         return self.execute(r)
 
-    def run_approved(self) -> None:
-        """Requests you approved since last cycle: run them (outside the lock) and tell whoever asked."""
-        with self.w.lock:
-            todo = self.w.gate.approved()
-        for r in todo:
-            out = self.execute(r)
-            with self.w.lock:
-                self.w.events.publish(ev.QueuedReadRan(r, out.message))
-
     def execute(self, r: GateRequest):
         web = self.w.web
         if web is None:
