@@ -33,7 +33,10 @@ $0.50), and Etsy's $0.20 listing fee. A product usually pays for itself on its f
 Margin isn't the limit; volume is. Most listings sell little, so what decides profit is findability (titles, tags,
 covers), quality, and how much a single purchase is worth. Hence the floor, and the push upward:
 
-- **Bundles beat singles:** a study guide plus memory cards plus a reading plan on one theme, $15-25.
+- **Bundles beat singles:** a study guide plus memory cards plus a reading plan on one theme, $15-25. Any co-op can
+  make one from 2 to 6 existing products, its own or others' (`make_bundle`): one combined PDF, priced at least as
+  its dearest part; its sales go 15% to the co-op that assembled it and 85% to the parts' makers by price, so co-ops
+  gain by bundling each other's work. Listing it goes through your gate like any product.
 - **Packs:** a month of devotionals, a year of verse art, a full VBS (vacation Bible school) kit, $20-40.
 - **Editable versions:** Canva or Word templates beside the PDF justify a higher price.
 

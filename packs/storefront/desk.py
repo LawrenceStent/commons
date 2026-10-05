@@ -60,6 +60,7 @@ class Product:
     files: dict = field(default_factory=dict)  # pdf, cover: paths, written when a listing is requested
     art: str = ""  # an approved illustration (a path), for the cover
     art_prompt: str = ""  # what an illustration request asked for
+    parts: tuple[str, ...] = ()  # a bundle: the products it's made of
 
 
 def _schema(props: dict, required: list[str]) -> dict:
@@ -68,6 +69,9 @@ def _schema(props: dict, required: list[str]) -> dict:
 
 
 S, N = {"type": "string"}, {"type": "number"}
+BUNDLE = (2, 6)  # products in a bundle
+ASSEMBLER = 0.15  # of a bundle's sales, to the co-op that put it together; the rest to its parts' makers, by price
+
 TOOLS = (
     {"name": "drop_product", "description": "Ask the operator to unlist one of your products everywhere. Free; waits "
      "for their approval.", "input_schema": _schema({"product_id": S, "reason": S}, ["product_id", "reason"])},
@@ -75,6 +79,12 @@ TOOLS = (
      "(FLUX.2, a few cents): describe the picture, no words in it, no real people, logos or brands. Waits for their "
      "approval; without one the cover is typographic.",
      "input_schema": _schema({"product_id": S, "prompt": S}, ["product_id", "prompt"])},
+    {"name": "make_bundle", "description": "Put 2 to 6 existing products (yours or other co-ops') together as one "
+     "product, with its own title, description, tags and price: at least $5 and at least its dearest part, up to "
+     "$49.99. Bundles are worth far more than singles. Free; it's a draft until you list it (and the operator "
+     "approves). Its sales are shared: 15% to you, the rest to the parts' makers by price.",
+     "input_schema": _schema({"product_ids": {"type": "array", "items": S}, "title": S, "description": S,
+                              "tags": S, "price": N}, ["product_ids", "title", "description", "tags", "price"])},
     {"name": "list_product", "description": "Ask the operator to list one of your draft products on one or more sales "
      "channels (a list of names from your desk view). Its listing is checked against the store's limits and rules "
      "first. Free; nothing goes public until the operator approves.",
@@ -168,15 +178,16 @@ class StoreDesk:
         if self.real:
             self._book_dollars(w, p, channel, sale)
         if sale.refund:
-            back = min(max(net, 0), w.ledger.balance(purse(p.maker)))
-            if back:
-                w.ledger.transfer(purse(p.maker), "market", back, cycle=w.cycle, kind="refund", memo=p.id)
+            for who, share in self._shares(p, max(net, 0)):
+                if back := min(share, w.ledger.balance(purse(who))):
+                    w.ledger.transfer(purse(who), "market", back, cycle=w.cycle, kind="refund", memo=p.id)
             p.sold, p.revenue = p.sold - 1, p.revenue - sale.gross
             w.tell(p.maker, "refund", f"{p.id} was refunded on {channel}: ${sale.gross / USD:.2f}")
             return
         p.sold, p.revenue, p.last_sale = p.sold + 1, p.revenue + sale.gross, w.cycle
-        if net > 0:
-            w.ledger.settle_revenue(p.maker, net, cycle=w.cycle, memo=f"{p.id} on {channel}")
+        for who, share in self._shares(p, max(net, 0)):
+            if share > 0:
+                w.ledger.settle_revenue(who, share, cycle=w.cycle, memo=f"{p.id} on {channel}")
         w.tell(p.maker, "sale", f"{p.id} {p.title!r} sold on {channel} for ${sale.gross / USD:.2f}"
                                 f" (fee ${sale.fee / USD:.2f})")
 
@@ -193,6 +204,8 @@ class StoreDesk:
 
     # ── tools ──────────────────────────────────────────────────
     def call(self, w, coop: str, tool: str, args: dict) -> tuple[bool, str]:
+        if tool == "make_bundle":
+            return self._bundle(w, coop, args)
         p = self.products.get(str(args.get("product_id", "")))
         if p is None or p.maker != coop:
             return False, f"you have no product {args.get('product_id')!r}; your desk view lists yours"
@@ -235,6 +248,41 @@ class StoreDesk:
         if ok:
             p.stage = Stage.REQUESTED
         return ok, message
+
+    def _bundle(self, w, coop: str, args: dict) -> tuple[bool, str]:
+        ids = list(dict.fromkeys(str(i) for i in args.get("product_ids") or []))
+        parts = [self.products.get(i) for i in ids]
+        if not BUNDLE[0] <= len(ids) <= BUNDLE[1] or any(p is None or p.stage == Stage.DROPPED or p.parts for p in parts):
+            return False, f"a bundle is {BUNDLE[0]} to {BUNDLE[1]} existing products (not dropped, not bundles themselves)"
+        found = [p for p in parts if p is not None]
+        try:
+            price = round(float(args["price"]) * USD)
+        except (KeyError, TypeError, ValueError):
+            return False, "give the bundle's price in dollars"
+        if price < max(p.price for p in found):
+            return False, f"a bundle can't cost less than its dearest part (${max(p.price for p in found) / USD:.2f})"
+        pid = f"P{len(self.products) + 1}"
+        bundle = Product(pid, "bundle", coop, str(args.get("title", "")).strip(), str(args.get("description", "")).strip(),
+                         tuple(t.strip() for t in str(args.get("tags", "")).split(",") if t.strip()), price,
+                         sum(p.quality for p in found) / len(found), parts=tuple(ids),
+                         content="\n\n".join(f"{p.title}\n\n{p.content or p.description}" for p in found))
+        if problems := listing_problems(bundle):
+            return False, "the bundle can't be made as it is: " + "; ".join(problems)
+        if why := screen(w, coop, "listing", f"Title: {bundle.title}\n{bundle.description}\nTags: {', '.join(bundle.tags)}"):
+            return False, why
+        self.products[pid] = bundle
+        return True, f"bundle {pid} made from {', '.join(ids)} at ${price / USD:.2f}: a draft; list it with list_product"
+
+    def _shares(self, p: Product, net: int) -> list[tuple[str, int]]:
+        """Who a sale pays: the maker; for a bundle, its assembler and its parts' makers, by price."""
+        parts = [self.products[i] for i in p.parts if i in self.products]
+        if not parts:
+            return [(p.maker, net)]
+        assembler = round(net * ASSEMBLER)
+        total = sum(x.price for x in parts)
+        out = [(p.maker, assembler)] + [(x.maker, (net - assembler) * x.price // total) for x in parts]
+        out[0] = (p.maker, assembler + net - sum(a for _, a in out))  # what integer division leaves over
+        return out
 
     def _ask_art(self, w, coop: str, p: Product, prompt: str) -> tuple[bool, str]:
         if self.images is None:

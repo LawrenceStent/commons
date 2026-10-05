@@ -160,3 +160,41 @@ def test_every_listing_discloses_ai_use_once_and_names_flux_for_an_illustration(
     assert "About this product: written and designed with the help of AI tools, and reviewed by a person" in detail
     again = disclosed(disclosed("A plan.", art=False), art=True)
     assert again.count("About this product:") == 1 and "FLUX.2" in again and again.startswith("A plan.")
+
+
+def add(w, pid, maker, price):
+    w.desk.products[pid] = Product(pid, "J" + pid, maker, f"Product {pid}", f"About {pid}.", ("faith",),
+                                   round(price * USD), 0.8, content=f"Content of {pid}.")
+
+
+def test_a_bundle_of_other_co_ops_products_shares_its_sales_by_price():
+    w = store()
+    add(w, "P2", "press", 10)
+    act = Actions(w, w.communities["scribes"])
+    make = lambda **kw: act.desk_call("make_bundle", {"product_ids": ["P1", "P2"], "title": "Faith Starter Bundle",
+                                                       "description": "Two printables together.",
+                                                       "tags": "bundle, faith", **kw})
+    assert "dearest part" in make(price=6).message
+    assert "2 to 6" in act.desk_call("make_bundle", {"product_ids": ["P1"], "title": "x", "description": "y",
+                                                     "tags": "z", "price": 20}).message
+    out = make(price=15)
+    assert out and "draft" in out.message
+    bundle = w.desk.products["P3"]
+    assert bundle.parts == ("P1", "P2") and "Product P2" in bundle.content
+    shares: dict[str, int] = {}
+    for who, amount in w.desk._shares(bundle, 1_000_000):
+        shares[who] = shares.get(who, 0) + amount
+    assert sum(shares.values()) == 1_000_000 and shares["scribes"] > shares["press"] > 0  # scribes: assembler + P1
+
+
+def test_a_listed_bundle_pays_its_parts_makers_when_it_sells():
+    w = store()
+    add(w, "P2", "press", 10)
+    Actions(w, w.communities["scribes"]).desk_call("make_bundle", {
+        "product_ids": ["P1", "P2"], "title": "Faith Starter Bundle", "description": "Two printables together.",
+        "tags": "bundle, faith", "price": 15})
+    Actions(w, w.communities["scribes"]).desk_call("list_product", {"product_id": "P3", "channels": ["etsy"]})
+    approve_all(w)
+    before = w.ledger.balance(purse("press"))
+    w.run(4)
+    assert w.desk.products["P3"].sold > 0 and w.ledger.balance(purse("press")) > before
