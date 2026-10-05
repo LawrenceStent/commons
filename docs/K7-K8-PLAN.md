@@ -56,7 +56,7 @@ Done when (FRAMEWORK.md §9): two societies run on alternate schedules on one ma
 - **Dashboard picker:** the dashboard can open any saved society to look at (read only), chosen from a list.
 
 ### Stages
-- [ ] K8.1 `commons list`; `commons pause` and `commons resume`; ticks skip a paused society
+- [x] K8.1 `commons list`; `commons pause` and `commons resume`; ticks skip a paused society
 - [ ] K8.2 A total real-dollar cap across societies, checked before every tick
 - [ ] K8.3 `scripts/tick-all.sh`: every unpaused society in turn, one model load; the launchd file uses it
 - [ ] K8.4 The dashboard opens a saved society, picked from the registry

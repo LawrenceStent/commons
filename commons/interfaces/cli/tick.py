@@ -13,10 +13,11 @@ the save, the ledger, the activity log and every LLM turn. One live run at a tim
 import sys
 from pathlib import Path
 
+from commons.application import registry
 from commons.application.society import World
 from commons.interfaces.cli import live
 
-STATE = "state"
+STATE = registry.STATE
 
 
 def parser():
@@ -28,20 +29,22 @@ def parser():
 
 
 def folder(a) -> Path:
-    if (Path("societies") / a.name).exists():
+    """The society's state folder; a resumed society keeps the pack it was built with."""
+    root = registry.folder_of(a.name)
+    if root.parent == registry.FOUNDED:
         a.society = a.name
-        return Path("societies") / a.name / STATE
-    return Path("runs") / "ticks" / a.name / STATE
+    recorded = registry.read_status(root / STATE).get("pack")
+    if recorded and a.pack not in (None, recorded):
+        sys.exit(f"{a.name} is a {recorded} society; leave out --pack, or pass --pack {recorded}")
+    a.pack = a.pack or recorded
+    return root / STATE
 
 
 def _open(a, state: Path, society, pack, models) -> World:
     save, ledger = state / "society.save", state / "ledger.sqlite"
-    if save.exists():
-        grader, appraiser = live.judges(a, pack, models)
-        world = World.resume(save, grader=grader, appraiser=appraiser, backend=models["backend"], pack=pack)
-        world.web = live.web_for(a, world.operator)
-        if world.web:
-            world.web.set_hosts(world.gate.policy.allow_hosts)
+    if save.exists():  # the society's own pack, from its save; then judges and the web for it
+        world = World.resume(save, backend=models["backend"], pack=pack if society else None)
+        world.attach(*live.judges(a, world.pack, models), live.web_for(a, world.operator))
         return world
     if ledger.exists():
         sys.exit(f"{ledger} exists without a save: an earlier tick died before saving. Move the folder aside to start again.")
@@ -51,6 +54,9 @@ def _open(a, state: Path, society, pack, models) -> World:
 def main(argv: list[str] | None = None) -> None:
     a = parser().parse_args(argv)
     state = folder(a)
+    if (state.parent / "paused").exists():
+        print(f"{a.name} is paused: skipped (commons resume {a.name})")
+        return
     society, pack = live._source(a)
     models = live._models(a)
     state.mkdir(parents=True, exist_ok=True)
@@ -64,6 +70,7 @@ def main(argv: list[str] | None = None) -> None:
         world.meter.halted = False  # a stuck model isn't the society's doing: the next tick tries again
     world.save(state / "society.save")
     world.ledger.check()
+    registry.write_status(state, world, real_spent=world.ledger.real()["api_spend"])
     settled = [s for s in getattr(world.desk, "settlements", []) if s["cycle"] > start]
     print(f"{a.name}: cycles {start + 1}-{world.cycle} played and saved in {state}"
           + (f" · {len(settled)} windows settled, {sum(s['paid'] for s in settled)} µcr paid" if settled else ""))

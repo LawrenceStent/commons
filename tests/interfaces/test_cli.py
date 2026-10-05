@@ -19,7 +19,7 @@ def scratch(tmp_path, monkeypatch):
 
 
 def test_importing_a_command_runs_nothing(capsys):
-    for name in set(cli.COMMANDS.values()):
+    for name in {v.partition(":")[0] for v in cli.COMMANDS.values()}:
         importlib.reload(importlib.import_module(f"commons.interfaces.cli.{name}"))
     assert capsys.readouterr().out == ""
 
@@ -141,3 +141,28 @@ def test_ticks_build_a_society_then_resume_it(tmp_path, monkeypatch, capsys):
 
     w = World.resume(state / "society.save", backend=object())  # no model needed to look
     assert w.cycle == 25 and w.desk.settlements and w.ledger.check() is None
+
+
+def test_list_pause_and_resume(tmp_path, monkeypatch, capsys):
+    from commons.interfaces.cli import live
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(live, "PID", tmp_path / "runs" / "live.pid")
+    cli.main(["list"])
+    assert "no societies yet" in capsys.readouterr().out
+    cli.main(["tick", "paper", "--pack", "trading", "--backend", "fake", "--cycles", "2"])
+    cli.main(["tick", "probe", "--pack", "osint", "--backend", "fake", "--cycles", "1"])
+    capsys.readouterr()
+    cli.main(["list"])
+    out = capsys.readouterr().out
+    assert "paper" in out and "trading" in out and "probe" in out and "osint" in out
+    cli.main(["pause", "paper"])
+    cli.main(["tick", "paper", "--backend", "fake"])  # the pack comes from the society
+    assert "paused: skipped" in capsys.readouterr().out
+    cli.main(["list"])
+    assert "paused" in capsys.readouterr().out
+    cli.main(["resume", "paper"])
+    cli.main(["tick", "paper", "--backend", "fake"])
+    assert "cycles 3-3 played" in capsys.readouterr().out
+    with pytest.raises(SystemExit, match="is a trading society"):
+        cli.main(["tick", "paper", "--pack", "osint", "--backend", "fake"])

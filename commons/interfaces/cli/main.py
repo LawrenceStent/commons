@@ -2,6 +2,7 @@
 
     uv run commons run ...         a live society, with LLM co-ops
     uv run commons tick ...        resume a saved society, play a few cycles, save it (scheduled forward tests)
+    uv run commons list            every society on this machine; pause NAME / resume NAME
     uv run commons sim ...         a scripted society (no models)
     uv run commons console ...     the dashboard on a scripted society
     uv run commons found ...       found a society from a brief, or approve its blueprints
@@ -20,6 +21,7 @@ from importlib import import_module
 COMMANDS = {
     "run": "live", "sim": "sim", "console": "console", "found": "found", "approve": "approve", "rate": "rate",
     "calibrate": "calibrate", "metrics": "metrics", "golden": "golden", "tick": "tick",
+    "list": "societies:main_list", "pause": "societies:main_pause", "resume": "societies:main_resume",
 }
 
 
@@ -31,7 +33,8 @@ def main(argv: list[str] | None = None) -> None:
     if argv[0] not in COMMANDS:
         print(__doc__.strip())
         sys.exit(f"unknown command {argv[0]!r}")
-    import_module(f"commons.interfaces.cli.{COMMANDS[argv[0]]}").main(argv[1:])
+    module, _, function = COMMANDS[argv[0]].partition(":")
+    getattr(import_module(f"commons.interfaces.cli.{module}"), function or "main")(argv[1:])
 
 
 if __name__ == "__main__":
