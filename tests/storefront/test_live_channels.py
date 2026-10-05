@@ -118,3 +118,25 @@ def test_a_saved_channel_keeps_no_keys_and_needs_them_back_from_the_environment(
     monkeypatch.chdir(tmp_path)
     back = pickle.loads(data)
     assert back.shop == "shop2" and back.taxonomy == 5
+
+
+def test_etsy_sign_in_uses_pkce_and_swaps_the_code_for_tokens():
+    import base64
+    import hashlib
+    import urllib.parse
+
+    from packs.storefront import etsy_login
+
+    url = etsy_login.authorize_url("key", "st", "verifier-123")
+    q = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)
+    expected = base64.urlsafe_b64encode(hashlib.sha256(b"verifier-123").digest()).rstrip(b"=").decode()
+    assert q["code_challenge"] == [expected] and q["code_challenge_method"] == ["S256"] and q["client_id"] == ["key"]
+    assert q["scope"] == ["listings_r listings_w transactions_r"] and q["redirect_uri"] == [etsy_login.REDIRECT]
+    sent = {}
+
+    def transport(method, url, headers, body):
+        sent.update(urllib.parse.parse_qs(body.decode()))
+        return 200, json.dumps({"access_token": "a", "refresh_token": "r"}).encode()
+
+    assert etsy_login.exchange("key", "code-1", "verifier-123", transport) == {"access_token": "a", "refresh_token": "r"}
+    assert sent["grant_type"] == ["authorization_code"] and sent["code_verifier"] == ["verifier-123"]
