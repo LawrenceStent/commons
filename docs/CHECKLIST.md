@@ -683,6 +683,7 @@ checklists in the plan (R0 to R12), on branch `refactor/architecture`; no featur
     the trading pack, `commons tick` and the schedule (off), first live ticks. Waiting on you: turning the schedule
     on, and the graduation criteria for stage 2, written down before anyone looks at results
 - [ ] K7 OSINT pack: sourcing-first evaluator, separate verify co-op, forbidden-target policy enforced in tools
+  - K7, K8 and R13 next, then Phase 2 (your order, 5 Oct): plan and checklists in `docs/K7-K8-PLAN.md`
 - [ ] K8 Many societies: registry, CLI, dashboard picker, per-society and total spend caps, slow-cadence scheduler
 
 Recommended order: a minimal 1.5 (one capable model trading), then K1–K3, K4, K5, Phase 2 as pack 0's
