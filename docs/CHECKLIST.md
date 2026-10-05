@@ -694,6 +694,8 @@ Recommended order: a minimal 1.5 (one capable model trading), then K1–K3, K4, 
 live mode, then K6, K7, K8.
 
 ## Phase 2 — One real channel (digital products)
+
+Plan, your decisions (5 Oct) and stages: `docs/PHASE2-PLAN.md`.
 - [ ] Gate enforced via PreToolUse hook + egress allowlist; batch approval in console
 - [ ] Storefront + Stripe connector
 - [ ] Decide: charter mutability, kill criteria
