@@ -17,7 +17,8 @@ from tests.golden.harness import _clean
 from tests.paths import ROOT
 
 FIXTURES = ROOT / "tests" / "golden" / "fixtures"
-CASES = {"earn_online": "coop-a", "tech_for_good": "scouts", "trading": "holder", "osint": "sources"}
+CASES = {"earn_online": "coop-a", "tech_for_good": "scouts", "trading": "holder", "osint": "sources",
+         "storefront": "scribes"}
 
 
 def capture(pack_name: str) -> dict:

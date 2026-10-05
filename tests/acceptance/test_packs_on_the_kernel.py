@@ -15,7 +15,8 @@ DOMAIN = re.compile(r'"(research|build|design|write)"|product|bike|espresso|buye
                     r'coop-[abc]|"studio"|"lab"|tagline|'
                     r'"(scout|assess)"|drinking water|volunteer|funder or council|'
                     r'broker|stop.?loss|benchmark|BTC|SPY|coinbase|yahoo|drawdown|sortino|'
-                    r'"(collect|analyse)"|doxx|people.?finder|companies house|edgar', re.IGNORECASE)  # packs 0-3
+                    r'"(collect|analyse)"|doxx|people.?finder|companies house|edgar|'
+                    r'kjv|etsy|lemon ?squeezy|scripture|devotional|storefront', re.IGNORECASE)  # packs 0-4
 
 
 def test_no_domain_words_in_the_kernel():

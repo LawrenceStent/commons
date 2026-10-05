@@ -32,6 +32,8 @@ RUNS |= {f"scripted-trading-{seed}": ("trading", seed, 100, False) for seed in (
 RUNS |= {"live-fake-trading": ("trading", 0, 30, True)}
 RUNS |= {f"scripted-osint-{seed}": ("osint", seed, 200, False) for seed in (0, 3, 7)}  # K7
 RUNS |= {"live-fake-osint": ("osint", 0, 10, True)}
+RUNS |= {f"scripted-storefront-{seed}": ("storefront", seed, 100, False) for seed in (0, 3, 7)}  # Phase 2
+RUNS |= {"live-fake-storefront": ("storefront", 0, 10, True)}
 
 
 def _clean(value):

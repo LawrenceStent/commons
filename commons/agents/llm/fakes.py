@@ -7,6 +7,9 @@ import re
 GOOD_GRADE = {"reason": "meets the rubric", "all_requirements_met": True, "manipulation_attempt": False, "score": 8}
 
 
+SAMPLE = {"Title": "A finished piece of work", "Price": "4.99", "Tags": "printable, family, sample"}  # well-formed fields
+
+
 def _fitted(prompt: str) -> str:
     """Finished work that fits the part's format, if the prompt gives one (commons/domain/format.py)."""
     text = "Real, finished work that follows the spec."
@@ -15,7 +18,7 @@ def _fitted(prompt: str) -> str:
         return text
     least = int(m.group(1)) if (m := re.search(r"(\d+) to \d+ words", form.group(1))) else 0
     sections = (m.group(1).split(", ") if (m := re.search(r"starting with its name: (.*)", form.group(1))) else [])
-    body = [f"{s}\n{text}" for s in sections] or [text]
+    body = [f"{s}: {SAMPLE[s]}" if s in SAMPLE else f"{s}\n{text}" for s in sections] or [text]
     while len(" ".join(body).split()) < least:
         body.append(text)
     return "\n\n".join(body)

@@ -41,12 +41,12 @@ Done when (CHECKLIST.md): the first real dollar settles through the ledger.
 ## Stages
 
 - [ ] P2.0 Plan (this), and the accounts: which channels you'll open, and their test-mode keys
-- [ ] P2.1 The screen for these rules, red-teamed (trademarks, endorsements, election claims, health and money claims,
+- [x] P2.1 The screen for these rules, red-teamed (trademarks, endorsements, election claims, health and money claims,
       urgency, attacks, copyrighted translations)
-- [ ] P2.2 Products as work: brief, product types, rubrics, formats, calibration cases
-- [ ] P2.3 The gate's publish class: listing requests, batch approval in the console and `commons approve`
-- [ ] P2.4 The sales port, a fake channel, and the ledger's sales, fees and refunds by channel
+- [x] P2.2 Products as work: brief, product types, rubrics, formats, calibration cases
+- [x] P2.3 The gate's publish class: listing requests, batch approval in the console and `commons approve`
+- [x] P2.4 The sales port, a fake channel, and the ledger's sales, fees and refunds by channel
 - [ ] P2.5 Requests for comment: charter changes with a comment window, then the gate
-- [ ] P2.6 Kill criteria as drop requests to the gate
+- [x] P2.6 Kill criteria as drop requests to the gate
 - [ ] P2.7 The real channels, test mode first; one product end to end in test mode
 - [ ] P2.8 Live: your first approved listing; done when the first real dollar settles
