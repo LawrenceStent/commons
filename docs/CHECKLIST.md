@@ -684,7 +684,7 @@ checklists in the plan (R0 to R12), on branch `refactor/architecture`; no featur
     on, and the graduation criteria for stage 2, written down before anyone looks at results
 - [x] K7 OSINT pack (5 Oct): sourcing-first grader and calibration set, verify as an independent part (another
       co-op, once the others are done, given their work), the screen (no people, no personal data, passive only)
-      at founding, before the gate and at hand-in, halting the society on any refusal. Done-when met by test
+      at founding, before the gate and at hand-in, halting the society on any refusal. Done-when met by test How it works, and what isn't built: `docs/OSINT.md`
   - K7, K8 and R13 done 5 Oct (plan and checklists in `docs/K7-K8-PLAN.md`); Phase 2 next
 - [x] K8 Many societies (5 Oct): the registry and `commons list`, `pause`, `resume`, `pace`; a real-dollar cap across
       every society per calendar day; `commons tick-all` and `scripts/tick.sh all` (one model load, one society
