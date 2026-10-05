@@ -7,6 +7,7 @@ from commons.application.society import Params, World
 from commons.domain.community import Community
 from commons.domain.grading import tagged
 from commons.domain.market import MarketJob, Part
+from commons.domain.status import JobStatus
 from commons.substrate.ledger import purse
 
 
@@ -340,3 +341,34 @@ def test_an_independent_part_is_bought_from_someone_who_did_no_other_part():
     assert act(w, "prime").award(write, "other")
     assert job.independence_refusal("research", "other", w.contracts) == \
         "you hold job T5's independent part, so you can't take another part of it"
+
+
+def _checked_job(w: World, tally: str) -> MarketJob:
+    job = MarketJob("T6", "kit", 80_000, {"research": Part("research", "r", "r"),
+                                          "write": Part("write", "w", "w", independent=True)},
+                    posted=w.cycle, deadline=w.cycle + 6)
+    w.jobs[job.id] = job
+    assert act(w, "prime").claim(job.id)
+    job.fill("research", tagged(0.9, " research"), source="prime")
+    job.fill("write", tagged(0.9, f" checked\n{tally}"), source="sub")
+    job.scores = {"research": 0.9, "write": 0.9}
+    return job
+
+
+def test_a_checker_finding_a_claim_contradicted_fails_the_job():
+    w = world()
+    job = _checked_job(w, "Supported: 3 of 4. Contradicted: 1.")
+    w.board.finish(job)
+    assert job.status == JobStatus.FAILED
+
+
+def test_pay_scales_with_the_share_of_claims_the_checker_found_supported():
+    paid = {}
+    for tally in ("Supported: 4 of 4. Contradicted: 0.", "Supported: 3 of 4. Contradicted: 0."):
+        w = world()
+        job = _checked_job(w, tally)
+        before = w.ledger.balance(purse("prime"))
+        w.board.finish(job)
+        paid[tally] = w.ledger.balance(purse("prime")) - before
+    full, three_quarters = paid.values()
+    assert full > 0 and abs(three_quarters - 0.75 * full) <= 1

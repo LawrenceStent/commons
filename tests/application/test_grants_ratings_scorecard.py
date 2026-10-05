@@ -126,6 +126,18 @@ def test_a_made_up_citation_fails_the_part_by_rule():
     assert w.grading.citations == {"valid": 1, "invalid": 1}
 
 
+def test_the_grader_is_shown_the_passages_the_work_cites():
+    seen = []
+    grader = LLMGrader(FakeBackend(respond=lambda *a: seen.append(a) or {"reason": "ok", "all_requirements_met": True,
+                                                                        "manipulation_attempt": False, "score": 7}))
+    w = World(Params(seed=0, verify=False), archive=Archive(EXAMPLE / "archive"), grader=grader)
+    w.grading.try_grade("the task", "r", "as shown in [archive: repairs#1]")
+    prompt = "\n".join(str(x) for x in seen[0])
+    assert '<source id="repairs#1">' in prompt and w.archive.get("repairs#1").text[:40] in prompt
+    assert "says no more than its source" in prompt
+    assert w.grading.sources([]) == ""
+
+
 # ── the panel ──────────────────────────────────────────────────
 def _judge(score, req=True):
     return LLMGrader(FakeBackend(respond=lambda *a: {"reason": f"r{score}", "all_requirements_met": req,

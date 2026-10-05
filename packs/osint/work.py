@@ -45,14 +45,16 @@ TEMPLATES: dict[str, tuple[str, str]] = {  # in this order: same seed, same jobs
         "Check the work done on this question: {subject} For each cited claim, say whether its source supports it, "
         "contradicts it, or can't be checked from the archive.",
         "Every cited claim in the work listed with a verdict (supported, contradicted or unverifiable) and the "
-        "passage that decides it; claims without a citation flagged; a closing line: how many claims were supported "
-        "out of how many. Checks the work as given; adds no new claims.",
+        "passage that decides it; claims without a citation flagged; ending with the tally line 'Supported: N of M. "
+        "Contradicted: K.' over the M cited claims (a contradicted claim fails the job; pay scales with the share "
+        "supported). Checks the work as given; adds no new claims.",
     ),
 }
 
 FORMATS = {
     "analyse": Format(150, 350, ("Findings", "Confidence", "Gaps")),
     "report": Format(200, 400, ("Answer", "Confidence", "Unknowns")),
+    "verify": Format(tally=True),
 }
 
 WORK_SOURCE = TemplateWorkSource(SUBJECTS, TEMPLATES, formats=FORMATS, independent=frozenset({"verify"}))

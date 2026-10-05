@@ -14,6 +14,7 @@ from commons.domain.community import Community
 from commons.domain.market import MarketJob
 from commons.domain.status import JobStatus
 from commons.domain.treasury import bond_for
+from commons.domain.verification import verdict
 from commons.substrate.ledger import InsufficientFunds, purse
 
 if TYPE_CHECKING:
@@ -51,9 +52,15 @@ class JobBoard:
             del self.w.jobs[k]
 
     def finish(self, job: MarketJob) -> None:
-        if not job.passed(self.w.params.market.pass_score):
+        pass_score = self.w.params.market.pass_score
+        if not job.passed(pass_score):
             self.fail(job, f"a part failed grading ({', '.join(f'{k} {v:.2f}' for k, v in job.scores.items())})")
             return
+        if (checked := job.tally()) is not None:  # verification decides payment (domain/verification.py)
+            if why := verdict(checked, pass_score):
+                self.fail(job, why)
+                return
+            job.verified = checked.share
         if not self.w.payment.pays_at_once:
             job.await_grants()
             self.w.payments.payment_queue.append(job.id)

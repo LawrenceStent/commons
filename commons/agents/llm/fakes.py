@@ -17,10 +17,12 @@ def _fitted(prompt: str) -> str:
     if not form:
         return text
     least = int(m.group(1)) if (m := re.search(r"(\d+) to \d+ words", form.group(1))) else 0
-    sections = (m.group(1).split(", ") if (m := re.search(r"starting with its name: (.*)", form.group(1))) else [])
+    sections = (m.group(1).split(", ") if (m := re.search(r"starting with its name: ([^;]*)", form.group(1))) else [])
     body = [f"{s}: {SAMPLE[s]}" if s in SAMPLE else f"{s}\n{text}" for s in sections] or [text]
     while len(" ".join(body).split()) < least:
         body.append(text)
+    if "closing tally line" in form.group(1):
+        body.append("Supported: 3 of 3. Contradicted: 0.")
     return "\n\n".join(body)
 
 

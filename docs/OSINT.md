@@ -16,7 +16,8 @@ matter most are code, not prompts, and breaking one halts the whole society unti
    - **analyse**: Findings, Confidence and Gaps (150 to 350 words), every finding cited
    - **report**: Answer, Confidence and Unknowns (200 to 400 words), every claim cited
    - **verify**: every cited claim in the others' work checked against its source: supported, contradicted or
-     unverifiable, uncited claims flagged, and a closing count
+     unverifiable, uncited claims flagged, ending with the tally `Supported: N of M. Contradicted: K.` (required by
+     its format)
 3. **A co-op claims a job**, by the kernel's allocation rule (most trusted, best fit, least loaded).
 4. **Reading the web.** Members search and fetch through the gate. Every request passes the screen first, then
    your `[gate]` policy and allowlist, then the network layer's own allowlist. Pages read join the society's
@@ -28,9 +29,13 @@ matter most are code, not prompts, and breaking one halts the whole society unti
    who did or holds another part of the job may bid on it or be awarded it. It can be announced only once the other
    parts are done, and its contract carries their work, fenced as material, for the verifier to check.
 7. **Grading.** Each part is graded against its rubric by the pack's grader (calibrated on eight hand-labelled
-   cases). A citation to a passage that doesn't exist fails the part by rule, before any grader reads it.
-8. **Payment.** A job is paid when every part passes. The society runs on grants: a fixed budget each cycle,
-   shared by the work that passes, by value.
+   cases). A citation to a passage that doesn't exist fails the part by rule, before any grader reads it. The grader
+   is shown the text of every passage the part cites (up to eight), and told that a claim its source doesn't
+   support misses the rubric.
+8. **Payment.** A job is paid when every part passes **and its check holds**: the board reads the verify tally, and
+   any contradicted claim, or fewer supported than the pass mark (half), fails the job. Otherwise its value scales
+   with the share supported (3 of 4 supported: 75% of the value). The society runs on grants: a fixed budget each
+   cycle, shared by the work that passes, by value.
 
 ## The rules, and where each is enforced
 
@@ -42,6 +47,8 @@ matter most are code, not prompts, and breaking one halts the whole society unti
 | No personal data in the work | the screen: every hand-in | refused; the society halts |
 | Read only, public pages only, allowlisted hosts only, robots.txt respected | the gate (your `[gate]` policy) and the network layer, independently | refused |
 | Every claim cites a real source | the citation rule at grading | a made-up citation fails the part |
+| Claims say no more than their sources | the grader, shown the cited passages | an unsupported claim misses the rubric |
+| A contradicted claim isn't paid | the verify tally, read by the board (`commons/domain/verification.py`) | the job fails; pay otherwise scales with the share supported |
 | The checker isn't an author | independent parts (`do_part`, `bid`, `award`) | refused |
 | Subjects come from you, not the co-ops | the pack leaves out ventures | not offered; refused if called |
 | Formats (length, sections) | at hand-in | refused with the reason |
@@ -98,8 +105,8 @@ activity log, then reset the kill-switch from the dashboard. Check the grader fi
 | Collect, verify, analyse, report | yes | |
 | Every claim cites a source | partly: a citation must point at a passage that exists | the citation can still misquote or overstate its source; only the verifier and the grader stand between that and payment |
 | A verify co-op, not the author, checks citations | yes (independent parts) | the verifier's own verdicts aren't checked against the sources (see below) |
-| Payment held until verification completes | **no**: verify is one more graded part; the job pays when every part passes | **high**: verification is advisory. A verifier can find claims contradicted and the job is still paid, because its verdicts don't feed back into payment |
-| Grader scores corroboration and calibration | loosely: the rubrics ask for both; the grader never sees the sources | **medium**: the grader judges the writing, not whether the sources say it, so a confident, well-formatted verification passes |
+| Payment held until verification completes | **yes** (6 Oct): the verify tally decides payment | a contradicted claim fails the job; pay scales with the share supported. The verifier's tally is itself graded against the sources it cites |
+| Grader scores corroboration and calibration | corroboration yes (6 Oct): the grader sees the cited passages; calibration not yet | the grader judges whether the sources say it, not only whether the writing is careful |
 | Source independence measured | no | **medium-low**: an answer resting on one source cited three times can look corroborated |
 | Confidence calibration (Brier score over resolved claims) | no | **low now**: most answers never "resolve" within a run; it matters once answers include predictions |
 | Corrections tracked (retractions, honesty about them) | no | **low now**: matters once answers are published and later shown wrong |
@@ -109,14 +116,14 @@ activity log, then reset the kill-switch from the dashboard. Check the grader fi
 | Passive collection, site terms and robots respected | yes: reads only, allowlist, robots.txt | |
 | Legal and ethical review of the brief before founding | by rule (the screen) plus your approval of blueprints | no separate legal review step; you are the reviewer |
 
-### What would close the two gaps that matter
+### The two gaps that mattered, closed (6 Oct)
 
-1. **Verification decides payment.** The verify part ends with a count (`Supported: N of M`). A rule could read it:
-   any claim marked contradicted holds the job back for its prime to correct, and payment scales with the share of
-   claims supported. Then checking has teeth: a wrong answer stops being paid as if it were right.
-2. **Graders see the sources.** When a part cites archive passages, the grader could be given those passages' text
-   alongside the work. It would judge whether the sources actually say what's claimed, not only whether the writing
-   is careful. This helps every pack, not only OSINT.
+Both are kernel changes, so every pack gets them:
 
-After those: count distinct sources per answer (a rule over the citations' source files), then calibration and
-corrections once answers are predictive or published.
+1. **Verification decides payment.** Any pack can give a part `Format(tally=True)`; an independent part's tally is
+   read by the board before payment. A contradicted claim fails the job (the bond is forfeited); a supported share
+   below the pass mark fails it; otherwise value scales with the share. An author's own count doesn't count: only an
+   independent part's.
+2. **Graders see the sources.** Every part that cites archive passages is graded with those passages beside it.
+
+Still to do: count distinct sources per answer, confidence calibration, corrections, and cost per verified claim.
