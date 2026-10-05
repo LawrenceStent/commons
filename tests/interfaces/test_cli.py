@@ -166,3 +166,21 @@ def test_list_pause_and_resume(tmp_path, monkeypatch, capsys):
     assert "cycles 3-3 played" in capsys.readouterr().out
     with pytest.raises(SystemExit, match="is a trading society"):
         cli.main(["tick", "paper", "--pack", "osint", "--backend", "fake"])
+
+
+def test_a_cap_across_every_society_stops_ticks_and_runs(tmp_path, monkeypatch, capsys):
+    from commons.application import registry
+    from commons.interfaces.cli import live
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(live, "PID", tmp_path / "runs" / "live.pid")
+    registry.record_spend("elsewhere", 1_500_000)
+    registry.record_spend("paper", 600_000)
+    assert registry.spent_today() == 2_100_000
+    cli.main(["tick", "paper", "--pack", "trading", "--backend", "fake"])
+    assert "skipped: today's real spend" in capsys.readouterr().out
+    with pytest.raises(SystemExit, match="total-ceiling"):
+        cli.main(["run", "--backend", "fake", "--cycles", "1"])
+    cli.main(["tick", "paper", "--pack", "trading", "--backend", "fake", "--total-ceiling", "5"])
+    assert "cycles 1-1 played" in capsys.readouterr().out
+    assert registry.spent_today(day="2000-01-01") == 0  # by calendar day

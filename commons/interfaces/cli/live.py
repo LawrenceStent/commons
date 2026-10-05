@@ -30,7 +30,7 @@ from commons.adapters.web import WebAccess
 from commons.agents.llm.fakes import GOOD_GRADE, competent
 from commons.agents.llm.steward import LLMStrategy
 from commons.agents.scripted import SCRIPTED
-from commons.application import founding
+from commons.application import founding, registry
 from commons.application.archive import Archive
 from commons.application.gate import Gate
 from commons.application.graders import HybridGrader, LLMGrader, PanelGrader
@@ -59,6 +59,8 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--max-minutes", type=float, default=30, help="stop after this many minutes of wall time")
     ap.add_argument("--seed", type=int, default=0, help="random seed (a founded society uses its own)")
     ap.add_argument("--real-ceiling", type=float, default=1.00, help="real dollars per day before the kill-switch trips")
+    ap.add_argument("--total-ceiling", type=float, default=2.00,
+                    help="real dollars per calendar day across every society on this machine (runs/spend.json)")
     ap.add_argument("--serve", action="store_true", help="watch it on the dashboard")
     ap.add_argument("--operator", help="folder of directives, context and limits for the co-ops (see operator.example/)")
     ap.add_argument("--panel", action="store_true",
@@ -179,7 +181,7 @@ def _announce(world: World, society, population, a) -> None:
                  " · decide requests on the dashboard (--serve)" if world.gate.policy.read == "ask" else ""))
     if world.operator.errors:
         sys.exit(f"the operator folder has a problem: {world.operator.errors[0]}")
-    world.meter.real_ceiling = round(a.real_ceiling * 1e6)
+    within_room(world, a)
 
 
 def _log_turns(world: World, path: str) -> None:
@@ -249,6 +251,16 @@ def _report(world: World, society, ledger: str, turns_path: str) -> None:
         print(f"{len(world.ratings.samples)} pieces of work set aside for you to rate: uv run commons rate {society.name}")
 
 
+def room(a) -> int:
+    """Real µ$ left today under the cap across every society; a run or tick doesn't start without some."""
+    return round(a.total_ceiling * 1e6) - registry.spent_today()
+
+
+def within_room(world: World, a) -> None:
+    """This run's real-dollar kill-switch, tightened to what's left today across every society."""
+    world.meter.real_ceiling = min(round(a.real_ceiling * 1e6), world.meter.real_spent_today + max(0, room(a)))
+
+
 def _ledger_path(runs: Path, backend: str) -> Path:
     """A ledger file no earlier run has used: runs started in the same second get -2, -3 and so on."""
     stem = f"live-{backend}-{time.strftime('%Y%m%d-%H%M%S')}"
@@ -267,12 +279,15 @@ def main(argv: list[str] | None = None) -> None:
     runs = society.folder / "runs" if society else Path("runs")
     runs.mkdir(parents=True, exist_ok=True)
     ledger = str(_ledger_path(runs, a.backend))
+    if room(a) <= 0:
+        sys.exit(f"today's real spend across every society has reached ${a.total_ceiling:.2f} (--total-ceiling)")
     _lock()
     world = _world(a, society, pack, models, population, ledger)
     _announce(world, society, population, a)
     turns_path = ledger.replace(".sqlite", ".turns.jsonl")
     _log_turns(world, turns_path)
     _run(world, a, ledger)
+    registry.record_spend(society.name if society else Path(ledger).stem, world.ledger.real()["api_spend"])
     _report(world, society, ledger, turns_path)
 
 

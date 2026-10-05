@@ -16,6 +16,7 @@ from pathlib import Path
 FOUNDED = Path("societies")
 TICKED = Path("runs") / "ticks"
 STATE = "state"
+SPEND = Path("runs") / "spend.json"  # real USD micro-dollars per calendar day, per society: the cap across them all
 
 
 @dataclass(frozen=True)
@@ -60,6 +61,28 @@ def write_status(state: Path, world, *, real_spent: int) -> None:
     status = {"pack": world.pack.name, "cycle": world.cycle, "last_tick": round(time.time()),
               "real_spent": real_spent, "halted": world.meter.halted}
     (state / "status.json").write_text(json.dumps(status, indent=1) + "\n")
+
+
+def spent_today(day: str | None = None) -> int:
+    """Real spend today (µ$), every society together."""
+    return sum(_spend().get(day or time.strftime("%Y-%m-%d"), {}).values())
+
+
+def record_spend(name: str, micros: int, day: str | None = None) -> None:
+    if micros <= 0:
+        return
+    book = _spend()
+    today = book.setdefault(day or time.strftime("%Y-%m-%d"), {})
+    today[name] = today.get(name, 0) + micros
+    SPEND.parent.mkdir(parents=True, exist_ok=True)
+    SPEND.write_text(json.dumps(book, indent=1, sort_keys=True) + "\n")
+
+
+def _spend() -> dict:
+    try:
+        return json.loads(SPEND.read_text())
+    except (OSError, ValueError):
+        return {}
 
 
 def pause(name: str) -> Path:

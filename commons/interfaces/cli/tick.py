@@ -60,12 +60,21 @@ def main(argv: list[str] | None = None) -> None:
     society, pack = live._source(a)
     models = live._models(a)
     state.mkdir(parents=True, exist_ok=True)
+    if live.room(a) <= 0:
+        print(f"{a.name}: skipped: today's real spend across every society has reached ${a.total_ceiling:.2f}")
+        return
     live._lock()
     world = _open(a, state, society, pack, models)
     live._log_turns(world, str(state / "turns.jsonl"))
-    start = world.cycle
-    a.cycles = start + a.cycles  # the run loop counts from the society's first cycle
-    live._run(world, a, str(state / "ledger.sqlite"))
+    start, todo = world.cycle, a.cycles
+    for _ in range(todo):  # a cycle at a time, so the cap across societies is rechecked between them
+        if live.room(a) <= 0 or world.meter.halted:
+            break
+        live.within_room(world, a)
+        before = world.ledger.real()["api_spend"]
+        a.cycles = world.cycle + 1  # the run loop counts from the society's first cycle
+        live._run(world, a, str(state / "ledger.sqlite"))
+        registry.record_spend(a.name, world.ledger.real()["api_spend"] - before)
     if world.meter.halted and live._model_down(world.hub, world.cycle):
         world.meter.halted = False  # a stuck model isn't the society's doing: the next tick tries again
     world.save(state / "society.save")
