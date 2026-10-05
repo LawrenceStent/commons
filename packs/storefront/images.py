@@ -26,6 +26,7 @@ from commons.adapters import secrets
 # (method, url, headers, body) -> (status, body bytes); tests pass a fake
 Transport = Callable[[str, str, dict, bytes | None], tuple[int, bytes]]
 API = "https://api.bfl.ai/v1/"
+READY = "Ready"  # BFL's task statuses (theirs, not ours)
 FAILED = ("Error", "Failed", "Content Moderated", "Request Moderated")
 
 
@@ -69,7 +70,7 @@ class FluxImages:
         while time.monotonic() < deadline:
             state = self._json("GET", poll, None)
             status = state.get("status")
-            if status == "Ready":
+            if status == READY:
                 return self._get(str((state.get("result") or {}).get("sample") or ""))
             if status in FAILED:
                 raise ImageError(f"the image service refused or failed: {status}")

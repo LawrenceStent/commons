@@ -48,5 +48,9 @@ Done when (CHECKLIST.md): the first real dollar settles through the ledger.
 - [x] P2.4 The sales port, a fake channel, and the ledger's sales, fees and refunds by channel
 - [x] P2.5 Requests for comment: charter changes with a comment window, then the gate
 - [x] P2.6 Kill criteria as drop requests to the gate
-- [ ] P2.7 The real channels, test mode first; one product end to end in test mode
+- [~] P2.7 Built and tested against fakes (6 Oct); waiting for your keys. Product files typeset in code (PDF and cover);
+      FLUX.2 illustrations through BFL as spend requests; Etsy by API (drafts until ETSY_ACTIVATE=yes); Lemon Squeezy
+      by hand from a kit, then `commons link` (its API can't create products); real sales booked in USD beside the
+      makers' credits. Still to do with your keys: `commons channels --check`, one product end to end on Etsy as a
+      draft and on Lemon Squeezy in test mode
 - [ ] P2.8 Live: your first approved listing; done when the first real dollar settles

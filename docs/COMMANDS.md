@@ -7,6 +7,7 @@ Since the refactor (R3, 1 Oct) there is one command, `commons`, with a subcomman
 |---|---|---|---|
 | `uv run commons run` | Runs a live society (LLM co-ops) | Fake: nothing. LM Studio: your machine. Anthropic: real money | [run](#commons-run) |
 | `uv run commons tick` | Resumes a saved society, plays a few cycles, saves it; `tick-all` does every unpaused one | As `run` | [tick](#commons-tick) |
+| `uv run commons channels` | A pack's outside services: which have keys in `.env`; `link` an item listed by hand | Nothing (`--check`: one free read each) | [channels](#commons-channels-link) |
 | `uv run commons list` | Every society on this machine; `pause`, `resume` and `pace` one | Nothing | [list](#commons-list-pause-resume-pace) |
 | `uv run commons sim` | Runs a scripted society (no models) | Nothing | [sim](#commons-sim) |
 | `uv run commons found` | Founds a society from your brief; approves its blueprints | One model call (or none with `fake`) | [found](#commons-found) |
@@ -132,6 +133,23 @@ uv run commons pace probe 180      # at most one tick every 3 hours; 0: every ro
 
 **Reads** each society's `state/status.json` (written at every save) and its `paused` and `pace` files; **writes**
 those two files. Nothing is loaded or run.
+
+## commons channels, link
+
+The storefront's outside services (Phase 2): FLUX.2 images (BFL), Etsy and Lemon Squeezy. Keys go in `.env` (copy
+`.env.example`; git-ignored, never printed, never saved with a society).
+
+```sh
+uv run commons channels --pack storefront            # which services have their keys (names only)
+uv run commons channels --pack storefront --check    # one free, read-only call to each: the keys work
+uv run commons link shop P3 lemonsqueezy 123456      # a product you created by hand in Lemon Squeezy, linked
+```
+
+Etsy lists by API, but stays at drafts (free; you check them in Etsy) until `ETSY_ACTIVATE=yes`. Lemon Squeezy's API
+can't create products: when you approve a listing there, the store writes the PDF and cover under
+`STATE/../products/P3/` and tells you; you create the product in Lemon Squeezy (test mode first) and `link` it, and
+its orders and refunds are read from then on. Every listing, price change, drop and illustration is a gate request:
+set `[gate] publish = "ask"` (and `spend = "ask"` for illustrations) in the society's operator folder.
 
 ## commons sim
 
