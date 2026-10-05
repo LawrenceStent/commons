@@ -115,10 +115,10 @@ class PlaybookView:
 @dataclass(frozen=True)
 class ProposalView:
     id: str
-    kind: str  # spawn | merge
+    kind: str  # spawn | merge | charter
     proposer: str
     deadline: int
-    detail: str  # spawn: the new member's role; merge (my own): the target
+    detail: str  # spawn: the new member's role; merge (my own): the target; charter: the proposed charter
     standing: float  # the commons' view of the proposer
 
 
@@ -189,6 +189,7 @@ class Observation:
     archive: tuple = (0, ())  # (passages, source files) of the society's reference archive
     web: str = ""  # what the operator's gate allows (empty: no web)
     grants: tuple | None = None  # grant economy: (pool now, budget per cycle); None in a market economy
+    charter_proposals: tuple[ProposalView, ...] = ()  # other co-ops' charter changes open for my comment
     desk: str = ""  # what I see of the pack's desk (commons/domain/desk.py); empty without one
     desk_tools: tuple = ()  # the desk's tool schemas, offered beside the kernel's
     goals: tuple[GoalView, ...] = ()  # my active goals
@@ -220,6 +221,8 @@ class PopulationActions(Protocol):
     def propose_merge(self, target: str) -> Outcome: ...
     def accept_merge(self, proposal_id: ProposalId) -> Outcome: ...
     def learn(self, capability: str, playbook_id: PlaybookId | None = None) -> Outcome: ...
+    def propose_charter(self, text: str, reason: str = "") -> Outcome: ...
+    def comment(self, proposal_id: ProposalId, text: str) -> Outcome: ...
 
 
 class KnowledgeActions(Protocol):

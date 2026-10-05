@@ -37,6 +37,7 @@ class VentureStatus(StrEnum):
 
 class ProposalStatus(StrEnum):
     OPEN = "open"
+    REFERRED = "referred"  # a charter change, sent to the operator's gate after its comment window
     DONE = "done"
     EXPIRED = "expired"
     FAILED = "failed"

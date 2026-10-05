@@ -14,7 +14,7 @@ RUNTIME_KEYS = {"steward_model", "member_model", "max_rounds", "max_tokens", "me
 ACTIONS = {"claim", "do_part", "announce", "bid", "award", "deliver", "review", "attest", "dispute", "propose_spawn",
            "second_spawn", "retire", "fork", "propose_merge", "accept_merge", "learn", "publish", "read_playbook",
            "note", "idea", "set_goal", "update_goal", "propose_venture", "commission", "search_archive", "read_archive",
-           "web_search", "web_fetch"}
+           "web_search", "web_fetch", "propose_charter", "comment"}
 # natural names for groups of actions; a forbid list may use either
 ALIASES = {"merge": {"propose_merge", "accept_merge"}, "spawn": {"propose_spawn"}, "venture": {"propose_venture"},
            "ventures": {"propose_venture"}, "contracting": {"announce", "award"}, "bidding": {"bid"},

@@ -117,6 +117,8 @@ class ObservationBuilder:
                                for x in open_ if x.kind == "merge" and x.target == name),
             my_proposals=tuple(ProposalView(x.id, x.kind, x.proposer, x.deadline, x.role or x.target, 0.0)
                                for x in open_ if x.proposer == name),
+            charter_proposals=tuple(ProposalView(x.id, x.kind, x.proposer, x.deadline, x.text, round(standing(x.proposer), 3))
+                                    for x in open_ if x.kind == "charter" and x.proposer != name and name not in x.comments),
             library=tuple(PlaybookView(pb.id, pb.capability, pb.author, pb.title, pb.uses) for pb in self.w.library.values()),
         )
 

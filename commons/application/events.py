@@ -617,6 +617,52 @@ def _(e: ev.PlaybookPublished, w):
 
 
 @notices.register
+def _(e: ev.CharterProposed, w):
+    x = e.proposal
+    return [(c.name, "charter_proposed", f"{x.proposer} proposes a new charter ({x.id}): \"{x.text}\". Comment once with "
+             f"comment({x.id}, ...) by cycle {x.deadline}; then the operator decides.", x.id)
+            for c in w.living() if c.name != x.proposer]
+
+
+@telemetry.register
+def _(e: ev.CharterProposed, w):
+    x = e.proposal
+    return [("population.charter", dict(id=x.id, coop=x.proposer, stage="proposed", text=x.text, deadline=x.deadline))]
+
+
+@notices.register
+def _(e: ev.CharterCommented, w):
+    return [(e.proposal.proposer, "charter_comment", f"{e.by} commented on {e.proposal.id}: {e.text}", e.proposal.id)]
+
+
+@telemetry.register
+def _(e: ev.CharterCommented, w):
+    return [("population.charter", dict(id=e.proposal.id, coop=e.proposal.proposer, stage="comment", by=e.by))]
+
+
+@notices.register
+def _(e: ev.CharterReferred, w):
+    x = e.proposal
+    return [(x.proposer, "charter_referred", f"{x.id} went to the operator ({e.request}) with {len(x.comments)} "
+             "comment(s); your charter changes only if they approve", x.id)]
+
+
+@telemetry.register
+def _(e: ev.CharterReferred, w):
+    return [("population.charter", dict(id=e.proposal.id, coop=e.proposal.proposer, stage=str(e.proposal.status)))]
+
+
+@notices.register
+def _(e: ev.CharterChanged, w):
+    return [(e.coop, "charter_changed", f"the operator approved your new charter: {e.new}", None)]
+
+
+@telemetry.register
+def _(e: ev.CharterChanged, w):
+    return [("population.charter", dict(coop=e.coop, stage="changed", old=e.old, new=e.new))]
+
+
+@notices.register
 def _(e: ev.Screened, w):
     halt = " The society is halted until the operator resets it." if e.halted else ""
     return [(e.coop, "screened", f"refused by this society's rules: {e.why}.{halt}", None)]

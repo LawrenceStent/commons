@@ -26,6 +26,12 @@ B = {"type": "boolean"}
 IDS = {"type": "array", "items": {"type": "string"}}
 
 _TOOLS: list[dict[str, Any]] = [
+    {"name": "comment", "description": "Comment once on another co-op's proposed charter change (listed under CHARTER "
+     "CHANGES). Your comment goes to the operator with the proposal. Free.",
+     "input_schema": _obj({"proposal_id": S, "text": S}, ["proposal_id", "text"])},
+    {"name": "propose_charter", "description": "Propose a new charter for your own co-op (20 to 400 characters), with "
+     "why. You can't change it yourself: other co-ops comment for a few cycles, then the operator decides. Uses one "
+     "capacity.", "input_schema": _obj({"text": S, "reason": S}, ["text", "reason"])},
     {"name": "accept_merge", "description": "Accept a merge offer addressed to you: the proposer's members, purse, "
      "capabilities and playbooks join your community. Refused if they still have work in flight or the total would "
      "exceed the member limit.", "input_schema": _obj({"proposal_id": S}, ["proposal_id"])},

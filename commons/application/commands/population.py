@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from commons.application import population
+from commons.application import charters, population
 from commons.application.commands.base import CommandBase
 from commons.application.commands.pipeline import command
 from commons.application.observation import Outcome
@@ -44,6 +44,17 @@ class PopulationCommands(CommandBase):
     @command()
     def accept_merge(self, proposal_id: ProposalId) -> Outcome:
         return population.accept_merge(self.w, self.me, proposal_id)
+
+    @command()
+    def propose_charter(self, text: str, reason: str = "") -> Outcome:
+        """A request for comment on a new charter for this co-op; it goes to the operator after the comment window."""
+        if (err := self._use_capacity()) is not None:
+            return err
+        return charters.propose(self.w, self.me, text, reason)
+
+    @command()
+    def comment(self, proposal_id: ProposalId, text: str) -> Outcome:
+        return charters.comment(self.w, self.me, proposal_id, text)
 
     @command()
     def learn(self, capability: str, playbook_id: PlaybookId | None = None) -> Outcome:

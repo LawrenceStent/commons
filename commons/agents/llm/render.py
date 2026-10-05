@@ -278,6 +278,9 @@ def _society(obs: Observation) -> list[str]:
                       for r in obs.spawn_requests])
             + _section("MERGE OFFERS to you", [f"  {m.id} from {m.proposer} (standing {m.standing:.2f}), until cycle {m.deadline}"
                                                for m in obs.merge_offers])
+            + _section("CHARTER CHANGES other co-ops propose (comment once with comment; the operator decides)",
+                       [f"  {x.id} from {x.proposer} (standing {x.standing:.2f}), until cycle {x.deadline}: {_u(x.detail, 300)}"
+                        for x in obs.charter_proposals])
             + _section("YOUR OPEN PROPOSALS", [f"  {x.id} {x.kind} {x.detail}, until cycle {x.deadline}" for x in obs.my_proposals])
             + _section("PEERS", [f"  {q.name}: members {q.members}, standing {q.standing:.2f}, "
                                  + ", ".join(f"{c} (your trust {t:.2f})" for c, t in q.trust.items()) for q in obs.peers])

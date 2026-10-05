@@ -25,6 +25,7 @@ import random
 import re
 from typing import TYPE_CHECKING
 
+from commons.application import charters
 from commons.application.observation import Outcome
 from commons.domain import events as ev
 from commons.domain.community import Community
@@ -199,8 +200,12 @@ def learn(w: World, me: Community, capability: str, playbook_id: PlaybookId | No
 
 
 def expire_proposals(w: World) -> None:
-    for x in w.proposals.values():
+    """Past their deadline: spawns and merges expire; a charter change's comment window closes and it goes to you."""
+    for x in list(w.proposals.values()):
         if x.status == ProposalStatus.OPEN and w.cycle > x.deadline:
+            if x.kind == "charter":
+                charters.refer(w, x)
+                continue
             x.status = ProposalStatus.EXPIRED
             w.events.publish(ev.ProposalExpired(x))
     for k in [k for k, x in w.proposals.items() if x.status != ProposalStatus.OPEN and x.deadline < w.cycle - w.params.storage.retain]:

@@ -332,6 +332,31 @@ class PlaybookPublished(Event):
 
 
 @dataclass(frozen=True)
+class CharterProposed(Event):
+    proposal: Proposal
+
+
+@dataclass(frozen=True)
+class CharterCommented(Event):
+    proposal: Proposal
+    by: str
+    text: str
+
+
+@dataclass(frozen=True)
+class CharterReferred(Event):
+    proposal: Proposal
+    request: str  # the gate request's id
+
+
+@dataclass(frozen=True)
+class CharterChanged(Event):
+    coop: str
+    old: str
+    new: str
+
+
+@dataclass(frozen=True)
 class Screened(Event):
     """The pack's screen refused something a co-op tried (commons/domain/pack.py)."""
     coop: str

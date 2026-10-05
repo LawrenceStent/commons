@@ -190,3 +190,48 @@ def test_disputes_close_after_the_window():
         w.step()
     assert not w.observe(w.communities["beta"]).to_dispute
     assert "too late" in act(w, "beta").dispute(c.id, "late").message or "no rejected" in act(w, "beta").dispute(c.id, "late").message
+
+
+def test_a_charter_changes_only_after_comment_and_your_approval():
+    """P2.5: a request for comment, then the operator's gate. Nobody changes their own charter."""
+    from commons.application.actions import Actions
+    from commons.application.society import Params, World
+    from commons.domain.status import ProposalStatus, RequestStatus
+
+    w = World(Params(seed=0, verify=False, charter_window=2)).run(1)
+    a, b = list(w.communities)[:2]
+    old = w.communities[a].charter
+    w.communities[a].capacity = 3
+    out = Actions(w, w.communities[a]).propose_charter("We make careful printables that people keep using.", "focus")
+    assert out and out.id
+    rid = out.id
+    assert "already" in Actions(w, w.communities[a]).propose_charter("Another new charter for us all.", "x").message
+    assert "own charter" in Actions(w, w.communities[a]).comment(rid, "me too").message
+    assert rid in [x.id for x in w.observe(w.communities[b]).charter_proposals]
+    assert Actions(w, w.communities[b]).comment(rid, "Good: you are better at printables than anything else.")
+    assert "already commented" in Actions(w, w.communities[b]).comment(rid, "again").message
+    w.run(3)  # the window closes: to the gate, not applied
+    x = w.proposals[rid]
+    request = next(r for r in w.gate.requests.values() if r.tool == "change_charter")
+    assert x.status == ProposalStatus.REFERRED and request.risk == "govern"
+    assert "careful printables" in request.detail and f"- {b}: Good" in request.detail
+    assert w.communities[a].charter == old
+    w.web_desk.decide([request.id], True)
+    w.step()
+    assert w.communities[a].charter == "We make careful printables that people keep using."
+    assert w.registry.cards[a].description == w.communities[a].charter and request.status == RequestStatus.DONE
+
+
+def test_a_denied_charter_change_leaves_the_charter_alone():
+    from commons.application.actions import Actions
+    from commons.application.society import Params, World
+
+    w = World(Params(seed=0, verify=False, charter_window=1)).run(1)
+    a = list(w.communities)[0]
+    old = w.communities[a].charter
+    w.communities[a].capacity = 3
+    Actions(w, w.communities[a]).propose_charter("A completely different purpose for us.", "change")
+    w.run(2)
+    w.web_desk.decide([r.id for r in w.gate.pending()], False)
+    w.run(2)
+    assert w.communities[a].charter == old

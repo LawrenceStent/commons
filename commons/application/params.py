@@ -95,6 +95,7 @@ class PopulationConfig:
     spawn_fee: Micros
     spawn_window: int
     merge_window: int
+    charter_window: int
     fork_good_keep: float
     learn_cost: Micros
     learn_playbook_discount: float
@@ -215,6 +216,7 @@ class Params:
     spawn_fee: Micros = 300_000
     spawn_window: int = 3
     merge_window: int = 3
+    charter_window: int = 3  # cycles other co-ops have to comment on a proposed charter before it goes to you
     fork_good_keep: float = 0.5  # share of a parent's good record a fork inherits (bad is kept in full)
     learn_cost: Micros = 500_000
     learn_playbook_discount: float = 0.4
