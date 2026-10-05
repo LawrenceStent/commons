@@ -1,7 +1,9 @@
 #!/bin/zsh
-# One scheduled tick of a saved society (K6): load the local model, play CYCLES cycles, save, unload.
+# One scheduled tick (K6, K8): load the local model once, play CYCLES cycles of one society, or of every unpaused
+# society in turn (NAME = all), save, unload.
 #
 #   scripts/tick.sh NAME [MODEL] [CYCLES]        e.g. scripts/tick.sh paper qwen/qwen3.5-35b-a3b 1
+#   scripts/tick.sh all  [MODEL] [CYCLES]        every unpaused society (commons list shows them)
 #
 # It skips the tick, and touches nothing, when:
 #   - less than MIN_FREE % of memory is free (you are using the machine)
@@ -14,7 +16,7 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 NAME=${1:?usage: scripts/tick.sh NAME [MODEL] [CYCLES]}
 MODEL=${2:-qwen/qwen3.5-35b-a3b}
 CYCLES=${3:-1}
-PACK=${PACK:-trading}
+PACK=${PACK:-}  # only for a society's first tick; later ticks keep the pack it was built with
 MIN_FREE=${MIN_FREE:-60}
 LMS=~/.lmstudio/bin/lms
 LOG=runs/ticks/$NAME/tick.log
@@ -31,7 +33,12 @@ $LMS server start >/dev/null 2>&1
 if ! $LMS load "$MODEL" --context-length 32768 -y >/dev/null 2>&1; then
   say "skip: couldn't load $MODEL"; $LMS server stop >/dev/null 2>&1; exit 1
 fi
-uv run commons tick "$NAME" --pack "$PACK" --backend lmstudio --model "$MODEL" --cycles "$CYCLES" 2>&1 | tail -3 | while read -r line; do say "$line"; done
+if [[ $NAME == all ]]; then
+  cmd=(uv run commons tick-all --backend lmstudio --model "$MODEL" --cycles "$CYCLES")
+else
+  cmd=(uv run commons tick "$NAME" --backend lmstudio --model "$MODEL" --cycles "$CYCLES" ${PACK:+--pack "$PACK"})
+fi
+"${cmd[@]}" 2>&1 | grep -E "^(tick-all|cycle|[a-z0-9-]+: |STOPPED|KILL)" | while read -r line; do say "$line"; done
 rc=${pipestatus[1]}
 $LMS unload --all >/dev/null 2>&1
 $LMS server stop >/dev/null 2>&1

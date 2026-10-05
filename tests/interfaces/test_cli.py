@@ -184,3 +184,25 @@ def test_a_cap_across_every_society_stops_ticks_and_runs(tmp_path, monkeypatch, 
     cli.main(["tick", "paper", "--pack", "trading", "--backend", "fake", "--total-ceiling", "5"])
     assert "cycles 1-1 played" in capsys.readouterr().out
     assert registry.spent_today(day="2000-01-01") == 0  # by calendar day
+
+
+def test_tick_all_takes_turns_and_skips_the_paused(tmp_path, monkeypatch, capsys):
+    from commons.application import registry
+    from commons.interfaces.cli import live
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(live, "PID", tmp_path / "runs" / "live.pid")
+    cli.main(["tick", "paper", "--pack", "trading", "--backend", "fake"])
+    cli.main(["tick", "probe", "--pack", "osint", "--backend", "fake"])
+    for _ in range(3):  # three scheduled rounds: each society one cycle a round, one after the other
+        cli.main(["tick-all", "--backend", "fake"])
+    status = {e.name: e.status for e in registry.societies()}
+    assert status["paper"]["cycle"] == 4 and status["probe"]["cycle"] == 4
+    assert status["paper"]["pack"] == "trading" and status["probe"]["pack"] == "osint"
+    cli.main(["pause", "probe"])
+    capsys.readouterr()
+    cli.main(["tick-all", "--backend", "fake"])
+    assert "1 paused: probe" in capsys.readouterr().out
+    assert {e.name: e.status["cycle"] for e in registry.societies()} == {"paper": 5, "probe": 4}
+    with pytest.raises(SystemExit, match="no --pack"):
+        cli.main(["tick-all", "--pack", "trading"])

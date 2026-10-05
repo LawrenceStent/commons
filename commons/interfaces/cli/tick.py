@@ -85,5 +85,19 @@ def main(argv: list[str] | None = None) -> None:
           + (f" · {len(settled)} windows settled, {sum(s['paid'] for s in settled)} µcr paid" if settled else ""))
 
 
+def main_all(argv: list[str] | None = None) -> None:
+    """Every unpaused society, one after another in this process (one lock, one model load in scripts/tick.sh):
+    `commons tick-all [tick options]`. Each keeps its own pack; paused ones are skipped."""
+    argv = list(argv or [])
+    if any(x == "--pack" or x.startswith("--pack=") for x in argv):
+        sys.exit("tick-all takes no --pack: each society keeps its own")
+    entries = registry.societies()
+    paused = [e.name for e in entries if e.paused]
+    due = [e.name for e in entries if not e.paused]
+    print(f"tick-all: {len(due)} societies{f' ({len(paused)} paused: ' + ', '.join(paused) + ')' if paused else ''}")
+    for name in due:
+        main([name, *argv])
+
+
 if __name__ == "__main__":
     main()

@@ -42,7 +42,7 @@ def folder_of(name: str) -> Path:
 
 def societies() -> list[Entry]:
     found = [(p, True) for p in sorted(FOUNDED.glob("*/society.toml"))]
-    ticked = [(p, False) for p in sorted(TICKED.glob(f"*/{STATE}/status.json"))]
+    ticked = [(p, False) for p in sorted(TICKED.glob(f"*/{STATE}/society.save"))]
     out = {}
     for path, founded in found + ticked:
         folder = path.parent if founded else path.parent.parent

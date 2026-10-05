@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!-- A launchd schedule for scripts/tick.sh: off until you turn it on (see docs/COMMANDS.md, commons tick).
-     Edit NAME (the society) and the interval, then:
+     It ticks every unpaused society in turn ("all"; or put one society's name). Edit the interval, then:
        cp scripts/commons.tick.plist ~/Library/LaunchAgents/ && launchctl load ~/Library/LaunchAgents/commons.tick.plist
      Off again: launchctl unload ~/Library/LaunchAgents/commons.tick.plist -->
 <plist version="1.0">
@@ -11,7 +11,7 @@
   <array>
     <string>/bin/zsh</string>
     <string>/Users/larrystent/work/commons/scripts/tick.sh</string>
-    <string>paper</string>
+    <string>all</string>
   </array>
   <key>StartInterval</key><integer>3600</integer>
   <key>RunAtLoad</key><false/>

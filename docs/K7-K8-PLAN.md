@@ -58,7 +58,7 @@ Done when (FRAMEWORK.md §9): two societies run on alternate schedules on one ma
 ### Stages
 - [x] K8.1 `commons list`; `commons pause` and `commons resume`; ticks skip a paused society
 - [x] K8.2 A total real-dollar cap across societies, checked before every tick
-- [ ] K8.3 `scripts/tick-all.sh`: every unpaused society in turn, one model load; the launchd file uses it
+- [x] K8.3 `scripts/tick-all.sh`: every unpaused society in turn, one model load; the launchd file uses it
 - [ ] K8.4 The dashboard opens a saved society, picked from the registry
 - [ ] K8.5 Done-when: two societies (trading and OSINT, with fake models) take turns on a schedule; docs
 
