@@ -1,16 +1,17 @@
-"""Identifiers. NewTypes: strings at run time, named kinds of string to a reader and a type checker."""
+"""Identifiers: aliases of str, names for readers (NewTypes until R13, 5 Oct: ids arrive as plain strings from tool
+calls and messages, so a checker demanded a wrapper at every boundary)."""
 
-from typing import NewType
+from typing import TypeAlias
 
-JobId = NewType("JobId", str)  # "J12" (posted), "V3" (a venture's job)
-ContractId = NewType("ContractId", str)  # "<job id>.<capability>.<n>"
-ProposalId = NewType("ProposalId", str)
-PlaybookId = NewType("PlaybookId", str)
-PassageId = NewType("PassageId", str)  # "<file stem>#<n>"
-VentureId = NewType("VentureId", str)
-IdeaId = NewType("IdeaId", str)
-GoalId = NewType("GoalId", str)
-DraftId = NewType("DraftId", str)
+JobId: TypeAlias = str  # "J12" (posted), "V3" (a venture's job)
+ContractId: TypeAlias = str  # "<job id>.<capability>.<n>"
+ProposalId: TypeAlias = str
+PlaybookId: TypeAlias = str
+PassageId: TypeAlias = str  # "<file stem>#<n>"
+VentureId: TypeAlias = str
+IdeaId: TypeAlias = str
+GoalId: TypeAlias = str
+DraftId: TypeAlias = str
 
 
 class Sequences:

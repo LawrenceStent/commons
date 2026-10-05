@@ -33,7 +33,7 @@ READS = {
 def test_every_setting_is_in_exactly_one_group():
     names = [n for g in GROUPS.values() for n in g]
     assert len(names) == len(set(names))
-    assert set(names) == {f.name for f in dataclasses.fields(Params)}
+    assert set(names) == {f.name for f in dataclasses.fields(Params) if f.init}  # the settings, not the groups
 
 
 def test_groups_mirror_the_flat_settings_and_nothing_changes_after():
@@ -54,3 +54,14 @@ def test_modules_read_only_their_groups_and_never_flat_names():
         read = set(re.findall(rf"(?:params|\bp)\.({groups})\.", text))
         assert read <= READS.get(rel, set()), f"{rel} reads {sorted(read - READS.get(rel, set()))}"
         assert not re.search(rf"\.params\.({flat})\b", text), f"{rel} reads a setting by its flat name"
+
+
+def test_every_setting_is_in_exactly_one_group_with_the_same_type():
+    from dataclasses import fields
+
+    from commons.application.params import CONFIGS, Params
+
+    flat = {f.name: f.type for f in fields(Params) if f.init}
+    grouped = [(f.name, f.type) for c in CONFIGS.values() for f in fields(c)]
+    assert sorted(n for n, _ in grouped) == sorted(flat)  # all of them, once each
+    assert all(flat[n] == t for n, t in grouped)

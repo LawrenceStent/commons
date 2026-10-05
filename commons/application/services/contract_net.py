@@ -48,7 +48,7 @@ class ContractNet:
                 # non-delivery is objective: the substrate files the prime's complaint for it
                 c.fail(at=now)
                 self.w.events.publish(ev.ContractFailed(c))
-                self.w.rep.attest(c.prime, c.winner, c.capability, 0.0)
+                self.w.rep.attest(c.prime, c.contractor, c.capability, 0.0)
             elif c.status == ContractStatus.DELIVERED and c.id not in self.w.grading.pending_reviews:
                 if self.pay_remainder(c):
                     self.close_review(c, True, "accepted by default: the prime didn't review in time")
@@ -95,23 +95,23 @@ class ContractNet:
     def pay_remainder(self, c: Contract) -> bool:
         owed = c.owed
         try:
-            self.w.ledger.transfer(purse(c.prime), purse(c.winner), owed, cycle=self.w.cycle, kind="contract", memo=f"settle {c.id}")
+            self.w.ledger.transfer(purse(c.prime), purse(c.contractor), owed, cycle=self.w.cycle, kind="contract", memo=f"settle {c.id}")
         except InsufficientFunds:
             return False
-        self.w.recorder.stat(c.winner, "earned", owed)
+        self.w.recorder.stat(c.contractor, "earned", owed)
         return True
 
     def close_review(self, c: Contract, accept: bool, reason: str) -> None:
         (c.accept if accept else c.reject)(reason, at=self.w.cycle)
         self.w.events.publish(ev.ContractReviewed(c, accept, reason))
-        self.w.rep.attest(c.prime, c.winner, c.capability, 1.0 if accept else 0.0)
+        self.w.rep.attest(c.prime, c.contractor, c.capability, 1.0 if accept else 0.0)
         if accept:
-            self.w.recorder.stat(c.winner, "ok")
-            track = self.w.communities[c.winner].deliveries
+            self.w.recorder.stat(c.contractor, "ok")
+            track = self.w.communities[c.contractor].deliveries
             track[c.capability] = track.get(c.capability, 0) + 1
             job = self.w.jobs.get(c.job_id)
             if job and job.status == JobStatus.CLAIMED and job.parts[c.capability].artifact is None:
-                job.fill(c.capability, c.artifact, source=c.id, cites=c.cites)
+                job.fill(c.capability, c.work, source=c.id, cites=c.cites)
                 self.w.grading.maybe_submit(job)
 
     def audit(self, c: Contract, reason: str) -> Outcome:
@@ -127,30 +127,30 @@ class ContractNet:
         verdict moves standing, not any one community's private view."""
         p = self.w.params
         if g.score < p.market.pass_score:
-            self.w.rep.attest("audit", c.winner, c.capability, 0.0)
+            self.w.rep.attest("audit", c.contractor, c.capability, 0.0)
             self.w.events.publish(ev.AuditUpheld(c, g.score))
             return
         owed = c.owed
         try:
             # the treasury keeps the fee (it paid for the audit); the prime reimburses the contractor
-            self.w.ledger.transfer(purse(c.prime), purse(c.winner), owed + p.contracts.audit_cost,
+            self.w.ledger.transfer(purse(c.prime), purse(c.contractor), owed + p.contracts.audit_cost,
                                  cycle=self.w.cycle, kind="audit", memo=f"overturned {c.id}")
             paid = True
         except InsufficientFunds:
             paid = False
         self.w.rep.attest("audit", c.prime, c.capability, 0.0)
-        self.w.rep.attest("audit", c.winner, c.capability, 1.0)
+        self.w.rep.attest("audit", c.contractor, c.capability, 1.0)
         if not paid:
             c.default(at=self.w.cycle)
             self.w.events.publish(ev.AuditUnpaid(c))
             return
-        self.w.recorder.stat(c.winner, "earned", owed + p.contracts.audit_cost)
-        self.w.recorder.stat(c.winner, "ok")
+        self.w.recorder.stat(c.contractor, "earned", owed + p.contracts.audit_cost)
+        self.w.recorder.stat(c.contractor, "ok")
         c.overturn(f"overturned on audit ({g.score:.2f}): {reason}", at=self.w.cycle)
         self.w.events.publish(ev.AuditOverturned(c, g.score, owed, p.contracts.audit_cost))
         job = self.w.jobs.get(c.job_id)
         if job and job.status == JobStatus.CLAIMED and job.parts[c.capability].artifact is None:
-            job.fill(c.capability, c.artifact, source=c.id, cites=c.cites)
+            job.fill(c.capability, c.work, source=c.id, cites=c.cites)
             self.w.grading.maybe_submit(job)
 
     def settle_review(self, cid: ContractId, g) -> None:
@@ -186,7 +186,7 @@ class ContractNet:
     def default(self, c: Contract) -> None:
         c.default(at=self.w.cycle)
         self.w.events.publish(ev.ContractDefaulted(c))
-        self.w.rep.attest(c.winner, c.prime, c.capability, 0.0)
+        self.w.rep.attest(c.contractor, c.prime, c.capability, 0.0)
         c.rated_by_winner()
 
     def settle_audit(self, cid: ContractId, g) -> None:
@@ -200,10 +200,10 @@ class ContractNet:
             if entry["attempts"] >= self.w.params.market.grade_retries:
                 self.w.grading.pending_audits.pop(cid)
                 c.drop_dispute()  # it may be filed again
-                self.w.ledger.transfer("treasury", purse(c.winner), self.w.params.contracts.audit_cost, cycle=self.w.cycle, kind="audit",
+                self.w.ledger.transfer("treasury", purse(c.contractor), self.w.params.contracts.audit_cost, cycle=self.w.cycle, kind="audit",
                                      memo=f"refund {cid}")
                 self.w.events.publish(ev.AuditCancelled(c))
             return
         self.w.grading.pending_audits.pop(cid)
-        self.w.grading.charge(g, job=c.job_id, part=c.capability, payers=("treasury", purse(c.winner)), audit=cid)
+        self.w.grading.charge(g, job=c.job_id, part=c.capability, payers=("treasury", purse(c.contractor)), audit=cid)
         self.apply_audit(c, g, entry["reason"])

@@ -14,20 +14,21 @@ World = Any  # the society (application/society.py); typed loosely so the domain
 
 
 class Desk(Protocol):
-    tools: tuple[dict[str, Any], ...]  # name, description, input_schema; fixed (they sit in the cached prompt)
+    @property
+    def tools(self) -> tuple[dict[str, Any], ...]: ...  # name, description, input_schema; fixed (cached prompt)
 
-    def call(self, world: World, coop: str, tool: str, args: dict[str, Any]) -> tuple[bool, str]:
+    def call(self, world: World, coop: str, tool: str, args: dict[str, Any], /) -> tuple[bool, str]:
         """Do what `coop` asked: (done, what to tell it). Refusals are readable sentences, never exceptions."""
         ...
 
-    def view(self, world: World, coop: str) -> str:
+    def view(self, world: World, coop: str, /) -> str:
         """What `coop` sees of the desk this turn (empty: nothing)."""
         ...
 
-    def open(self, world: World) -> None:
+    def open(self, world: World, /) -> None:
         """The start of a cycle, under the lock."""
         ...
 
-    def close(self, world: World) -> None:
+    def close(self, world: World, /) -> None:
         """The end of a cycle, under the lock."""
         ...

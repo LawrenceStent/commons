@@ -15,11 +15,12 @@ import os
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from commons.application.ports import (  # the port, re-exported
     Completion,
@@ -107,7 +108,7 @@ class AnthropicBackend:
         t = time.perf_counter()
         try:
             r = self.client.messages.create(
-                model=model, max_tokens=max_tokens, messages=wire,
+                model=model, max_tokens=max_tokens, messages=cast(Any, wire),  # the SDK's message dicts, as built above
                 system=[{"type": "text", "text": b, "cache_control": {"type": "ephemeral"}} for b in system[:4]],
                 **kw)
         except anthropic.RateLimitError as e:
@@ -186,7 +187,7 @@ class LMStudioBackend:
         if model not in self._tool_capable:
             root = self.base_url.rsplit("/v1", 1)[0]
             try:
-                with urllib.request.urlopen(f"{root}/api/v0/models/{urllib.request.quote(model, safe='')}", timeout=5) as r:
+                with urllib.request.urlopen(f"{root}/api/v0/models/{urllib.parse.quote(model, safe='')}", timeout=5) as r:
                     info = json.load(r)
                 self._tool_capable[model] = "tool_use" in (info.get("capabilities") or [])
             except (OSError, ValueError):
@@ -322,6 +323,8 @@ class FakeBackend:
 
     def structured(self, *, model, system, prompt, schema, max_tokens=1024) -> Completion:
         self.calls.append((system, prompt))
+        if self.respond is None:
+            raise ModelError("this fake backend has no structured answers")
         data = self.respond(system, prompt, schema)
         if isinstance(data, Exception):
             raise data
@@ -332,6 +335,8 @@ class FakeBackend:
     def chat(self, *, model, system, messages, tools=None, max_tokens=4096, reasoning=True) -> Turn:
         self.chats.append((system, messages, tools))
         self.reasoning.append(reasoning)
+        if self.converse is None:
+            raise ModelError("this fake backend can't chat")
         out = self.converse(system, messages, tools)
         if isinstance(out, Exception):
             raise out

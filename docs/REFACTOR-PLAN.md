@@ -285,7 +285,7 @@ Sizes are relative (S, M, L, XL). Tick each item when it's committed.
 
 ---
 
-### Proposed: R13. Type checking (needs your decision)
+### R13. Type checking (done 5 Oct; see docs/K7-K8-PLAN.md)
 - With named types in place, a type checker can hold them. `pyright` (basic mode) reports 247 errors today, mostly
   `None` handling and loosely typed dicts. Proposed: make it clean, then run it in the test suite so it stays clean.
   Not started: it wasn't in the approved scope.

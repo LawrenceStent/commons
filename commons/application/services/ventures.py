@@ -68,7 +68,7 @@ class VentureDesk:
 
     def _approve_best(self) -> None:
         waiting = sorted((v for v in self.w.ventures.values() if v.status == VentureStatus.PENDING and v.score is not None),
-                         key=lambda v: (-v.score, v.id))
+                         key=lambda v: (-(v.score or 0), v.id))
         for i, v in enumerate(waiting):
             if i < self.w.params.ventures.venture_budget:
                 self.decide(v, approved=True)

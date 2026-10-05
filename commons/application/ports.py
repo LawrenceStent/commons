@@ -113,7 +113,8 @@ class SearchResult:
 
 class WebPort(Protocol):
     """Reads only, behind the operator's allowlist (which the adapter enforces on its own, as a second check)."""
-    search_host: str | None  # the host searches go to; None when there's no search
+    @property
+    def search_host(self) -> str | None: ...  # the host searches go to; None when there's no search
 
     def set_hosts(self, hosts) -> None: ...
 

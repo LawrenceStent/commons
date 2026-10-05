@@ -29,7 +29,7 @@ from commons.agents.llm.render import render
 from commons.agents.llm.tools import NAMES, steward_tools
 from commons.agents.waking import members_to_wake
 from commons.application.commands.base import FORMAT_REFUSED
-from commons.application.observation import ActionsAPI, Observation, Outcome
+from commons.application.observation import Observation, Outcome, RuntimeAPI
 from commons.application.ports import ModelBackend, ModelError, ToolCall, ToolResult, Turn
 from commons.domain.ids import PlaybookId
 from commons.substrate.ledger import InsufficientFunds
@@ -94,11 +94,11 @@ class LLMStrategy:
         """How many members to wake: the default rule (commons/agents/waking.py)."""
         return members_to_wake(obs)
 
-    def turn(self, obs: Observation, act: ActionsAPI) -> None:
+    def turn(self, obs: Observation, act: RuntimeAPI) -> None:
         StewardLoop(self, obs, act).run()
 
     # ── tools ──────────────────────────────────────────────────
-    def dispatch(self, obs: Observation, act: ActionsAPI, call: ToolCall) -> Outcome:
+    def dispatch(self, obs: Observation, act: RuntimeAPI, call: ToolCall) -> Outcome:
         a = dict(call.input)
         act.why = str(a.pop("why", "") or "")[:300]
         if any(t["name"] == call.name for t in obs.desk_tools):
@@ -121,7 +121,7 @@ class LLMStrategy:
         except (KeyError, TypeError, ValueError) as e:
             return Outcome(False, f"bad arguments for {call.name}: {e}")
 
-    def _submit(self, act: ActionsAPI, tool: str, a: dict) -> Outcome:
+    def _submit(self, act: RuntimeAPI, tool: str, a: dict) -> Outcome:
         """A draft, by id, as a part of the co-op's own job (do_part) or a contract it won (deliver)."""
         d = self.drafts.get(str(a["draft_id"]))
         if d is None:
@@ -134,7 +134,7 @@ class LLMStrategy:
             self.drafts.pop(d.id, None)  # used, or refused for its format: either way, a new one is commissioned next
         return out
 
-    def commission(self, obs: Observation, act: ActionsAPI, ref: str, capability: str, instructions: str,
+    def commission(self, obs: Observation, act: RuntimeAPI, ref: str, capability: str, instructions: str,
                    playbook_id: PlaybookId | None, sources=()) -> Outcome:
         return self.members.commission(act, ref, capability, instructions, playbook_id, sources)
 
@@ -146,7 +146,7 @@ class StewardLoop:
     purse can't pay for more thinking."""
     agent: LLMStrategy
     obs: Observation
-    act: ActionsAPI
+    act: RuntimeAPI
     messages: list = field(default_factory=list)
     log: list = field(default_factory=list)
     refused: dict = field(default_factory=dict)  # (tool, args) refused this turn -> why

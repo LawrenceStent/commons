@@ -27,8 +27,7 @@ class GossipService:
         heard = 0
         for listener in self.w.communities.values():
             for env in self.w.bus.read("reputation", listener.name):
-                if env.verb == "gossip":
-                    g = env.open()
+                if env.verb == "gossip" and isinstance(g := env.open(), Gossip):
                     self.w.rep.hear(listener.name, env.sender, g.subject, g.capability, g.score, g.evidence)
                     heard += 1
         self.w.events.publish(ev.GossipHeard(heard))

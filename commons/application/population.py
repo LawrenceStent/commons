@@ -187,7 +187,7 @@ def learn(w: World, me: Community, capability: str, playbook_id: PlaybookId | No
     if w.ledger.balance(purse(me.name)) < cost + royalty:
         return Outcome(False, f"learning {capability} costs {cost + royalty}; you can't afford it")
     w.meter.charge(me.name, cost, cycle=w.cycle, memo=f"learn {capability}")
-    if royalty:
+    if royalty and pb is not None:
         w.ledger.transfer(purse(me.name), purse(pb.author), royalty, cycle=w.cycle, kind="royalty", memo=f"learn {pb.id}")
         pb.uses += 1
         w.royalties_paid[pb.author] = w.royalties_paid.get(pb.author, 0) + royalty

@@ -98,7 +98,7 @@ class ObservationBuilder:
                             and c.status in closed and not c.winner_attested),
             to_dispute=tuple(view(c, False) for c in cs if not p.market.grader_reviews and c.winner == name
                              and c.status == ContractStatus.REJECTED and not c.disputed
-                             and self.w.cycle <= c.closed + p.contracts.dispute_window),
+                             and c.closed is not None and self.w.cycle <= c.closed + p.contracts.dispute_window),
             owed=sum(c.owed for c in cs if c.prime == name and c.status in (ContractStatus.AWARDED, ContractStatus.DELIVERED)),
             pending_claims=tuple(self.w.board.pending_claims(name)),
         )

@@ -195,7 +195,7 @@ class Strategy:
             return None  # our niche isn't crowded
         known = {c for peer in obs.peers for c in peer.capabilities} - set(obs.capabilities)
         thin = {c: providers(c) for c in known if providers(c) <= 1}
-        return min(sorted(thin), key=thin.get) if thin else None
+        return min(sorted(thin), key=lambda c: thin[c]) if thin else None
 
     # ── money ──────────────────────────────────────────────────
     def free(self, obs: Observation) -> int:

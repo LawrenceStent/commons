@@ -10,7 +10,7 @@ from commons.application.commands.pipeline import command
 from commons.application.observation import Outcome
 from commons.domain.goals import MAX_ACTIVE_GOALS, MAX_STEPS, Goal, Idea, Step
 from commons.domain.ids import GoalId, IdeaId
-from commons.domain.status import IdeaStatus
+from commons.domain.status import GoalStatus, IdeaStatus
 from commons.substrate.ledger import InsufficientFunds, purse
 
 if TYPE_CHECKING:
@@ -84,9 +84,9 @@ class PlanningCommands(CommandBase):
             if note:
                 s.note = note[:200]
         if status is not None:
-            if status not in ("active", "done", "dropped"):
+            if status not in tuple(GoalStatus):
                 return Outcome(False, "status is active, done or dropped")
-            g.status = status
+            g.status = GoalStatus(status)
             g.outcome = note[:300] if note and step is None else g.outcome
         g.updated = self.w.cycle
         self.w.plans[self.me.name].trim()

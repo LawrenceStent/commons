@@ -126,6 +126,8 @@ class Ledger:
             entry = self.db.execute(
                 "INSERT INTO entries (cycle, currency, kind, memo) VALUES (?, ?, ?, ?)", (cycle, cur, kind, memo)
             ).lastrowid
+            if entry is None:  # sqlite always gives an insert its row id
+                raise RuntimeError("the ledger couldn't number the entry")
             self.db.executemany(
                 "INSERT INTO postings (entry_id, account, currency, amount) VALUES (?, ?, ?, ?)",
                 [(entry, a, cur, n) for a, n in legs],

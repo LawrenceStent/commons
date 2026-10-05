@@ -10,7 +10,6 @@ from commons.application.commands.base import CommandBase
 from commons.application.commands.pipeline import command
 from commons.application.observation import Outcome
 from commons.domain.money import Micros
-from commons.domain.status import JobStatus
 from commons.substrate.ledger import InsufficientFunds, purse
 
 if TYPE_CHECKING:
@@ -66,15 +65,6 @@ class RuntimeHooks(CommandBase):
     def operator_view(self):
         """What this co-op's operator has told it: directives, context, limits, runtime settings."""
         return self.w.operator.view(self.me.name)
-
-    @command(log=False)
-    def operator_refusal(self, action: str, args: dict) -> str | None:
-        """A rule refusing this action before it runs: the pack's (an action this society doesn't have), then your
-        operator's limits."""
-        if action in self.w.pack.without:
-            return f"this society has no {action.replace('_', ' ')}"
-        held = sum(j.prime == self.me.name and j.status == JobStatus.CLAIMED for j in self.w.jobs.values())
-        return self.w.operator.check(self.me.name, action, args, held)
 
     @command(log=False)
     def record_member_work(self, args: dict, out: Outcome) -> None:

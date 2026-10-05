@@ -174,7 +174,7 @@ class MarketCommands(CommandBase):
         if accept and not self.w.contract_net.pay_remainder(c):
             return Outcome(False, f"you can't pay the {c.owed} remainder; "
                                   f"it defaults at cycle {c.deadline} if still unpaid")
-        self._send(Attest(job_id=contract_id, subject=c.winner, capability=c.capability, outcome=1.0 if accept else 0.0))
+        self._send(Attest(job_id=contract_id, subject=c.contractor, capability=c.capability, outcome=1.0 if accept else 0.0))
         self.w.contract_net.close_review(c, accept, reason[:300])
         return Outcome(True, f"{'accepted' if accept else 'rejected'} {contract_id}")
 
@@ -204,7 +204,7 @@ class MarketCommands(CommandBase):
             return Outcome(False, f"{contract_id} has already been audited")
         if c is None or c.winner != self.me.name or c.status != ContractStatus.REJECTED:
             return Outcome(False, f"you have no rejected delivery {contract_id} to dispute")
-        if w.cycle > c.closed + p.contracts.dispute_window:
+        if c.closed is None or w.cycle > c.closed + p.contracts.dispute_window:
             return Outcome(False, f"too late: disputes must be filed within {p.contracts.dispute_window} cycles of the rejection")
         try:
             w.ledger.transfer(purse(self.me.name), "treasury", p.contracts.audit_cost, cycle=w.cycle, kind="audit", memo=f"dispute {contract_id}")

@@ -17,10 +17,123 @@ by group: `params.market.job_ttl`. Packs override the defaults (`Pack.params` fo
 
 from __future__ import annotations
 
-from dataclasses import dataclass, fields, make_dataclass
+from dataclasses import dataclass, field, fields
 
 from commons.domain.money import Micros
 
+
+# One frozen dataclass per group: code reads `params.<group>.<name>`. Their fields are the flat settings' (below);
+# tests/application/test_params.py checks every flat setting is in exactly one group, with the same type.
+@dataclass(frozen=True)
+class RunConfig:
+    """The run settings."""
+    seed: int
+    reputation: bool
+    verify: bool
+
+
+@dataclass(frozen=True)
+class MoneyConfig:
+    """The money settings."""
+    treasury_seed: Micros
+    treasury_reserve: Micros
+    purse_seed: Micros
+    basic_budget: Micros
+    floor_cap: Micros
+    upkeep: Micros
+    actions_per_member: int
+    economy: str
+    grant_budget: Micros
+    grant_cap_cycles: int
+    quality_pay: float
+    daily_ceiling: Micros
+    work_cost: Micros
+
+
+@dataclass(frozen=True)
+class MarketConfig:
+    """The market settings."""
+    jobs_per_cycle: int
+    job_reward: Micros
+    parts_per_job: int
+    board_ttl: int
+    job_ttl: int
+    claim_allocation: bool
+    claim_bond: float
+    pass_score: float
+    grade_retries: int
+    grade_cost: Micros
+    grader_reviews: bool
+
+
+@dataclass(frozen=True)
+class ContractsConfig:
+    """The contracts settings."""
+    bid_floor: float
+    sub_share: float
+    advance_frac: float
+    bid_window: int
+    deliver_ttl: int
+    review_ttl: int
+    audit_cost: Micros
+    dispute_window: int
+
+
+@dataclass(frozen=True)
+class VenturesConfig:
+    """The ventures settings."""
+    venture_fee: Micros
+    venture_budget: int
+    venture_min_score: int
+
+
+@dataclass(frozen=True)
+class PopulationConfig:
+    """The population settings."""
+    max_members: int
+    max_communities: int
+    spawn_fee: Micros
+    spawn_window: int
+    merge_window: int
+    fork_good_keep: float
+    learn_cost: Micros
+    learn_playbook_discount: float
+    learn_royalty: float
+
+
+@dataclass(frozen=True)
+class KnowledgeConfig:
+    """The knowledge settings."""
+    publish_cost: Micros
+
+
+@dataclass(frozen=True)
+class TrustConfig:
+    """The trust settings."""
+    gossip_every: int
+    gossip_fanout: int
+    base_allowance: int
+    decay: float
+
+
+@dataclass(frozen=True)
+class RuntimeConfig:
+    """The runtime settings."""
+    parallel_turns: bool
+    parallel_workers: int
+    grading_workers: int
+
+
+@dataclass(frozen=True)
+class StorageConfig:
+    """The storage settings."""
+    ledger_path: str
+    journal_keep: int
+    events_keep: int
+    activity_keep: int
+    activity_path: str | None
+    retain: int
+    outputs_keep: int
 
 @dataclass(frozen=True)
 class Params:
@@ -110,34 +223,25 @@ class Params:
     audit_cost: Micros = 6_000  # paid by the disputing contractor; refunded by the prime if the audit finds for them
     dispute_window: int = 3
 
+    # the groups, built from the flat settings
+    run: RunConfig = field(init=False, repr=False, compare=False)
+    money: MoneyConfig = field(init=False, repr=False, compare=False)
+    market: MarketConfig = field(init=False, repr=False, compare=False)
+    contracts: ContractsConfig = field(init=False, repr=False, compare=False)
+    ventures: VenturesConfig = field(init=False, repr=False, compare=False)
+    population: PopulationConfig = field(init=False, repr=False, compare=False)
+    knowledge: KnowledgeConfig = field(init=False, repr=False, compare=False)
+    trust: TrustConfig = field(init=False, repr=False, compare=False)
+    runtime: RuntimeConfig = field(init=False, repr=False, compare=False)
+    storage: StorageConfig = field(init=False, repr=False, compare=False)
+
     def __post_init__(self):
         values = {f.name: getattr(self, f.name) for f in fields(self) if f.init}
         for group, cls in CONFIGS.items():
             object.__setattr__(self, group, cls(**{name: values[name] for name in GROUPS[group]}))
 
 
-GROUPS: dict[str, tuple[str, ...]] = {
-    "run": ("seed", "reputation", "verify"),
-    "money": ("treasury_seed", "treasury_reserve", "purse_seed", "basic_budget", "floor_cap", "upkeep",
-              "actions_per_member", "economy", "grant_budget", "grant_cap_cycles", "quality_pay", "daily_ceiling",
-              "work_cost"),
-    "market": ("jobs_per_cycle", "job_reward", "parts_per_job", "board_ttl", "job_ttl", "claim_allocation", "claim_bond",
-               "pass_score", "grade_retries", "grade_cost", "grader_reviews"),
-    "contracts": ("bid_floor", "sub_share", "advance_frac", "bid_window", "deliver_ttl", "review_ttl", "audit_cost",
-                  "dispute_window"),
-    "ventures": ("venture_fee", "venture_budget", "venture_min_score"),
-    "population": ("max_members", "max_communities", "spawn_fee", "spawn_window", "merge_window", "fork_good_keep",
-                   "learn_cost", "learn_playbook_discount", "learn_royalty"),
-    "knowledge": ("publish_cost",),
-    "trust": ("gossip_every", "gossip_fanout", "base_allowance", "decay"),
-    "runtime": ("parallel_turns", "parallel_workers", "grading_workers"),
-    "storage": ("ledger_path", "journal_keep", "events_keep", "activity_keep", "activity_path", "retain", "outputs_keep"),
-}
-
-_TYPES = {f.name: f.type for f in fields(Params)}
-# one frozen dataclass per group, with the flat settings' names and types: RunConfig, MoneyConfig, MarketConfig, ...
-CONFIGS = {g: make_dataclass(f"{g.capitalize()}Config", [(n, _TYPES[n]) for n in names], frozen=True,
-                             namespace={"__doc__": f"The {g} settings (see commons/application/params.py)."},
-                             module=__name__)
-           for g, names in GROUPS.items()}
-globals().update({cls.__name__: cls for cls in CONFIGS.values()})  # findable by name, so a saved society can be loaded
+CONFIGS: dict[str, type] = {"run": RunConfig, "money": MoneyConfig, "market": MarketConfig, "contracts": ContractsConfig,
+                            "ventures": VenturesConfig, "population": PopulationConfig, "knowledge": KnowledgeConfig,
+                            "trust": TrustConfig, "runtime": RuntimeConfig, "storage": StorageConfig}
+GROUPS: dict[str, tuple[str, ...]] = {g: tuple(f.name for f in fields(c)) for g, c in CONFIGS.items()}

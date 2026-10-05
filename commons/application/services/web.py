@@ -69,7 +69,7 @@ class WebDesk:
             verdict, r = self.w.gate.ask(coop, actor, tool, target, host, self.w.cycle)
             if isinstance(r, GateRequest):
                 self.w.events.publish(ev.GateRequested(r))
-        if verdict == "deny":
+        if verdict == "deny" or not isinstance(r, GateRequest):
             return Outcome(False, f"the gate refused: {r}")
         if verdict == "pending":
             return Outcome(False, f"waiting for the operator's approval as {r.id}. If approved it runs at the start of a "
@@ -86,17 +86,20 @@ class WebDesk:
                 self.w.events.publish(ev.QueuedReadRan(r, out.message))
 
     def execute(self, r: GateRequest):
+        web = self.w.web
+        if web is None:
+            return Outcome(False, "this society has no web access")
         try:
             if r.tool == "web_search":
-                results = self.w.web.search(r.target, k=5)
+                results = web.search(r.target, k=5)
                 text = "\n".join(f"- {x.title}: {x.url}\n  {x.snippet[:200]}" for x in results) or "no results"
                 msg, ref = f"search results for {r.target!r} (web_fetch a url to read it):\n{text}", None
             else:
-                page = self.w.web.fetch(r.target)
+                page = web.fetch(r.target)
                 with self.w.lock:
                     ids = self.w.archive.add_page(page.url, page.title, page.text, fetched=f"cycle {self.w.cycle}")
                     self.web_pages[r.target] = self.web_pages[page.url] = ids
-                first = self.w.archive.get(ids[0]).text if ids else ""
+                first = p.text if ids and (p := self.w.archive.get(ids[0])) else ""
                 msg, ref = (f"read {page.url} ({page.title[:80]}) into the archive as {len(ids)} passage(s): "
                             f"{', '.join(ids[:12])}{' …' if len(ids) > 12 else ''}. Cite them as [archive: <id>]. The "
                             f"first:\n<untrusted>\n{first[:1500]}\n</untrusted>"), (ids[0] if ids else None)

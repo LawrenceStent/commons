@@ -54,6 +54,7 @@ Test first. Tests are grouped by layer (`tests/<layer>/`) with whole-society beh
   `MemoryBus.backlog()`, `Hub.kept()`).
 - **Golden master** (`tests/golden/`): 8 seeded runs × 5 streams, and the dashboard JSON for both packs. A refactor
   must leave it unchanged. Regenerate only for an intended change: `uv run commons golden --update --approved "why"`.
+- **Types:** `uv run pyright` (basic mode, over `commons/` and `packs/`) reports nothing, and a test keeps it so.
 - **Commit gate:** `uv run pytest -q > runs/pytest.log 2>&1; rc=$?` and commit only on `rc == 0`. Never pipe pytest.
   After a mutation test, delete `__pycache__` (a stale `.pyc` of the same size and second survives).
 

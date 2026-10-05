@@ -281,9 +281,10 @@ does the same with the default pack.
 ## Tests
 
 ```sh
-uv run pytest                          # everything (about 37 s), golden master included
-uv run pytest -m golden                # only the golden master (8 runs, about 5 s)
-uv run pytest tests/test_layers.py     # only the dependency rule
+uv run pytest                                   # everything (about 50 s): golden master and type check included
+uv run pytest -m golden                         # only the golden master (16 runs)
+uv run pytest tests/architecture                # the dependency rule and the type check
+uv run pyright                                  # the type check on its own (basic mode, commons/ and packs/)
 ```
 
 Commit only when pytest itself exits 0 (`uv run pytest -q > runs/pytest.log 2>&1; rc=$?`), never through a pipe,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, ClassVar
+from typing import Any, ClassVar, TypeVar
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
@@ -30,8 +30,11 @@ class Message(BaseModel):
 REGISTRY: dict[tuple[str, str], type[Message]] = {}
 
 
+M = TypeVar("M", bound="Message")
+
+
 def message(family: str, verb: str):
-    def register(cls: type[Message]) -> type[Message]:
+    def register(cls: type[M]) -> type[M]:
         cls.family, cls.verb = family, verb
         REGISTRY[(family, verb)] = cls
         return cls

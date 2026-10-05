@@ -70,7 +70,7 @@ def main(argv: list[str] | None = None) -> None:
     if a.backend == "fake":
         appraiser = LLMAppraiser(FakeBackend(appraise_oracle(pack)), model="fake")
     else:
-        one = grader.graders[0] if a.panel else grader
+        one = grader.graders[0] if isinstance(grader, PanelGrader) else grader
         appraiser = LLMAppraiser(one.backend, model=one.model, max_tokens=max(a.max_tokens, 600), system=pack.appraiser_system)
     print(calibration.report_appraiser(calibration.run_appraiser(appraiser, pack.venture_cases)))
 

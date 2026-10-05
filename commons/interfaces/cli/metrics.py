@@ -49,10 +49,10 @@ def _scan(files, packages):
         inner = set()
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                funcs.append((node.end_lineno - node.lineno + 1, f"{rel}:{node.lineno} {node.name}"))
+                funcs.append(((node.end_lineno or node.lineno) - node.lineno + 1, f"{rel}:{node.lineno} {node.name}"))
                 inner |= {id(n) for n in ast.walk(node) if isinstance(n, (ast.Import, ast.ImportFrom)) and n is not node}
             elif isinstance(node, ast.ClassDef):
-                classes.append((node.end_lineno - node.lineno + 1, f"{rel}:{node.lineno} {node.name}"))
+                classes.append(((node.end_lineno or node.lineno) - node.lineno + 1, f"{rel}:{node.lineno} {node.name}"))
         for node in ast.walk(tree):
             mods = [a.name for a in node.names] if isinstance(node, ast.Import) else \
                    [node.module] if isinstance(node, ast.ImportFrom) and node.module and not node.level else []

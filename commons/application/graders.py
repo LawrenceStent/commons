@@ -100,7 +100,7 @@ class HybridGrader:
     Tagging only helps scripted characters; an LLM that writes a tag into its own work is scored by
     the stub on that tag, so the runtime strips tags from model output (see commons/agents/llm/steward.py)."""
 
-    def __init__(self, llm: LLMGrader, stub=None):
+    def __init__(self, llm: LLMGrader | PanelGrader, stub=None):
         self.llm, self.stub = llm, stub or StubGrader()
 
     def grade(self, spec: str, rubric: str, artifact: str) -> Grade:

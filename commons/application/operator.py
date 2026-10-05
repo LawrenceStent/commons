@@ -85,6 +85,8 @@ class Operator:
 
     # ── loading ────────────────────────────────────────────────
     def _read(self, rel: str) -> str:
+        if self.root is None:
+            return ""
         p = (self.root / rel).resolve()
         if not str(p).startswith(str(self.root.resolve())):
             raise OperatorError(f"{rel} is outside the operator folder")
@@ -98,7 +100,7 @@ class Operator:
     def _fingerprint(self) -> str:
         h = hashlib.sha256()
         for p in self._files():
-            h.update(str(p.relative_to(self.root)).encode())
+            h.update(str(p.relative_to(self.root or Path())).encode())
             h.update(p.read_bytes())
         return h.hexdigest()
 

@@ -16,13 +16,22 @@ from commons.domain.money import Micros
 
 
 class PaymentPolicy(Protocol):
-    name: str
-    pays_at_once: bool  # False: passing work waits for `shares` at the end of the cycle
-    pool: str | None  # the ledger account it pays from and funds, if it keeps one
-    funder: str | None  # the outside account that funds the pool
-    source: str | None  # where revenue comes from in the ledger (None: the ledger's default outside payer)
-    payer: str  # how it's named when a co-op is told it was paid
-    queued: str  # what a co-op is told when its passing work waits
+    """Read only: an economy is chosen once and never changes."""
+
+    @property
+    def name(self) -> str: ...
+    @property
+    def pays_at_once(self) -> bool: ...  # False: passing work waits for `shares` at the end of the cycle
+    @property
+    def pool(self) -> str | None: ...  # the ledger account it pays from and funds, if it keeps one
+    @property
+    def funder(self) -> str | None: ...  # the outside account that funds the pool
+    @property
+    def source(self) -> str | None: ...  # where revenue comes from in the ledger (None: the default outside payer)
+    @property
+    def payer(self) -> str: ...  # how it's named when a co-op is told it was paid
+    @property
+    def queued(self) -> str: ...  # what a co-op is told when its passing work waits
 
     def funding(self, pool_balance: Micros) -> Micros: ...
 

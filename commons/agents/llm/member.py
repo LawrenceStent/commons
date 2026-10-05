@@ -17,7 +17,7 @@ from commons.agents.llm.prompts import (
 from commons.agents.llm.render import commissionable
 from commons.agents.llm.tools import MEMBER, member_tools
 from commons.application.commands.base import size_problems
-from commons.application.observation import ActionsAPI, Observation, Outcome
+from commons.application.observation import Observation, Outcome, RuntimeAPI
 from commons.application.ports import ModelBackend, ModelError, ToolResult, Turn
 from commons.domain.format import Format, words
 from commons.domain.grading import strip_tags
@@ -60,7 +60,7 @@ class MemberWorker:
         """For a fork: the same setup, no drafts."""
         return MemberWorker(self.backend, self.model, self.max_tokens, self.rounds, self.keep)
 
-    def commission(self, act: ActionsAPI, ref: str, capability: str, instructions: str,
+    def commission(self, act: RuntimeAPI, ref: str, capability: str, instructions: str,
                    playbook_id: PlaybookId | None, sources=()) -> Outcome:
         obs = act.observe()  # the job may have been claimed earlier this turn
         checked = self._check(obs, ref, capability)
@@ -101,7 +101,7 @@ class MemberWorker:
             return Outcome(False, f"you already have draft {waiting.id} for {ref} {capability}; submit it with {how}")
         return match
 
-    def _reference(self, act: ActionsAPI, playbook_id: PlaybookId | None, sources) -> str | Outcome:
+    def _reference(self, act: RuntimeAPI, playbook_id: PlaybookId | None, sources) -> str | Outcome:
         """A playbook and archive passages for the member to work from, or why they couldn't be read."""
         reference = ""
         if playbook_id:
@@ -117,7 +117,7 @@ class MemberWorker:
             material.append((got.id, got.message.split("\n", 1)[-1]))
         return reference + (sources_reference(material) if material else "")
 
-    def _write(self, act: ActionsAPI, prompt: str, tools: list) -> Turn | Outcome:
+    def _write(self, act: RuntimeAPI, prompt: str, tools: list) -> Turn | Outcome:
         """Look-up rounds, then the deliverable: the member's last turn, or why it failed."""
         messages: list[dict[str, Any]] = [{"role": "user", "text": prompt}]
         for round_ in range(self.rounds + 1 if tools else 1):
@@ -139,7 +139,7 @@ class MemberWorker:
             messages += [t.as_message(), {"role": "tool", "results": self._look_up(act, t.tool_calls)}]
         return t
 
-    def _revise(self, act: ActionsAPI, prompt: str, t: Turn, problems: list[str], fmt: Format) -> Turn | Outcome:
+    def _revise(self, act: RuntimeAPI, prompt: str, t: Turn, problems: list[str], fmt: Format) -> Turn | Outcome:
         """One more call, without tools, when the draft breaks the part's format: it would be refused at hand-in."""
         messages = [{"role": "user", "text": prompt}, {"role": "assistant", "text": t.text},
                     {"role": "user", "text": f"This breaks the format rule ({'; '.join(problems)}), so it would be "
@@ -157,7 +157,7 @@ class MemberWorker:
             return Outcome(False, "the purse couldn't pay for the member's revision")
         return revised
 
-    def _look_up(self, act: ActionsAPI, calls) -> list[ToolResult]:
+    def _look_up(self, act: RuntimeAPI, calls) -> list[ToolResult]:
         """At most three look-ups a round, through the actions API, logged as the member's."""
         results = []
         for call in calls[:3]:

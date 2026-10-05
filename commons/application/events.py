@@ -11,14 +11,17 @@ in. `notices` and `telemetry` must be defined for every event; `activity` defaul
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from functools import singledispatch
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeAlias
 
 from commons.domain import events as ev
 from commons.domain.status import RequestStatus
 
 if TYPE_CHECKING:
     from commons.application.society import World
+
+Notice: TypeAlias = tuple[str | None, str, str, str | None]  # (to whom, kind, text, about what)
 
 
 class Events:
@@ -27,7 +30,8 @@ class Events:
 
     def publish(self, event: ev.Event) -> None:
         for to, kind, text, ref in notices(event, self.w):
-            self.w.tell(to, kind, text, ref)
+            if to is not None:  # a notice to a contract's winner before there is one tells nobody
+                self.w.tell(to, kind, text, ref)
         for entry in activity(event, self.w):
             self.w.activity.add(self.w.cycle, *entry)
         for kind, fields in telemetry(event, self.w):
@@ -36,17 +40,17 @@ class Events:
 
 # ── what co-ops are told ───────────────────────────────────────
 @singledispatch
-def notices(event: ev.Event, w: World) -> list[tuple[str, str, str, str | None]]:
+def notices(event: ev.Event, w: World) -> Sequence[Notice]:
     raise TypeError(f"no notices defined for {type(event).__name__}")
 
 
 @singledispatch
-def telemetry(event: ev.Event, w: World) -> list[tuple[str, dict]]:
+def telemetry(event: ev.Event, w: World) -> Sequence[tuple[str, dict]]:
     raise TypeError(f"no telemetry defined for {type(event).__name__}")
 
 
 @singledispatch
-def activity(event: ev.Event, w: World) -> list[tuple]:
+def activity(event: ev.Event, w: World) -> Sequence[tuple]:
     return []
 
 

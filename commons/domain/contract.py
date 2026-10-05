@@ -123,5 +123,19 @@ class Contract:
         """The audit couldn't be held (the grader stayed down): it may be filed again."""
         self.disputed = False
 
+    @property
+    def contractor(self) -> str:
+        """The winner, for a contract that has one (awarded or later); asking an open contract is a bug."""
+        if self.winner is None:
+            raise DomainError(f"{self.id} has no contractor: it is {self.status}")
+        return self.winner
+
+    @property
+    def work(self) -> str:
+        """The delivered artifact, for a contract that has one."""
+        if self.artifact is None:
+            raise DomainError(f"{self.id} has no delivered work: it is {self.status}")
+        return self.artifact
+
     def rated_by_winner(self) -> None:
         self.winner_attested = True

@@ -68,6 +68,12 @@ Done when (FRAMEWORK.md §9): two societies run on alternate schedules on one ma
 
 `pyright` in basic mode reported 247 errors on 1 Oct, mostly `None` handling and loosely typed dicts.
 
-- [ ] R13.1 pyright in the dev dependencies with its configuration; count the errors
-- [ ] R13.2 Fix them, layer by layer (protocol, domain, substrate, application, agents, adapters, interfaces, packs)
-- [ ] R13.3 A test runs pyright, so it stays clean
+- [x] R13.1 pyright in the dev dependencies with its configuration: 446 errors on 5 Oct (the code had grown)
+- [x] R13.2 Fixed, to zero. Most came from four things: the settings groups (built by make_dataclass, so invisible
+      to a checker: now explicit classes, with a test that keeps them in step with the flat settings); `Micros` and
+      the ids as NewTypes (now type aliases: money arithmetic and tool-call strings would have needed a wrapper at
+      every step); event subscribers' return types (now covariant); and the runtime hooks the LLM agent uses (now a
+      `RuntimeAPI` protocol). The rest were real gaps in `None` handling, fixed where they arise (`Contract.contractor`
+      and `.work`, `MarketJob.owner`, guards on optional web, robots and archive results), plus read-only protocols
+      for economies and the web, and positional-only desk methods. Behaviour unchanged: golden master identical
+- [x] R13.3 `tests/architecture/test_types.py` runs pyright (about 2.5 seconds); a new error fails the suite

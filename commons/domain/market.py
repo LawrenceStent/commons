@@ -56,6 +56,13 @@ class MarketJob:
     bond: Micros = 0  # posted by the prime on allocation; returned when paid, forfeited if the job fails
     settle_at: int | None = None  # for deferred outcomes: the cycle the grader settles it
 
+    @property
+    def owner(self) -> str:
+        """The prime, for a job that has one (claimed or later); asking a job on the board is a bug."""
+        if self.prime is None:
+            raise DomainError(f"{self.id} has no prime: it is {self.status}")
+        return self.prime
+
     def done_by(self, contracts: dict) -> dict[str, str]:
         """capability -> who did or holds each part bought by contract (awarded, delivered or accepted)."""
         out = {}

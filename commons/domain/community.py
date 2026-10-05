@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -24,7 +25,7 @@ class Agent(Protocol):
 class Community:
     name: str
     members: int
-    capabilities: frozenset[str]
+    capabilities: AbstractSet[str]  # any set; kept as a frozenset
     strategy: Agent
     charter: str = ""
     identity: Identity = field(init=False)

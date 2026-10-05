@@ -95,9 +95,15 @@ def _close(w: World) -> None:
     w.recorder.record()
 
 
+def _desk(w: World, when: str) -> None:
+    """The pack's desk, if it has one, opens or closes the cycle (commons/domain/desk.py)."""
+    if w.desk:
+        getattr(w.desk, when)(w)
+
+
 PHASES: tuple[Phase, ...] = (
     Phase("start", _start),
-    Phase("desk_open", lambda w: w.desk and w.desk.open(w)),
+    Phase("desk_open", lambda w: _desk(w, "open")),
     Phase("fund", lambda w: w.payments.fund()),
     Phase("ratings", lambda w: w.rating_desk.apply()),
     Phase("floor", lambda w: w.upkeep.floor()),
@@ -113,7 +119,7 @@ PHASES: tuple[Phase, ...] = (
     Phase("grade", lambda w: w.grading.settle(), locked=False),
     Phase("pay", lambda w: w.payments.settle_queue()),
     Phase("gossip", _gossip),
-    Phase("desk_close", lambda w: w.desk and w.desk.close(w)),
+    Phase("desk_close", lambda w: _desk(w, "close")),
     Phase("close", _close),
 )
 

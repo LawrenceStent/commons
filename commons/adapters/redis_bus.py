@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from commons.protocol import Envelope
 from commons.substrate.bus import Bus
 
@@ -40,7 +42,7 @@ class RedisBus(Bus):
         stream = self._stream(family)
         out: list[Envelope] = []
         while True:
-            resp = self.r.xreadgroup(group, group, {stream: ">"}, count=500)
+            resp: Any = self.r.xreadgroup(group, group, {stream: ">"}, count=500)  # [(stream, [(id, fields)])]
             if not resp:
                 return out
             ids = []

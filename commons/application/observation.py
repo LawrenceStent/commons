@@ -7,11 +7,15 @@ exposes `ActionsAPI` as tools. Nothing here imports the engine.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from commons.domain.format import Format
 from commons.domain.ids import ContractId, GoalId, IdeaId, JobId, PassageId, PlaybookId, ProposalId
 from commons.domain.money import Micros
+
+if TYPE_CHECKING:
+    from commons.domain.operator import OperatorView
+    from commons.domain.pack import Pack
 
 
 @dataclass(frozen=True)
@@ -250,3 +254,22 @@ class DeskActions(Protocol):
 class ActionsAPI(MarketActions, PopulationActions, KnowledgeActions, PlanningActions, DeskActions, Protocol):
     """Everything a community can do (the union of the roles above). Each call returns an Outcome the caller can read.
     An agent that needs only some of it can depend on just those roles."""
+
+
+class RuntimeAPI(ActionsAPI, Protocol):
+    """What a model-backed agent's runtime uses beyond the actions: billing its own calls, its transcript and decision
+    log, its operator's view and refusals, the pack, and a fresh observation mid-turn (commands/runtime.py)."""
+
+    actor: str
+    why: str
+
+    def observe(self) -> Observation: ...
+    def record_call(self, role: str, model: str, price_as: str, usage, real: bool, ms: int | None = None,
+                    cache_hit: float | None = None) -> int: ...
+    def thinking_refusal(self) -> str | None: ...
+    def record_transcript(self, entries: list[dict], started: float | None = None) -> None: ...
+    def record_decision(self, text: str) -> None: ...
+    def record_member_work(self, args: dict, out: Outcome) -> None: ...
+    def operator_view(self) -> OperatorView: ...
+    def operator_refusal(self, action: str, args: dict) -> str | None: ...
+    def pack(self) -> Pack: ...

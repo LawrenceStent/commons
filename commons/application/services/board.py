@@ -79,9 +79,11 @@ class JobBoard:
                 continue
             draw = random.Random(f"{p.run.seed}:{self.w.cycle}:{jid}")  # its own seed: the world's dice stay untouched
 
+            parts = job.parts
+
             def key(name: str) -> tuple:
                 c = self.w.communities[name]
-                fit = sum(cap in c.capabilities for cap in job.parts) / len(job.parts)
+                fit = sum(cap in c.capabilities for cap in parts) / len(parts)
                 return (-round(self.w.standing(name), 3), -fit, self.held_jobs(name), draw.random())
 
             bond = bond_for(job.reward, p.market.claim_bond)
@@ -102,7 +104,7 @@ class JobBoard:
     def settle_bond(self, job: MarketJob, returned: bool) -> None:
         if not (bond := job.release_bond()):
             return
-        dest = purse(job.prime) if returned else "treasury"
+        dest = purse(job.owner) if returned else "treasury"
         self.w.ledger.transfer("escrow", dest, bond, cycle=self.w.cycle, kind="bond",
                              memo=f"{'return' if returned else 'forfeit'} {job.id}")
 

@@ -28,9 +28,9 @@ class Payments:
 
     def fund(self) -> None:
         """The economy's funder tops up its pool, if it keeps one. Under the lock."""
-        if self.w.payment.pool and (amount := self.w.payment.funding(self.pool_balance())) > 0:
-            self.w.ledger.transfer(self.w.payment.funder, self.w.payment.pool, amount, cycle=self.w.cycle, kind="grant",
-                                 memo="budget")
+        pay = self.w.payment
+        if pay.pool and pay.funder and (amount := pay.funding(self.pool_balance())) > 0:
+            self.w.ledger.transfer(pay.funder, pay.pool, amount, cycle=self.w.cycle, kind="grant", memo="budget")
 
     def settle_queue(self) -> None:
         """Pay the work that waited for the end of the cycle, in the shares the economy gives it. Under the lock."""
@@ -46,7 +46,7 @@ class Payments:
         self.w.events.publish(ev.PoolShared(pool, total, len(queue)))
 
     def pay(self, job: MarketJob, payout: Micros | None = None) -> None:
-        prime = job.prime
+        prime = job.owner
         weights: Counter[str] = Counter()
         for part in job.parts.values():
             for pid in part.cites:
@@ -90,6 +90,6 @@ class Payments:
 
     def done_by(self, job: MarketJob, part) -> str:
         if part.source in (None, "self"):
-            return job.prime
+            return job.owner
         c = self.w.contracts.get(part.source)
-        return c.winner if c and c.winner else job.prime
+        return c.winner if c and c.winner else job.owner

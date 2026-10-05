@@ -17,7 +17,11 @@ dependencies = [
 commons = "commons.interfaces.cli.main:main"
 
 [dependency-groups]
-dev = ["pytest>=8", "httpx2"]
+dev = [
+    "pytest>=8",
+    "httpx2",
+    "pyright>=1.1.414",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -29,3 +33,11 @@ packages = ["commons", "packs", "sim"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = ["golden: the golden master (tests/golden): today's runs, reproduced exactly"]
+
+[tool.pyright]
+# R13: type checking, basic mode; tests/architecture/test_types.py keeps it clean
+include = ["commons", "packs"]
+pythonVersion = "3.12"
+typeCheckingMode = "basic"
+venvPath = "."
+venv = ".venv"

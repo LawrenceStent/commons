@@ -70,7 +70,12 @@ class Hub:
 
     def subscribe(self, fn: Subscriber) -> Callable[[], None]:
         self._subs.append(fn)
-        return lambda: fn in self._subs and self._subs.remove(fn)
+
+        def unsubscribe() -> None:
+            if fn in self._subs:
+                self._subs.remove(fn)
+
+        return unsubscribe
 
     @property
     def subscribers(self) -> int:

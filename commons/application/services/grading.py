@@ -116,7 +116,7 @@ class Grading:
                 continue
             try:
                 # the commons pays for grading; when it can't, the prime whose job it is does
-                self.charge(g, job=jid, part=cap, payers=("treasury", purse(job.prime)))
+                self.charge(g, job=jid, part=cap, payers=("treasury", purse(job.owner)))
             except InsufficientFunds:
                 self.awaiting_grade.pop(jid, None)
                 self.w.board.fail(job, "no one could pay for grading")
@@ -146,10 +146,10 @@ class Grading:
             if job is None or job.status != JobStatus.GRADED:
                 self.deferred.discard(jid)
                 continue
-            if self.w.cycle < job.settle_at:
+            if job.settle_at is not None and self.w.cycle < job.settle_at:
                 continue
             self.deferred.discard(jid)
-            later = self.w.grader.settle(job) if hasattr(self.w.grader, "settle") else None
+            later = settle(job) if (settle := getattr(self.w.grader, "settle", None)) else None
             for cap, score in (later or {}).items():
                 job.record_score(cap, score)
             self.w.board.finish(job)

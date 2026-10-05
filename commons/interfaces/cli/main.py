@@ -30,10 +30,10 @@ COMMANDS = {
 def main(argv: list[str] | None = None) -> None:
     argv = sys.argv[1:] if argv is None else argv
     if not argv or argv[0] in ("-h", "--help"):
-        print(__doc__.strip())
+        print((__doc__ or "").strip())
         return
     if argv[0] not in COMMANDS:
-        print(__doc__.strip())
+        print((__doc__ or "").strip())
         sys.exit(f"unknown command {argv[0]!r}")
     module, _, function = COMMANDS[argv[0]].partition(":")
     getattr(import_module(f"commons.interfaces.cli.{module}"), function or "main")(argv[1:])

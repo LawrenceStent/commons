@@ -26,7 +26,7 @@ def revenue_split(amount: Micros, royalties: dict[str, int] | None, *, tax: bool
     split: dict[str, Micros] = {}
     weight = sum((royalties or {}).values())
     if weight:
-        for author, w in sorted(royalties.items()):
+        for author, w in sorted((royalties or {}).items()):
             split[author] = Micros(pool * w // weight)
         to_treasury += pool - sum(split.values())
     else:

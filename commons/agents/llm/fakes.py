@@ -50,7 +50,8 @@ def competent(system, messages, tools):
             return {"text": "Working the jobs we hold.",
                     "tool_calls": [("commission", {"ref": ref, "capability": cap, "instructions": "do it well"})
                                    for ref, cap in todo]}
-        mine = set(re.search(r"Capabilities: (.*)", obs).group(1).split(", "))
+        found = re.search(r"Capabilities: (.*)", obs)
+        mine = set(found.group(1).split(", ")) if found else set()
         board = obs.split("THE BOARD (unclaimed jobs", 1)[1] if "THE BOARD (unclaimed jobs" in obs else ""
         for job in re.finditer(r"  (J\d+|T\d+|X\d+) \"[^\"]*\" reward.*?(?=\n  [JTX]\d+ |\n\n|\Z)", board, re.S):
             caps = re.findall(r"- (\w+) \[open; you can\]", job.group(0))

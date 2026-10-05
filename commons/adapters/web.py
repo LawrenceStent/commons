@@ -149,7 +149,7 @@ class Fetcher:
                  max_chars: int = 20_000):
         self.egress, self.max_bytes, self.max_chars = egress, max_bytes, max_chars
         self.transport = transport or urllib_transport(max_bytes=max_bytes)
-        self._robots: dict[str, urllib.robotparser.RobotFileParser | None] = {}
+        self._robots: dict[str, urllib.robotparser.RobotFileParser] = {}
         self.requests = 0  # every request that reached the transport, robots.txt included
 
     def _get(self, url: str) -> tuple[str, dict, bytes]:
@@ -170,7 +170,8 @@ class Fetcher:
     def _allowed_by_robots(self, url: str) -> bool:
         parts = urllib.parse.urlsplit(url)
         root = f"{parts.scheme}://{parts.netloc}"
-        if root not in self._robots:
+        rp = self._robots.get(root)
+        if rp is None:
             rp = urllib.robotparser.RobotFileParser()
             try:
                 _, _, body = self._get(f"{root}/robots.txt")
@@ -178,7 +179,7 @@ class Fetcher:
             except WebError:
                 rp.parse([])  # no robots.txt (or unreadable): the site hasn't said no
             self._robots[root] = rp
-        return self._robots[root].can_fetch(USER_AGENT, url)
+        return rp.can_fetch(USER_AGENT, url)
 
     def fetch(self, url: str, robots: bool = True) -> Page:
         self.egress.check(url)

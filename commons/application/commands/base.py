@@ -8,6 +8,7 @@ from commons.application.observation import Outcome
 from commons.application.screening import screen
 from commons.domain.grading import is_tagged
 from commons.domain.ids import ContractId
+from commons.domain.status import JobStatus
 from commons.protocol import Envelope, Message
 from commons.substrate.bus import RateLimited
 
@@ -35,6 +36,15 @@ class CommandBase:
     def __init__(self, world: World, me: Community):
         self.w = world
         self.me = me
+
+    def operator_refusal(self, action: str, args: dict) -> str | None:
+        """A rule refusing this action before it runs: the pack's (an action this society doesn't have), then your
+        operator's limits. Every command asks it (commands/pipeline.py); so do desk tools and the LLM runtime."""
+        with self.w.lock:
+            if action in self.w.pack.without:
+                return f"this society has no {action.replace('_', ' ')}"
+            held = sum(j.prime == self.me.name and j.status == JobStatus.CLAIMED for j in self.w.jobs.values())
+            return self.w.operator.check(self.me.name, action, args, held)
 
     def _send(self, msg: Message) -> bool:
         try:

@@ -142,7 +142,7 @@ def _lock() -> None:
     atexit.register(lambda: lock.exists() and lock.read_text() == str(os.getpid()) and lock.unlink())
 
 
-def judges(a, pack, m: dict) -> tuple:
+def judges(a, pack, m: dict) -> tuple[HybridGrader, LLMAppraiser]:
     """The grader and the appraiser this run's models give: built for a new society, reattached to a resumed one."""
     if a.panel and not pack.grader_panel:
         sys.exit(f"the {pack.name} pack has no grader panel")

@@ -21,8 +21,8 @@ from commons.domain.pack import load as load_pack
 
 if TYPE_CHECKING:
     from commons.application.ports import ModelBackend, WebPort
-    from commons.domain.pack import Pack
     from commons.application.society import Society
+    from commons.domain.pack import Pack
 
 DETACHED = ("lock", "grader", "appraiser", "web", "pack")  # rebuilt or reattached when the society resumes
 
@@ -35,7 +35,7 @@ def state_of(w: Society) -> dict[str, Any]:
 def restore(w: Society, state: dict[str, Any]) -> None:
     w.__dict__.update(state)
     w.lock = threading.RLock()
-    w.grader = w.appraiser = w.web = w.pack = None  # attached by `resume`
+    w.__dict__.update(grader=None, appraiser=None, web=None, pack=None)  # attached by `resume`
 
 
 def save(w: Society, path: str | Path) -> None:
