@@ -143,7 +143,8 @@ class Gate:
         by: dict[tuple, list[Request]] = {}
         for r in self.pending():
             by.setdefault(r.group, []).append(r)
-        return [{"coop": c, "tool": t, "host": h, "ids": [r.id for r in rs], "targets": [r.target for r in rs][:10]}
+        return [{"coop": c, "tool": t, "host": h, "ids": [r.id for r in rs], "targets": [r.target for r in rs][:10],
+                 "details": [r.detail for r in rs][:10]}
                 for (c, t, h), rs in sorted(by.items())]
 
     # ── files, for headless runs ───────────────────────────────

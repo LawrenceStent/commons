@@ -269,7 +269,7 @@ function render(s) {
     : "no hosts allowed: add [gate] allow_hosts to the operator's config.toml";
   $("gate").innerHTML = (g.groups.length ? `<table><tr><th>co-op</th><th>tool</th><th>host</th><th>asks for</th><th></th></tr>${g.groups.map(x =>
       `<tr><td>${esc(x.coop)}</td><td class="mono">${esc(x.tool)}</td><td class="mono">${esc(x.host)}</td>
-       <td>${x.targets.map(t => `<div class="mono muted">${esc(t)}</div>`).join("")}${x.ids.length > x.targets.length ? `<div class="muted">and ${x.ids.length - x.targets.length} more</div>` : ""}</td>
+       <td>${x.targets.map((t, i) => `<div class="mono muted">${esc(t)}</div>` + ((x.details || [])[i] ? `<pre class="mono" style="white-space:pre-wrap;margin:2px 0 6px">${esc(x.details[i])}</pre>` : "")).join("")}${x.ids.length > x.targets.length ? `<div class="muted">and ${x.ids.length - x.targets.length} more</div>` : ""}</td>
        <td style="white-space:nowrap"><button data-gate="approve" data-ids="${esc(x.ids.join(","))}">approve ${x.ids.length}</button>
          <button data-gate="always" data-ids="${esc(x.ids.join(","))}" title="and let ${esc(x.coop)} read from ${esc(x.host)} from now on">always</button>
          <button data-gate="deny" data-ids="${esc(x.ids.join(","))}">deny</button></td></tr>`).join("")}</table>`

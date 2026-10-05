@@ -206,3 +206,18 @@ def test_tick_all_takes_turns_and_skips_the_paused(tmp_path, monkeypatch, capsys
     assert {e.name: e.status["cycle"] for e in registry.societies()} == {"paper": 5, "probe": 4}
     with pytest.raises(SystemExit, match="no --pack"):
         cli.main(["tick-all", "--pack", "trading"])
+
+
+def test_approve_shows_what_would_go_public(tmp_path, monkeypatch, capsys):
+    from commons.application.gate import Gate
+
+    monkeypatch.chdir(tmp_path)
+    folder = tmp_path / "societies" / "shop"
+    folder.mkdir(parents=True)
+    (folder / "society.toml").write_text('pack = "storefront"\nseed = 0\n')
+    gate = Gate(folder=folder, run="r1")
+    gate.policy = gate.policy.__class__(publish="ask")
+    gate.propose("scribes", "steward", "list_product", "publish", "P1", "Title: 30-Day Plan\nPrice: $4.99", 3)
+    cli.main(["approve", "shop"])
+    out = capsys.readouterr().out
+    assert "list_product" in out and "Title: 30-Day Plan" in out and "Price: $4.99" in out

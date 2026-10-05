@@ -44,6 +44,8 @@ def listing(waiting, ordered) -> None:
         print(f"[{n}] {coop} · {tool} · {host} · {len(rs)} request(s)")
         for r in rs[:8]:
             print(f"      {r['id']}  {r['target'][:100]}")
+            for line in str(r.get("detail") or "").splitlines()[:40]:  # what would go public or take effect
+                print(f"          {line}")
     print("\nApprove with --all, --group N or --id ID (add --always for a standing approval), or deny with --deny.")
 
 
