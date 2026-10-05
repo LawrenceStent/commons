@@ -15,6 +15,9 @@ A pack supplies:
     scorecard        mission metrics (commons/domain/scorecard.py): what success means for this society, beyond money
     desk / live_desk optional: the pack's own tools and state, when its work isn't jobs (commons/domain/desk.py)
     without          kernel actions this society doesn't have (a trading desk has no job board): not offered, refused
+    screen           optional: a rule over what enters the society, by kind: "brief" and "question" at founding,
+                     "web_search" and "web_fetch" before the gate, "work" at hand-in. It returns why it refuses, or
+                     None. With halt_on_screen, a refused attempt during a run also halts the society
 
 Packs are found by name: `load("earn_online")` imports `packs.earn_online` and returns its `PACK`. The
 kernel refers to no pack except through `DEFAULT`, the one used when a world is built without saying.
@@ -101,11 +104,18 @@ class Pack:
     desk: Callable[[int], Desk] | None = None  # the pack's own tools and state (domain/desk.py), from the run's seed
     live_desk: Callable[[int], Desk] | None = None  # the same for live runs (live data); defaults to `desk`
     without: frozenset[str] = frozenset()  # kernel actions this society doesn't have: not offered, refused by rule
+    screen: Callable[[str, str], str | None] | None = None  # (kind, text) -> why it's refused; see `screened`
+    halt_on_screen: bool = False  # a screened attempt halts the society until you reset it
 
     @property
     def live(self) -> dict[str, Any]:
         """The settings for a live run: the live economy, with this pack's overrides."""
         return {**LIVE_ECONOMY, **self.live_params}
+
+
+def screened(pack: Pack, kind: str, text: str) -> str | None:
+    """Why the pack's screen refuses `text` of `kind`, or None (no screen, or it passes)."""
+    return pack.screen(kind, text) if pack.screen else None
 
 
 def load(name: str | None = None) -> Pack:

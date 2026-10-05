@@ -37,6 +37,7 @@ from commons.domain.community import Community
 from commons.domain.founding import KINDS, NAME, Blueprint, FoundingError, check
 from commons.domain.pack import Pack, TemplateWorkSource
 from commons.domain.pack import load as load_pack
+from commons.domain.pack import screened
 
 ROOT = Path("societies")
 MAX_CONTEXT = 6_000  # characters of context summary sent to the founding call
@@ -126,6 +127,7 @@ def found(name: str, pack_name: str | None, brief: str, context_dir: Path | None
     if (folder / "blueprints.toml").exists():
         raise FoundingError(f"{folder} already has blueprints; founding happens once (edit them, or pick a new name)")
     pack = load_pack(pack_name)
+    screen_founding(pack, brief, questions)
     blueprints = draft(backend, model, pack, brief, summarise_context(context_dir), n, max_tokens, questions)
     errors, warnings = check(blueprints, pack)
     folder.mkdir(parents=True, exist_ok=True)
@@ -138,6 +140,16 @@ def found(name: str, pack_name: str | None, brief: str, context_dir: Path | None
     write_blueprints(folder / "blueprints.toml", blueprints,
                      f"Drafted by {model} on {datetime.date.today():%d %b %Y} from brief.md for the {pack.name} pack.")
     return folder, errors, warnings
+
+
+def screen_founding(pack: Pack, brief: str, questions: str) -> None:
+    """The pack's screen (commons/domain/pack.py) on the brief and each question, before anything is drafted or run."""
+    refused = [f"the brief: {why}"] if (why := screened(pack, "brief", brief)) else []
+    for q in _question_lines(questions):
+        if why := screened(pack, "question", q):
+            refused.append(f"question {q!r}: {why}")
+    if refused:
+        raise FoundingError("this pack's rules refuse " + "; ".join(refused))
 
 
 def approve(name: str, root: Path = ROOT) -> tuple[list[str], list[str]]:
@@ -154,10 +166,12 @@ def approve(name: str, root: Path = ROOT) -> tuple[list[str], list[str]]:
 
 def read_questions(path: Path) -> list[str]:
     """One subject per line; blank lines, headings (#) and list markers are ignored."""
-    if not path.exists():
-        return []
+    return _question_lines(path.read_text()) if path.exists() else []
+
+
+def _question_lines(text: str) -> list[str]:
     out = []
-    for line in path.read_text().splitlines():
+    for line in text.splitlines():
         line = re.sub(r"^\s*(?:[-*]|\d+[.)])\s*", "", line).strip()
         if line and not line.startswith("#"):
             out.append(line[:200])
@@ -224,6 +238,7 @@ def load(name: str, root: Path = ROOT, require_approved: bool = True) -> Society
     if errors:
         raise FoundingError(f"{name}'s blueprints break the rules: {errors[0]}")
     brief = (folder / "brief.md").read_text().strip() if (folder / "brief.md").exists() else ""
+    screen_founding(pack, brief, "\n".join(read_questions(folder / "questions.md")))  # edited since founding, say
     if brief:
         pack = replace(pack, brief=f"{pack.brief}\n\nTHIS SOCIETY, IN ITS OPERATOR'S WORDS\n{brief}")
     if questions := read_questions(folder / "questions.md"):

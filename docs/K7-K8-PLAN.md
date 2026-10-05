@@ -32,7 +32,7 @@ bodies, events, infrastructure and public records. Sources are read only: Wikipe
   scorecard (citation validity, verified jobs, cost per verified job, screened attempts with a floor of zero).
 
 ### Stages
-- [ ] K7.1 `Pack.screen` and `Pack.halt_on_screen`: founding, web requests and hand-ins; screened attempts logged
+- [x] K7.1 `Pack.screen` and `Pack.halt_on_screen`: founding, web requests and hand-ins; screened attempts logged
 - [ ] K7.2 Independent parts: refused by `do_part`; a contractor who did another part of the job can't bid
 - [ ] K7.3 The OSINT screen, with red-team tests (the done-when)
 - [ ] K7.4 The pack: brief, work, rubrics, grant economy, populations, scorecard, calibration cases; golden runs

@@ -10,6 +10,7 @@ from commons.application.observation import (
     Outcome,
 )
 from commons.application.ports import WebError, host_of
+from commons.application.screening import screen
 from commons.domain import events as ev
 from commons.domain.gate import Request as GateRequest
 from commons.domain.status import (
@@ -50,6 +51,9 @@ class WebDesk:
         target = str(target).strip()[:500]
         if not self.w.web or not self.w.gate.policy.allow_hosts:
             return Outcome(False, "this society has no web access (the operator allows no hosts)")
+        with self.w.lock:
+            if why := screen(self.w, coop, tool, target):
+                return Outcome(False, why)
         if tool == "web_fetch":
             with self.w.lock:
                 if target in self.web_pages:

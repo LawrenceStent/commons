@@ -332,6 +332,16 @@ class PlaybookPublished(Event):
 
 
 @dataclass(frozen=True)
+class Screened(Event):
+    """The pack's screen refused something a co-op tried (commons/domain/pack.py)."""
+    coop: str
+    kind: str
+    text: str
+    why: str
+    halted: bool
+
+
+@dataclass(frozen=True)
 class GossipHeard(Event):
     heard: int
 

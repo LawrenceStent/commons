@@ -613,6 +613,17 @@ def _(e: ev.PlaybookPublished, w):
 
 
 @notices.register
+def _(e: ev.Screened, w):
+    halt = " The society is halted until the operator resets it." if e.halted else ""
+    return [(e.coop, "screened", f"refused by this society's rules: {e.why}.{halt}", None)]
+
+
+@telemetry.register
+def _(e: ev.Screened, w):
+    return [("pack.screened", dict(coop=e.coop, kind=e.kind, text=e.text, why=e.why, halted=e.halted))]
+
+
+@notices.register
 def _(e: ev.GossipHeard, w):
     return []
 

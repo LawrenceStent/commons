@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from commons.application.observation import Outcome
+from commons.application.screening import screen
 from commons.domain.grading import is_tagged
 from commons.domain.ids import ContractId
 from commons.protocol import Envelope, Message
@@ -56,11 +57,18 @@ class CommandBase:
             return Outcome(False, f"refused: {problems[0]}. Shorten it and hand it in again", FORMAT_REFUSED)
         return None
 
+    def _screened(self, kind: str, text: str) -> Outcome | None:
+        """The pack's screen (commons/application/screening.py)."""
+        why = screen(self.w, self.me.name, kind, text)
+        return Outcome(False, why) if why else None
+
     def _format_ok(self, part: Part, artifact: str) -> Outcome | None:
         """The size cap, then the part's format, by rule (commons/domain/format.py). Scripted stand-ins (quality-tagged)
         are judged by their tag, as the grader judges them; model-written text never carries a tag (the runtime strips
         them)."""
         if (err := self._size_ok(artifact)) is not None:
+            return err
+        if (err := self._screened("work", artifact)) is not None:
             return err
         if is_tagged(artifact) or not (problems := part.format.problems(artifact)):
             return None
