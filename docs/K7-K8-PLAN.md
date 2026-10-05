@@ -34,9 +34,11 @@ bodies, events, infrastructure and public records. Sources are read only: Wikipe
 ### Stages
 - [x] K7.1 `Pack.screen` and `Pack.halt_on_screen`: founding, web requests and hand-ins; screened attempts logged
 - [x] K7.2 Independent parts: refused by `do_part`; a contractor who did another part of the job can't bid
-- [ ] K7.3 The OSINT screen, with red-team tests (the done-when)
-- [ ] K7.4 The pack: brief, work, rubrics, grant economy, populations, scorecard, calibration cases; golden runs
-- [ ] K7.5 A fake-model dry run end to end; docs
+- [x] K7.3 The OSINT screen, with red-team tests (the done-when)
+- [x] K7.4 The pack: brief, work, rubrics, grant economy, populations, scorecard, calibration cases; golden runs
+- [x] K7.5 A fake-model dry run end to end (the live-fake-osint golden run); docs. Also: an independent part is
+      announced only once the others are done, and its contract carries their work; paid-work records keep the
+      spec the doer worked from, and whole texts (they had been cut at 4,000 characters)
 
 ## K8. Many societies
 

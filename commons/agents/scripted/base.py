@@ -134,7 +134,7 @@ class Strategy:
         for p in theirs:
             if not p.done and p.pending is None:
                 act.announce(job.id, p.capability, round(job.reward * sub_share), advance)
-        if all(p.done or p.pending in ("awarded", "delivered") for p in theirs):
+        if all(p.done or p.pending in ("awarded", "delivered") for p in theirs if not p.independent):
             for p in mine:
                 if not p.done and obs.capacity and act.spend(self.cost(obs, p.capability), f"work {job.id}"):
                     act.do_part(job.id, p.capability, self.artifact(obs, p.capability), self.cites(obs, p.capability))

@@ -44,7 +44,7 @@ Adapters implement them. Tests use the fakes.
 | Strategy (agents) | `domain/community.py` (`Agent` protocol) | Scripted and LLM strategies are interchangeable; they act only through `Actions`. |
 | Read models | `application/queries.py` | The dashboard reads; reading changes nothing. Bounded by the telemetry rings, not by run length. |
 | Settings as frozen groups | `application/params.py` | `params.<group>.<field>` (run, money, market, contracts, ventures, population, knowledge, trust, runtime, storage). |
-| Rules over judgement | the gate, operator limits, citation rule, part formats | Anything critical is a world function the agent can't talk its way past, not a prompt. |
+| Rules over judgement | the gate, operator limits, citation rule, part formats, pack screens, independent parts | Anything critical is a world function the agent can't talk its way past, not a prompt. |
 
 ## 3. Testing
 
@@ -70,6 +70,10 @@ Test first. Tests are grouped by layer (`tests/<layer>/`) with whole-society beh
 5. Prompts (`grader_system`, `appraiser_system`, `member_system`) and calibration cases in `packs/<name>/calibration.py`;
    check them with `uv run commons calibrate --pack <name>`.
 6. A `scorecard` of `Metric`s if success isn't money.
+   Optional rules: `screen` (refuse what enters the society: briefs and questions at founding, web requests before
+   the gate, work at hand-in; `halt_on_screen` to halt on any refusal), `independent` capabilities on the work
+   source (bought from a co-op that did no other part, once the others are done, with their work in its spec),
+   `without` (kernel actions the society doesn't have), and a `desk` if the work isn't jobs.
 7. Add an acceptance test in `tests/acceptance/test_packs_on_the_kernel.py` and golden runs for it.
 
 The kernel must not mention the pack by name; packs import the kernel, never the other way.

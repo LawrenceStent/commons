@@ -324,8 +324,15 @@ def test_an_independent_part_is_bought_from_someone_who_did_no_other_part():
     assert act(w, "sub").bid(build, 20_000)
     w.step()
     assert act(w, "prime").award(build, "sub")
+    assert "once the other parts are done" in act(w, "prime").announce(job.id, "write", 30_000, 0.5).message
+    w.communities["sub"].capacity = w.communities["prime"].capacity = 5
+    assert act(w, "sub").deliver(build, tagged(0.9, " build"))
+    w.step()
+    w.communities["prime"].capacity = 5
+    assert act(w, "prime").do_part(job.id, "research", tagged(0.9, " research"))
     write = act(w, "prime").announce(job.id, "write", 30_000, 0.5).id
-    out = act(w, "sub").bid(write, 20_000)  # sub holds the build part
+    assert "<work part=\"build\">" in w.contracts[write].spec  # the checker is given the work to check
+    out = act(w, "sub").bid(write, 20_000)  # sub did the build part
     assert not out and "no other part" in out.message
     w.communities["other"].capabilities = frozenset({"build", "write"})
     assert act(w, "other").bid(write, 20_000)

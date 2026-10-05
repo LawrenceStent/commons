@@ -71,8 +71,8 @@ class Payments:
             if part.source == "self":
                 track[cap] = track.get(cap, 0) + 1
         record = {"job": job.id, "title": job.title, "prime": prime, "cycle": self.w.cycle, "scores": dict(job.scores),
-                  "payout": payout, "parts": {cap: {"by": self.done_by(job, part), "spec": part.spec,
-                                                    "text": (part.artifact or "")[:4000]}
+                  "payout": payout, "parts": {cap: {"by": self.done_by(job, part), "spec": self.asked(part),
+                                                    "text": part.artifact or ""}
                                               for cap, part in sorted(job.parts.items())}}
         self.w.outputs.append(record)
         if self.w.ratings:
@@ -81,6 +81,12 @@ class Payments:
             self.w.recorder.stat(author, "earned", amount)
             self.w.royalties_paid[author] = self.w.royalties_paid.get(author, 0) + amount
         self.w.events.publish(ev.JobPaid(job, payout, mean, share, self.w.payment.payer, split.royalties, tax))
+
+    def asked(self, part) -> str:
+        """The spec its doer worked from: the contract's for a part bought (an independent part's carries the work it
+        checked), else the part's own."""
+        c = self.w.contracts.get(part.source) if part.source not in (None, "self") else None
+        return c.spec if c else part.spec
 
     def done_by(self, job: MarketJob, part) -> str:
         if part.source in (None, "self"):

@@ -72,9 +72,10 @@ class ContractNet:
                 c.withdraw(at=self.w.cycle)
                 self.w.events.publish(ev.ContractWithdrawn(c))
 
-    def open(self, cid: ContractId, job: MarketJob, capability: str, prime: str, max_price: Micros, advance_frac: float) -> None:
+    def open(self, cid: ContractId, job: MarketJob, capability: str, prime: str, max_price: Micros, advance_frac: float,
+             spec: str | None = None) -> None:
         part = job.parts[capability]
-        c = Contract(cid, job.id, capability, prime, part.spec, part.rubric, max_price, advance_frac,
+        c = Contract(cid, job.id, capability, prime, spec or part.spec, part.rubric, max_price, advance_frac,
                      announced=self.w.cycle, deadline=self.w.cycle + self.w.params.contracts.bid_window)
         self.w.contracts[cid] = c
         self.w.events.publish(ev.ContractOpened(c))

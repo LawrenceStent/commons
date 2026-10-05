@@ -85,12 +85,15 @@ class MarketCommands(CommandBase):
             return Outcome(False, "a contract for that part is already in progress")
         if max_price <= 0 or not 0 <= advance_frac <= 1:
             return Outcome(False, "max_price must be positive and advance_frac within 0..1")
+        if (spec := job.contract_spec(capability)) is None:
+            return Outcome(False, f"the {capability} part checks the rest of job {job_id}: announce it once the other "
+                                  "parts are done")
         n = sum(1 for c in self.w.contracts.values() if c.job_id == job_id and c.capability == capability)
         cid = f"{job_id}.{capability}.{n + 1}"
         if not self._send(Announce(job_id=cid, capability=capability, reward=max_price,
-                                   advance_frac=advance_frac, spec=part.spec)):
+                                   advance_frac=advance_frac, spec=spec)):
             return Outcome(False, "rate-limited: your standing caps how much you can post per cycle")
-        self.w.contract_net.open(cid, job, capability, self.me.name, max_price, advance_frac)
+        self.w.contract_net.open(cid, job, capability, self.me.name, max_price, advance_frac, spec)
         return Outcome(True, f"announced {cid}; bids arrive from next turn", cid)
 
     @command()

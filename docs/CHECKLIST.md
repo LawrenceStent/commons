@@ -682,7 +682,9 @@ checklists in the plan (R0 to R12), on branch `refactor/architecture`; no featur
     save and resume, pack desks, the paper broker, prices (Coinbase, Yahoo), performance and the capital economy,
     the trading pack, `commons tick` and the schedule (off), first live ticks. Waiting on you: turning the schedule
     on, and the graduation criteria for stage 2, written down before anyone looks at results
-- [ ] K7 OSINT pack: sourcing-first evaluator, separate verify co-op, forbidden-target policy enforced in tools
+- [x] K7 OSINT pack (5 Oct): sourcing-first grader and calibration set, verify as an independent part (another
+      co-op, once the others are done, given their work), the screen (no people, no personal data, passive only)
+      at founding, before the gate and at hand-in, halting the society on any refusal. Done-when met by test
   - K7, K8 and R13 next, then Phase 2 (your order, 5 Oct): plan and checklists in `docs/K7-K8-PLAN.md`
 - [ ] K8 Many societies: registry, CLI, dashboard picker, per-society and total spend caps, slow-cadence scheduler
 
