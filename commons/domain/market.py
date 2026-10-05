@@ -18,9 +18,10 @@ from dataclasses import dataclass, field
 from commons.domain.errors import DomainError
 from commons.domain.format import Format
 from commons.domain.money import Micros
-from commons.domain.status import JobStatus
+from commons.domain.status import ContractStatus, JobStatus
 
 S = JobStatus
+WORKED = (ContractStatus.AWARDED, ContractStatus.DELIVERED, ContractStatus.ACCEPTED)  # a contractor did or holds it
 TRANSITIONS: dict[JobStatus, set[JobStatus]] = {
     S.OPEN: {S.CLAIMED, S.EXPIRED},
     S.CLAIMED: {S.GRADED, S.PAID, S.FAILED},
@@ -38,6 +39,7 @@ class Part:
     source: str | None = None  # "self" or a contract id
     cites: tuple[str, ...] = ()
     format: Format = field(default_factory=Format)  # checked by rule at hand-in (commons/domain/format.py)
+    independent: bool = False  # someone other than the prime must do it, and nobody who did another part of the job
 
 
 @dataclass
@@ -53,6 +55,25 @@ class MarketJob:
     scores: dict[str, float] = field(default_factory=dict)
     bond: Micros = 0  # posted by the prime on allocation; returned when paid, forfeited if the job fails
     settle_at: int | None = None  # for deferred outcomes: the cycle the grader settles it
+
+    def done_by(self, contracts: dict) -> dict[str, str]:
+        """capability -> who did or holds each part bought by contract (awarded, delivered or accepted)."""
+        out = {}
+        for c in contracts.values():
+            if c.job_id == self.id and c.winner and c.status in WORKED:
+                out[c.capability] = c.winner
+        return out
+
+    def independence_refusal(self, capability: str, who: str, contracts: dict) -> str | None:
+        """Why `who` may not take `capability` of this job: an independent part, and it did or holds another part;
+        or another part, and it did or holds this job's independent part."""
+        held = {cap: w for cap, w in self.done_by(contracts).items() if cap != capability}
+        independent = {c for c, p in self.parts.items() if p.independent}
+        if capability in independent and who in held.values():
+            return f"the {capability} part must be done by someone who did no other part of job {self.id}"
+        if any(held.get(c) == who for c in independent):
+            return f"you hold job {self.id}'s independent part, so you can't take another part of it"
+        return None
 
     @property
     def complete(self) -> bool:

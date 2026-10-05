@@ -43,6 +43,7 @@ class PartView:
     source: str | None  # "self" or a contract id
     pending: str | None = None  # status of the contract in flight for this part: open | awarded | delivered
     format: Format = Format()  # what its text must look like, checked by rule at hand-in
+    independent: bool = False  # another co-op must do it (nobody who did another part of the job)
 
 
 @dataclass(frozen=True)

@@ -48,7 +48,7 @@ class ObservationBuilder:
     def _job_view(self, j: MarketJob, pending: dict) -> JobView:
         return JobView(j.id, j.title, j.reward, tuple(
             PartView(cap, part.spec, part.rubric, part.artifact is not None, part.source, pending.get((j.id, cap)),
-                     part.format)
+                     part.format, part.independent)
             for cap, part in sorted(j.parts.items())), j.deadline)
 
     def _contract_view(self, name: str, c: Contract, as_prime: bool) -> ContractView:

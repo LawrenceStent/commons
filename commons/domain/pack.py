@@ -68,6 +68,7 @@ class TemplateWorkSource:
     templates: dict[str, tuple[str, str]]  # capability -> (spec, rubric), each with a {subject} slot
     title: str = "{subject}"
     formats: dict[str, Format] = field(default_factory=dict)  # capability -> what its text must look like, by rule
+    independent: frozenset[str] = frozenset()  # capabilities someone other than the job's own co-ops must do
 
     def new_job(self, rng, job_id, cycle, reward, board_ttl, parts):
         subject = rng.choice(self.subjects)
@@ -77,7 +78,7 @@ class TemplateWorkSource:
             title=self.title.format(subject=subject),
             reward=reward,
             parts={c: Part(c, self.templates[c][0].format(subject=subject), self.templates[c][1].format(subject=subject),
-                           format=self.formats.get(c, Format())) for c in caps},
+                           format=self.formats.get(c, Format()), independent=c in self.independent) for c in caps},
             posted=cycle,
             deadline=cycle + board_ttl,
         )

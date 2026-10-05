@@ -103,7 +103,7 @@ def commissionable(obs: Observation) -> list[tuple[str, str, str, str, str, Form
     A world rule: in run 4, 9 steward calls asked for work on contracts not yet won or already delivered."""
     mine = set(obs.capabilities)
     out = [(j.id, p.capability, p.spec, p.rubric, "do_part", p.format) for j in obs.my_jobs for p in j.parts
-           if p.capability in mine and not p.done and p.pending is None]
+           if p.capability in mine and not p.done and p.pending is None and not p.independent]
     out += [(c.id, c.capability, c.spec, c.rubric, "deliver", c.format) for c in obs.to_deliver]
     return out
 
@@ -143,7 +143,8 @@ def _job(j: JobView, mine: set[str], *, prime: bool = False) -> str:
     parts = []
     for p in j.parts:
         state = "done" if p.done else (p.pending or "open")
-        can = "you can" if p.capability in mine else "you can't"
+        able = p.capability in mine and not (prime and p.independent)
+        can = ("another co-op must do it" if prime and p.independent else "you can" if able else "you can't")
         if not prime:
             parts.append(f"    - {p.capability} [{state}; {can}]\n      spec: {p.spec}\n      rubric: {p.rubric}")
         elif state == "done":
@@ -152,7 +153,7 @@ def _job(j: JobView, mine: set[str], *, prime: bool = False) -> str:
             if p.pending == "open":
                 nxt = "waiting: announced; award a bidder once bids arrive"
             else:
-                nxt = NEXT[(state, p.capability in mine)]
+                nxt = NEXT[(state, able)]
             parts.append(f"    - {p.capability} [{state}; {can}] → {nxt}\n      spec: {p.spec}\n      rubric: {p.rubric}")
     return f"  {j.id} \"{j.title}\" reward {j.reward} µcr, deadline cycle {j.deadline}\n" + "\n".join(parts)
 

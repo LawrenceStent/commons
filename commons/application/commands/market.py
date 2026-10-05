@@ -58,6 +58,8 @@ class MarketCommands(CommandBase):
             return Outcome(False, f"job {job_id} has no {capability} part")
         if part.artifact is not None:
             return Outcome(False, f"the {capability} part is already done")
+        if part.independent:
+            return Outcome(False, f"the {capability} part must be done by another co-op: announce a contract for it")
         if not self.me.can(capability):
             return Outcome(False, f"you lack the {capability} capability; announce a contract instead")
         if (err := self._cites_ok(tuple(cites))) is not None:
@@ -105,6 +107,8 @@ class MarketCommands(CommandBase):
         ok, why = self.w.eligible(c.prime, self.me.name, c.capability)
         if not ok:
             return Outcome(False, f"the commons refuses your bid: {why}")
+        if (job := self.w.jobs.get(c.job_id)) and (why := job.independence_refusal(c.capability, self.me.name, self.w.contracts)):
+            return Outcome(False, why)
         if (err := self._use_capacity()) is not None:
             return err
         if not self._send(Bid(job_id=contract_id, price=price)):
@@ -125,6 +129,8 @@ class MarketCommands(CommandBase):
         ok, why = self.w.eligible(self.me.name, bidder, c.capability)  # standing can fall between bid and award
         if not ok:
             return Outcome(False, f"the commons refuses this award: {why}; choose another bidder")
+        if (job := self.w.jobs.get(c.job_id)) and (why := job.independence_refusal(c.capability, bidder, self.w.contracts)):
+            return Outcome(False, f"{why.replace('you hold', f'{bidder} holds')}; choose another bidder")
         price = c.bids[bidder]
         advance = round(price * c.advance_frac)
         try:

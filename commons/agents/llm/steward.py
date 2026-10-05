@@ -30,7 +30,7 @@ from commons.agents.llm.tools import NAMES, steward_tools
 from commons.agents.waking import members_to_wake
 from commons.application.commands.base import FORMAT_REFUSED
 from commons.application.observation import ActionsAPI, Observation, Outcome
-from commons.application.ports import ModelBackend, ModelError, ToolCall, ToolResult
+from commons.application.ports import ModelBackend, ModelError, ToolCall, ToolResult, Turn
 from commons.domain.ids import PlaybookId
 from commons.substrate.ledger import InsufficientFunds
 
@@ -177,20 +177,7 @@ class StewardLoop:
     def _round(self) -> bool:
         """One model call and the tools it asked for. False ends the turn."""
         a, act, log = self.agent, self.act, self.log
-        if why := self._may_not_think():
-            log.append({"kind": "error", "text": why})
-            return False
-        try:
-            t = a.backend.chat(model=self.model, system=self.system, messages=self.messages,
-                               tools=steward_tools(bool(self.obs.web), self.obs.desk_tools, self.without),
-                               max_tokens=self.max_tokens)
-        except ModelError as e:
-            log.append({"kind": "error", "text": f"steward call failed: {e}"})
-            return False
-        try:
-            self.cost += act.record_call("steward", t.model, t.price_as, t.usage, t.real, t.ms, t.cache_hit)
-        except InsufficientFunds:
-            log.append({"kind": "error", "text": "the purse couldn't pay for that thinking; turn over"})
+        if (t := self._call()) is None:
             return False
         self.spent += t.usage.input_tokens + t.usage.output_tokens + t.usage.cache_read_input_tokens
         self.messages.append(t.as_message())
@@ -215,6 +202,25 @@ class StewardLoop:
         if t.stop == "max_tokens":
             log.append({"kind": "error", "text": "the steward ran out of output tokens"})
         return True
+
+    def _call(self) -> Turn | None:
+        """The model call, paid for; None (and why, in the log) if it can't happen, fails or can't be paid."""
+        if why := self._may_not_think():
+            self.log.append({"kind": "error", "text": why})
+            return None
+        try:
+            t = self.agent.backend.chat(model=self.model, system=self.system, messages=self.messages,
+                                        tools=steward_tools(bool(self.obs.web), self.obs.desk_tools, self.without),
+                                        max_tokens=self.max_tokens)
+        except ModelError as e:
+            self.log.append({"kind": "error", "text": f"steward call failed: {e}"})
+            return None
+        try:
+            self.cost += self.act.record_call("steward", t.model, t.price_as, t.usage, t.real, t.ms, t.cache_hit)
+        except InsufficientFunds:
+            self.log.append({"kind": "error", "text": "the purse couldn't pay for that thinking; turn over"})
+            return None
+        return t
 
     def _may_not_think(self) -> str | None:
         """Why the next model call can't happen: the operator's budget for the turn, or a purse that can't pay."""

@@ -129,8 +129,8 @@ class Strategy:
         finish doesn't eat our own work too."""
         sub_share = obs.params.get("sub_share", 0.4)
         advance = obs.params.get("advance_frac", 0.5)
-        mine = [p for p in job.parts if p.capability in obs.capabilities]
-        theirs = [p for p in job.parts if p.capability not in obs.capabilities]
+        mine = [p for p in job.parts if p.capability in obs.capabilities and not p.independent]
+        theirs = [p for p in job.parts if p not in mine]
         for p in theirs:
             if not p.done and p.pending is None:
                 act.announce(job.id, p.capability, round(job.reward * sub_share), advance)

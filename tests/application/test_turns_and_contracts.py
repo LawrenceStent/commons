@@ -307,3 +307,29 @@ def test_work_over_the_size_cap_is_refused_not_cut_off():
     fits = "x" * MAX_ARTIFACT
     assert act(w, "prime").do_part(job.id, "research", fits) and job.parts["research"].artifact == fits  # whole
     assert not act(w, "prime").publish("research", "a method", long)
+
+
+def test_an_independent_part_is_bought_from_someone_who_did_no_other_part():
+    w = world()
+    job = MarketJob("T5", "kit", 80_000, {"research": Part("research", "r", "r"),
+                                          "build": Part("build", "b", "b"),
+                                          "write": Part("write", "w", "w", independent=True)},
+                    posted=w.cycle, deadline=w.cycle + 6)
+    w.jobs[job.id] = job
+    assert act(w, "prime").claim(job.id)
+    w.communities["prime"].capabilities = frozenset({"research", "write"})
+    out = act(w, "prime").do_part(job.id, "write", "x")
+    assert not out and "another co-op" in out.message  # the prime can't check its own work
+    build = act(w, "prime").announce(job.id, "build", 30_000, 0.5).id
+    assert act(w, "sub").bid(build, 20_000)
+    w.step()
+    assert act(w, "prime").award(build, "sub")
+    write = act(w, "prime").announce(job.id, "write", 30_000, 0.5).id
+    out = act(w, "sub").bid(write, 20_000)  # sub holds the build part
+    assert not out and "no other part" in out.message
+    w.communities["other"].capabilities = frozenset({"build", "write"})
+    assert act(w, "other").bid(write, 20_000)
+    w.step()
+    assert act(w, "prime").award(write, "other")
+    assert job.independence_refusal("research", "other", w.contracts) == \
+        "you hold job T5's independent part, so you can't take another part of it"
