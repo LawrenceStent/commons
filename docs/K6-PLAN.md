@@ -99,4 +99,10 @@ job part today); news search; shorting or derivatives; anything with real money.
       oversized orders. Found and fixed: desks paid for playbooks and a venture and searched a missing archive
       (now `Pack.without`), and a cap refusal didn't say how much would fit
 - [ ] T8.2 Schedule on (your go-ahead); 30+ cycles with performance settled per horizon
-- [ ] T8.3 Findings in CHECKLIST.md; graduation criteria for stage 2 written down before anyone looks at results
+- [x] T8.3 Graduation criteria for stage 2, written down on 5 Oct before anyone looked at results, and checked by
+      code (`packs/trading/graduation.py`). A desk graduates to shadow trading only if, over at least 60 settled
+      windows (about two months of hourly ticks): its mean excess return after costs is above zero; its score is
+      positive in at least 55% of windows; its worst drawdown stays under 10%; it never meets the kill criterion and
+      pauses for daily loss at most 3 times. The society must also play at least 90% of its scheduled ticks, with no
+      limit ever failing to apply. Changing them after seeing results means starting the window again
+- [ ] T8.4 Findings in CHECKLIST.md as the forward test runs

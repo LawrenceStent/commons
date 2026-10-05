@@ -60,6 +60,10 @@ class Account:
     day_start: float = 0.0  # the account's value when the day began
     paused: str | None = None  # the day trading is paused for (a daily loss)
     stopped: bool = False  # the kill criterion was met
+    pauses: int = 0  # daily-loss pauses so far
+
+    def __setstate__(self, state: dict) -> None:  # accounts saved before `pauses` existed (4 Oct) load with none
+        self.__dict__.update({"pauses": 0, **state})
 
     def value(self, quotes: dict[str, Quote]) -> float:
         return self.cash + sum(p.qty * (quotes[s].price if s in quotes else p.last) for s, p in self.positions.items())
@@ -152,6 +156,7 @@ class Account:
         elif self.paused != day and self.day_start and now < self.day_start * (1 - limits.daily_loss):
             told += self._close_all(quotes, costs, f"daily loss limit: down {1 - now / self.day_start:.1%} today")
             self.paused = day
+            self.pauses += 1
             told.append("daily loss limit reached: everything sold, trading paused until the next day")
         return told
 
