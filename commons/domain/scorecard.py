@@ -18,6 +18,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from commons.domain.archive import sources
+
 World = Any  # the society (application/society.py), read through its public records; typed loosely so the domain
 #              doesn't depend on the application
 
@@ -90,6 +92,13 @@ def _cooperation(w: World) -> float | None:
     return round(sum(prime != who for prime, who in by) / len(by), 3) if by else None
 
 
+def _sources(w: World) -> float | None:
+    """Source independence: an answer resting on one page cited three times rests on one source."""
+    cited = [len(set().union(*(sources(p["text"]) for p in o["parts"].values()))) for o in w.outputs]
+    cited = [n for n in cited if n]
+    return round(sum(cited) / len(cited), 2) if cited else None
+
+
 def _citations(w: World) -> float | None:
     n = w.grading.citations["valid"] + w.grading.citations["invalid"]
     return round(w.grading.citations["valid"] / n, 3) if n else None
@@ -103,6 +112,8 @@ GENERAL = (
            what="share of paid parts done by another co-op"),
     Metric("citations", "Archive citations valid", _citations, unit="%", floor=1.0,
            what="cited archive passages that exist; a made-up citation fails its part"),
+    Metric("sources", "Sources per cited job", _sources,
+           what="distinct source files cited by a paid job's parts, among jobs that cite any"),
 )
 
 

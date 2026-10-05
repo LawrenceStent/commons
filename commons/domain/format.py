@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from commons.domain.archive import sources
 from commons.domain.verification import LINE, read_tally
 
 _CITATION = re.compile(r"\[archive:[^\]]*\]")
@@ -32,6 +33,7 @@ class Format:
     max_words: int | None = None
     sections: tuple[str, ...] = ()
     tally: bool = False  # a checker part: must end with "Supported: N of M. Contradicted: K." (domain/verification.py)
+    min_sources: int = 0  # distinct source files cited (domain/archive.py): one page cited three times is one source
 
     def problems(self, text: str) -> list[str]:
         n, out = words(text), []
@@ -41,6 +43,9 @@ class Format:
             out.append(f"it is {n} words; the least is {self.min_words}")
         if missing := [s for s in self.sections if not has_section(text, s)]:
             out.append(f"it lacks the section(s) {', '.join(missing)} (each on a line of its own, starting with its name)")
+        if (n := len(sources(text))) < self.min_sources:
+            out.append(f"it cites {n} different source(s); the least is {self.min_sources} (passages of one page are one "
+                       f"source)")
         if self.tally and read_tally(text) is None:
             out.append(f"it doesn't end with its tally, a line like '{LINE}' (supported plus contradicted at most M)")
         return out
@@ -53,6 +58,8 @@ class Format:
                         else f"at least {self.min_words} words")
         if self.sections:
             bits.append("sections, each on a line starting with its name: " + ", ".join(self.sections))
+        if self.min_sources:
+            bits.append(f"citations from at least {self.min_sources} different sources")
         if self.tally:
             bits.append(f"a closing tally line: {LINE}")
         return "; ".join(bits)

@@ -37,6 +37,11 @@ def citations(text: str) -> list[str]:
     return list(dict.fromkeys(m.lower() for m in _CITE.findall(text)))
 
 
+def sources(text: str) -> set[str]:
+    """The distinct source files a piece of work cites: three passages of one page are one source."""
+    return {c.split("#", 1)[0] for c in citations(text)}
+
+
 @dataclass(frozen=True)
 class Passage:
     id: str  # "<file stem>#<n>"

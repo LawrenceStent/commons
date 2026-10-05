@@ -35,3 +35,11 @@ def test_only_an_independent_part_s_tally_counts_and_pay_scales_with_it():
     assert job.value(0.5) == 100_000
     job.verified = 0.75
     assert job.value(0.5) == 75_000
+
+
+def test_a_format_can_require_distinct_sources_and_one_page_is_one_source():
+    f = Format(min_sources=2)
+    assert "at least 2 different sources" in f.describe()
+    one = "[archive: suez#1] and [archive: suez#2] and [archive: Suez#3]"
+    assert "cites 1 different source(s)" in f.problems(one)[0]
+    assert not f.problems(one + " [archive: lloyds-list#4]")

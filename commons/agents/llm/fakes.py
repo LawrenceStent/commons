@@ -21,6 +21,8 @@ def _fitted(prompt: str) -> str:
     body = [f"{s}: {SAMPLE[s]}" if s in SAMPLE else f"{s}\n{text}" for s in sections] or [text]
     while len(" ".join(body).split()) < least:
         body.append(text)
+    if "different sources" in form.group(1):  # cite what it was given; with too little, the rule refuses it
+        body.append(" ".join(f"[archive: {s}]" for s in re.findall(r'<source id="([^"]+)">', prompt)))
     if "closing tally line" in form.group(1):
         body.append("Supported: 3 of 3. Contradicted: 0.")
     return "\n\n".join(body)

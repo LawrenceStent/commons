@@ -54,6 +54,7 @@ TEMPLATES: dict[str, tuple[str, str]] = {  # in this order: same seed, same jobs
 FORMATS = {
     "analyse": Format(150, 350, ("Findings", "Confidence", "Gaps")),
     "report": Format(200, 400, ("Answer", "Confidence", "Unknowns")),
+    "collect": Format(min_sources=3),
     "verify": Format(tally=True),
 }
 
