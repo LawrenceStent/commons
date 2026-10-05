@@ -22,14 +22,19 @@ class Sale:
     gross: int  # µ$ paid by the buyer
     fee: int  # µ$ the channel kept
     cycle: int
+    refund: bool = False  # a refund of an earlier sale: the maker gives back what it was paid
 
 
 class Channel(Protocol):
     @property
     def name(self) -> str: ...
 
-    def list(self, title: str, description: str, tags: tuple[str, ...], price: int, quality: float) -> str:
-        """List a product; its listing id on this channel."""
+    @property
+    def manual(self) -> bool: ...  # True: you list on it by hand from a kit, then link the listing (no listing API)
+
+    def list(self, title: str, description: str, tags: tuple[str, ...], price: int, quality: float,
+             files: dict | None = None) -> str:
+        """List a product (with its files: pdf, cover); its listing id on this channel ("" for a manual channel)."""
         ...
 
     def set_price(self, listing: str, price: int) -> None: ...
@@ -44,6 +49,7 @@ class Channel(Protocol):
 @dataclass
 class FakeChannel:
     name: str
+    manual: bool = False
     seed: int = 0
     fee_share: float = 0.065  # of the sale
     fee_fixed: int = 200_000  # µ$ a sale
@@ -51,11 +57,16 @@ class FakeChannel:
     listings: dict[str, tuple[int, float]] = field(default_factory=dict)  # id -> (price µ$, quality)
     seq: int = 0
 
-    def list(self, title, description, tags, price, quality) -> str:
+    def list(self, title, description, tags, price, quality, files=None) -> str:
+        if self.manual:
+            return ""  # listed by hand, then linked (as Lemon Squeezy)
         self.seq += 1
         listing = f"{self.name}-{self.seq}"
         self.listings[listing] = (price, quality)
         return listing
+
+    def link(self, listing: str) -> None:
+        self.listings[listing] = (5 * USD, 0.9)
 
     def set_price(self, listing: str, price: int) -> None:
         if listing in self.listings:
@@ -76,5 +87,5 @@ class FakeChannel:
 def fake_channels(seed: int) -> dict[str, FakeChannel]:
     """The two you chose, with their fee shapes (roughly: Etsy's listing, transaction and processing fees; Lemon
     Squeezy's 5% and 50¢)."""
-    return {"etsy": FakeChannel("etsy", seed, fee_share=0.095, fee_fixed=450_000),
-            "lemonsqueezy": FakeChannel("lemonsqueezy", seed, fee_share=0.05, fee_fixed=500_000, base_rate=0.05)}
+    return {"etsy": FakeChannel("etsy", seed=seed, fee_share=0.095, fee_fixed=450_000),
+            "lemonsqueezy": FakeChannel("lemonsqueezy", seed=seed, fee_share=0.05, fee_fixed=500_000, base_rate=0.05)}

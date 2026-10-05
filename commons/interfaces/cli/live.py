@@ -287,7 +287,7 @@ def main(argv: list[str] | None = None) -> None:
     turns_path = ledger.replace(".sqlite", ".turns.jsonl")
     _log_turns(world, turns_path)
     _run(world, a, ledger)
-    registry.record_spend(society.name if society else Path(ledger).stem, world.ledger.real()["api_spend"])
+    registry.record_spend(society.name if society else Path(ledger).stem, world.ledger.real()["spend"])
     _report(world, society, ledger, turns_path)
 
 

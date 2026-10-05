@@ -10,3 +10,6 @@ var/
 runs/
 operator/
 societies/
+
+# your keys (Phase 2): never committed; see .env.example
+.env

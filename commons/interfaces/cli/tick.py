@@ -71,15 +71,15 @@ def main(argv: list[str] | None = None) -> None:
         if live.room(a) <= 0 or world.meter.halted:
             break
         live.within_room(world, a)
-        before = world.ledger.real()["api_spend"]
+        before = world.ledger.real()["spend"]
         a.cycles = world.cycle + 1  # the run loop counts from the society's first cycle
         live._run(world, a, str(state / "ledger.sqlite"))
-        registry.record_spend(a.name, world.ledger.real()["api_spend"] - before)
+        registry.record_spend(a.name, world.ledger.real()["spend"] - before)
     if world.meter.halted and live._model_down(world.hub, world.cycle):
         world.meter.halted = False  # a stuck model isn't the society's doing: the next tick tries again
     world.save(state / "society.save")
     world.ledger.check()
-    registry.write_status(state, world, real_spent=world.ledger.real()["api_spend"])
+    registry.write_status(state, world, real_spent=world.ledger.real()["spend"])
     settled = [s for s in getattr(world.desk, "settlements", []) if s["cycle"] > start]
     print(f"{a.name}: cycles {start + 1}-{world.cycle} played and saved in {state}"
           + (f" · {len(settled)} windows settled, {sum(s['paid'] for s in settled)} µcr paid" if settled else ""))

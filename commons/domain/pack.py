@@ -107,6 +107,7 @@ class Pack:
     without: frozenset[str] = frozenset()  # kernel actions this society doesn't have: not offered, refused by rule
     screen: Callable[[str, str], str | None] | None = None  # (kind, text) -> why it's refused; see `screened`
     halt_on_screen: bool = False  # a screened attempt halts the society until you reset it
+    health: Callable[[bool], list[str]] | None = None  # its outside services: keys set? (and, if asked, do they answer?)
 
     @property
     def live(self) -> dict[str, Any]:

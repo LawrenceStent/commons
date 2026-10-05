@@ -5,8 +5,9 @@ Two currencies, never exchanged:
     SIM   created money. It exists only in simulations: seeded from `genesis`, paid out by the
           mock `market` (or, in a grant economy, a `funder`), burned by notional `compute`. The dashboard shows it as "cr", never "$".
     USD   real money. Every unit traces to something that happened outside: capital the owner put
-          in (`owner:capital`), a customer payment (`ext:stripe`), a real API bill (`ext:anthropic`),
-          or a fee (`ext:fees`).
+          in (`owner:capital`), a customer payment (`ext:stripe`, or `ext:sales` through any sales channel), a
+          real API bill (`ext:anthropic`, or `ext:services` for any other outside service, such as images), or a
+          fee (`ext:fees`).
 
 Every entry is in one currency and balances within it, so there is no path from SIM to USD.
 Each currency has its own external accounts, which may go negative (they are the outside world);
@@ -16,6 +17,7 @@ Internal accounts, one set per currency:
     purse:<community>   a community's spendable balance (never negative)
     treasury            the shared treasury (never negative)
     grants              a grant economy's pool for this cycle (never negative)
+    sales               USD: what real sales brought in, after channel fees (yours: the co-ops earn credits for it)
 
 A ledger has a default currency, the one its society runs on: SIM for simulations, USD for a
 live society. Calls that don't name a currency use it.
@@ -33,7 +35,7 @@ from commons.substrate.telemetry import NULL, Hub
 SIM, USD = "SIM", "USD"
 EXTERNAL: dict[str, frozenset[str]] = {
     SIM: frozenset({"genesis", "market", "funder", "compute"}),
-    USD: frozenset({"owner:capital", "ext:stripe", "ext:anthropic", "ext:fees"}),
+    USD: frozenset({"owner:capital", "ext:stripe", "ext:sales", "ext:anthropic", "ext:services", "ext:fees"}),
 }
 ALL_EXTERNAL = frozenset().union(*EXTERNAL.values())
 
@@ -189,8 +191,9 @@ class Ledger:
     def real(self) -> dict[str, int]:
         """The real-money position, positive numbers: what went in, came in, and went out."""
         b = lambda a: self.balance(a, USD)
-        return {"capital_in": -b("owner:capital"), "revenue": -b("ext:stripe"),
-                "api_spend": b("ext:anthropic"), "fees": b("ext:fees")}
+        return {"capital_in": -b("owner:capital"), "revenue": -b("ext:stripe") - b("ext:sales"),
+                "api_spend": b("ext:anthropic"), "services_spend": b("ext:services"), "fees": b("ext:fees"),
+                "spend": b("ext:anthropic") + b("ext:services"), "sales_held": b("sales")}
 
     def total(self, currency: str | None = None) -> int:
         cur = currency or self.currency

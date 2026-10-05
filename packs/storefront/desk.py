@@ -20,8 +20,12 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
+from pathlib import Path
+from typing import Any
 
 from commons.application.screening import screen
+from commons.substrate.ledger import purse
+from packs.storefront import files
 from packs.storefront.channels import USD, Channel
 
 MAX_TITLE, MAX_TAGS, MAX_TAG = 140, 13, 20
@@ -52,6 +56,10 @@ class Product:
     last_sale: int | None = None
     sold: int = 0
     revenue: int = 0  # µ$ gross
+    content: str = ""  # the product itself (its content part), for the PDF
+    files: dict = field(default_factory=dict)  # pdf, cover: paths, written when a listing is requested
+    art: str = ""  # an approved illustration (a path), for the cover
+    art_prompt: str = ""  # what an illustration request asked for
 
 
 def _schema(props: dict, required: list[str]) -> dict:
@@ -63,6 +71,10 @@ S, N = {"type": "string"}, {"type": "number"}
 TOOLS = (
     {"name": "drop_product", "description": "Ask the operator to unlist one of your products everywhere. Free; waits "
      "for their approval.", "input_schema": _schema({"product_id": S, "reason": S}, ["product_id", "reason"])},
+    {"name": "illustrate", "description": "Ask the operator to pay for one illustration for a product's cover "
+     "(FLUX.2, a few cents): describe the picture, no words in it, no real people, logos or brands. Waits for their "
+     "approval; without one the cover is typographic.",
+     "input_schema": _schema({"product_id": S, "prompt": S}, ["product_id", "prompt"])},
     {"name": "list_product", "description": "Ask the operator to list one of your draft products on one or more sales "
      "channels (a list of names from your desk view). Its listing is checked against the store's limits and rules "
      "first. Free; nothing goes public until the operator approves.",
@@ -100,8 +112,11 @@ def listing_problems(p: Product) -> list[str]:
 @dataclass
 class StoreDesk:
     channels: Mapping[str, Channel]
-    credit_per_dollar: int = USD  # the society's µ-units per dollar of sales
+    credit_per_dollar: int = USD  # credits (µ) the maker earns per dollar a sale brings in, after fees
+    real: bool = False  # real channels: each sale is also booked in USD (buyer -> sales, fee -> ext:fees)
     drop_after: int = 48  # cycles without a sale before a drop request is raised
+    images: Any = None  # an illustration service (packs/storefront/images.py), if one is set up
+    folder: str | None = None  # where product files go; the society's folder by default
     tools: tuple = TOOLS
     products: dict[str, Product] = field(default_factory=dict)
     made: set[str] = field(default_factory=set)  # jobs already turned into products
@@ -130,18 +145,39 @@ class StoreDesk:
         pid = f"P{len(self.products) + 1}"
         self.products[pid] = Product(pid, record["job"], record["prime"], fields["title"], fields["description"],
                                      fields["tags"], round(fields["price"] * USD),
-                                     sum(scores) / len(scores) if scores else 0.5)
+                                     sum(scores) / len(scores) if scores else 0.5,
+                                     content=record["parts"].get("content", {}).get("text", ""))
 
     def _book(self, w, channel: str, sale) -> None:
-        p = next((x for x in self.products.values() if x.listings.get(channel) == sale.listing), None)
+        p = next((x for x in self.products.values() if sale.listing and x.listings.get(channel) == sale.listing), None)
         if p is None:
             return
-        p.sold, p.revenue, p.last_sale = p.sold + 1, p.revenue + sale.gross, w.cycle
         net = round((sale.gross - sale.fee) * self.credit_per_dollar / USD)
+        if self.real:
+            self._book_dollars(w, p, channel, sale)
+        if sale.refund:
+            back = min(max(net, 0), w.ledger.balance(purse(p.maker)))
+            if back:
+                w.ledger.transfer(purse(p.maker), "market", back, cycle=w.cycle, kind="refund", memo=p.id)
+            p.sold, p.revenue = p.sold - 1, p.revenue - sale.gross
+            w.tell(p.maker, "refund", f"{p.id} was refunded on {channel}: ${sale.gross / USD:.2f}")
+            return
+        p.sold, p.revenue, p.last_sale = p.sold + 1, p.revenue + sale.gross, w.cycle
         if net > 0:
             w.ledger.settle_revenue(p.maker, net, cycle=w.cycle, memo=f"{p.id} on {channel}")
         w.tell(p.maker, "sale", f"{p.id} {p.title!r} sold on {channel} for ${sale.gross / USD:.2f}"
                                 f" (fee ${sale.fee / USD:.2f})")
+
+    @staticmethod
+    def _book_dollars(w, p: Product, channel: str, sale) -> None:
+        """The real money, in USD beside the credits, never mixed with them: what the buyer paid, the channel's fee,
+        and what's left, held in `sales` (yours). A refund reverses it, as far as `sales` holds."""
+        sign = -1 if sale.refund else 1
+        legs = [("ext:sales", -sign * sale.gross), ("ext:fees", sign * sale.fee), ("sales", sign * (sale.gross - sale.fee))]
+        if sale.refund and w.ledger.balance("sales", "USD") < sale.gross - sale.fee:
+            return  # nothing left to reverse here: the refund came out of money already paid out to you
+        w.ledger.post(legs, cycle=w.cycle, kind="refund" if sale.refund else "sale", memo=f"{p.id} on {channel}",
+                      currency="USD")
 
     # ── tools ──────────────────────────────────────────────────
     def call(self, w, coop: str, tool: str, args: dict) -> tuple[bool, str]:
@@ -150,6 +186,8 @@ class StoreDesk:
             return False, f"you have no product {args.get('product_id')!r}; your desk view lists yours"
         if tool == "list_product":
             return self._ask_listing(w, coop, p, args.get("channels") or [])
+        if tool == "illustrate":
+            return self._ask_art(w, coop, p, " ".join(str(args.get("prompt", "")).split())[:800])
         if p.stage != Stage.LISTED:
             return False, f"{p.id} isn't listed (it is {p.stage})"
         if tool == "set_price":
@@ -176,45 +214,109 @@ class StoreDesk:
         if why := screen(w, coop, "listing", f"Title: {p.title}\n{p.description}\nTags: {', '.join(p.tags)}"):
             return False, why
         p.wanted = {"channels": sorted(set(channels))}
+        if folder := self._folder(w):
+            art = Path(p.art).read_bytes() if p.art and Path(p.art).exists() else None
+            p.files = {k: str(v) for k, v in files.write(folder, p.id, p.title, p.content or p.description, art).items()}
         detail = self._detail(p, "List on", ", ".join(p.wanted["channels"]))
         ok, message = self._ask(w, coop, "list_product", p, detail)
         if ok:
             p.stage = Stage.REQUESTED
         return ok, message
 
+    def _ask_art(self, w, coop: str, p: Product, prompt: str) -> tuple[bool, str]:
+        if self.images is None:
+            return False, "no illustration service is set up; covers are typographic"
+        if len(prompt) < 10:
+            return False, "describe the picture"
+        if why := screen(w, coop, "listing", prompt):
+            return False, why
+        p.art_prompt = prompt
+        cost = getattr(self.images, "price", 0) / USD
+        out = w.approvals.request(coop, "steward", "illustrate", "spend", p.id,
+                                  f"Illustrate {p.id} ({p.title}) for about ${cost:.2f}:\n{prompt}")
+        return out.ok, out.message
+
     def _ask(self, w, coop: str, tool: str, p: Product, detail: str) -> tuple[bool, str]:
         out = w.approvals.request(coop, "steward", tool, "publish", p.id, detail)
         return out.ok, out.message
 
+    def _folder(self, w) -> Path | None:
+        if self.folder:
+            return Path(self.folder)
+        ledger = w.params.storage.ledger_path
+        return Path(ledger).parent if ledger != ":memory:" else None
+
     @staticmethod
     def _detail(p: Product, what: str, value: str) -> str:
+        where = "".join(f"\n{k}: {v}" for k, v in sorted(p.files.items()))
         return (f"{what}: {value}\nProduct {p.id} by {p.maker} (job {p.job}, graded {p.quality:.2f})\n"
-                f"Title: {p.title}\nPrice: ${p.price / USD:.2f}\nTags: {', '.join(p.tags)}\nDescription:\n{p.description}")
+                f"Title: {p.title}\nPrice: ${p.price / USD:.2f}\nTags: {', '.join(p.tags)}\nDescription:\n{p.description}"
+                + (f"\nFiles (open them before approving):{where}" if where else ""))
 
     # ── what you approved ──────────────────────────────────────
     def carry_out(self, w, r) -> tuple[bool, str]:
-        """Runs outside the world's lock (a channel is the network); takes it to change the product."""
+        """Runs outside the world's lock (channels and images are the network); takes it to change the product."""
         p = self.products.get(r.target)
         if p is None:
             return False, f"no product {r.target}"
-        if r.tool == "list_product":
-            done = {c: self.channels[c].list(p.title, p.description, p.tags, p.price, p.quality)
-                    for c in p.wanted.get("channels", []) if c in self.channels}
-            with w.lock:
-                p.listings.update(done)
-                p.stage, p.listed_at = Stage.LISTED, w.cycle
-            return True, f"{p.id} listed on {', '.join(sorted(done))}"
-        if r.tool == "set_price":
-            for c, listing in p.listings.items():
-                self.channels[c].set_price(listing, p.wanted["price"])
-            with w.lock:
-                p.price = p.wanted["price"]
-            return True, f"{p.id} now ${p.price / USD:.2f}"
+        act = {"list_product": self._list, "set_price": self._reprice, "illustrate": self._illustrate}.get(r.tool, self._drop)
+        return act(w, p)
+
+    def _list(self, w, p: Product) -> tuple[bool, str]:
+        done, kits = {}, []
+        for c in p.wanted.get("channels", []):
+            channel = self.channels.get(c)
+            if channel is None:
+                continue
+            done[c] = channel.list(p.title, p.description, p.tags, p.price, p.quality, p.files)
+            if channel.manual:
+                kits.append(c)
+        with w.lock:
+            p.listings.update(done)
+            p.stage, p.listed_at = Stage.LISTED, w.cycle
+        note = "".join(f" {c}: create it by hand from {p.files.get('pdf', 'its files')} and the listing above, then "
+                       f"run `commons link <society> {p.id} {c} <id>`." for c in kits)
+        return True, f"{p.id} listed on {', '.join(sorted(c for c in done if c not in kits)) or 'no channel by API'}." + note
+
+    def _reprice(self, w, p: Product) -> tuple[bool, str]:
+        price = p.wanted["price"]
+        manual = [c for c, listing in p.listings.items() if self.channels[c].manual]
+        for c, listing in p.listings.items():
+            self.channels[c].set_price(listing, price)
+        with w.lock:
+            p.price = price
+        return True, f"{p.id} now ${price / USD:.2f}" + (f"; change it by hand on {', '.join(manual)}" if manual else "")
+
+    def _drop(self, w, p: Product) -> tuple[bool, str]:
+        manual = [c for c in p.listings if self.channels[c].manual]
         for c, listing in p.listings.items():
             self.channels[c].unlist(listing)
         with w.lock:
             p.listings, p.stage = {}, Stage.DROPPED
-        return True, f"{p.id} unlisted everywhere"
+        return True, f"{p.id} unlisted" + (f"; archive it by hand on {', '.join(manual)}" if manual else "")
+
+    def _illustrate(self, w, p: Product) -> tuple[bool, str]:
+        folder = self._folder(w)
+        if self.images is None or folder is None:
+            return False, "no illustration service or folder"
+        art = self.images.generate(p.art_prompt)
+        path = folder / "products" / p.id / "art.png"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(art)
+        with w.lock:
+            p.art = str(path)
+            w.meter.record_bill(p.maker, "illustration", getattr(self.images, "price", 0), cycle=w.cycle)
+        return True, f"{p.id} has an illustration ({path}); it goes on the cover when you list it"
+
+    def link(self, product_id: str, channel: str, listing: str) -> str:
+        """A product you listed by hand on a manual channel, linked so its sales are collected."""
+        p = self.products.get(product_id)
+        if p is None or channel not in p.listings:
+            raise ValueError(f"{product_id} has no listing on {channel} waiting for a link")
+        p.listings[channel] = listing
+        if link := getattr(self.channels[channel], "link", None):
+            link(listing)
+        return f"{product_id} linked to {channel} {listing}"
 
     # ── what a co-op sees ──────────────────────────────────────
     def view(self, w, coop: str) -> str:

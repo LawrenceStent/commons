@@ -99,3 +99,53 @@ def test_only_the_maker_can_ask_for_its_product():
     w = store()
     out = Actions(w, w.communities["press"]).desk_call("list_product", {"product_id": "P1", "channels": ["etsy"]})
     assert not out and "no product" in out.message
+
+
+def test_an_approved_illustration_is_billed_in_real_dollars_and_goes_on_the_cover(tmp_path):
+    from packs.storefront.images import FluxImages
+
+    w = store()
+    assert "spend is \"deny\"" in _illustrate_with(w, FluxImages("k", price=30_000)).message  # your policy decides
+    w.gate.policy = GatePolicy(publish="ask", spend="ask")
+    w.desk.folder = str(tmp_path)
+    w.desk.images = FluxImages("k", price=30_000, transport=lambda *a: (200, b""))
+    w.desk.images.generate = lambda prompt: _png()
+    assert "logo" not in desk(w, "illustrate", prompt="a quiet wheat field at dawn, soft light").message
+    assert w.desk.products["P1"].art == ""  # not before you approve the spend
+    request = w.gate.pending()[0]
+    assert request.risk == "spend" and "$0.03" in request.detail
+    approve_all(w)
+    w.step()
+    p = w.desk.products["P1"]
+    assert p.art.endswith("art.png") and w.ledger.real()["services_spend"] == 30_000
+    desk(w, "list_product", channels=["etsy"])
+    assert (tmp_path / "products" / "P1" / "cover.png").exists() and "Files (open them before approving)" in \
+        w.gate.pending()[0].detail
+
+
+def test_a_manual_channel_gets_a_kit_then_a_link(tmp_path):
+    w = store(channels={"lemonsqueezy": FakeChannel("lemonsqueezy", manual=True, base_rate=0.0)})
+    w.desk.folder = str(tmp_path)
+    desk(w, "list_product", channels=["lemonsqueezy"])
+    approve_all(w)
+    w.step()
+    p = w.desk.products["P1"]
+    request = next(r for r in w.gate.requests.values() if r.tool == "list_product")
+    assert p.listings == {"lemonsqueezy": ""} and "commons link" in request.result
+    w.desk.link("P1", "lemonsqueezy", "variant-9")
+    assert p.listings == {"lemonsqueezy": "variant-9"}
+
+
+def _png():
+    import io
+
+    from PIL import Image
+
+    out = io.BytesIO()
+    Image.new("RGB", (64, 48), (200, 180, 120)).save(out, "PNG")
+    return out.getvalue()
+
+
+def _illustrate_with(w, images):
+    w.desk.images = images
+    return desk(w, "illustrate", prompt="a quiet wheat field at dawn, soft light")

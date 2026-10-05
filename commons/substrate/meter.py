@@ -83,6 +83,17 @@ class Meter:
         self._check_real(cycle)
         return amount
 
+    def record_bill(self, who: str, what: str, amount: Micros, *, cycle: int) -> None:
+        """A real bill from an outside service other than a model (an image, say): booked to `ext:services` from the
+        owner's capital, counted against the real-dollar ceiling like any model call."""
+        self._roll(cycle // self.cycles_per_day)
+        self.ledger.transfer("owner:capital", "ext:services", amount, cycle=cycle, kind="service", memo=f"{who} {what}",
+                             currency=USD)
+        self.real_spent_today += amount
+        self.hub.emit("meter.real", cycle, community=who, model=what, amount=amount,
+                      spent_today=self.real_spent_today, ceiling=self.real_ceiling)
+        self._check_real(cycle)
+
     def _book_real(self, who: str, model: str, amount: Micros, cycle: int, from_purse: bool) -> None:
         self._roll(cycle // self.cycles_per_day)
         if not from_purse:  # in a USD society a purse charge *is* the bill; don't book it twice

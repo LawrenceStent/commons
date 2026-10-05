@@ -221,3 +221,15 @@ def test_approve_shows_what_would_go_public(tmp_path, monkeypatch, capsys):
     cli.main(["approve", "shop"])
     out = capsys.readouterr().out
     assert "list_product" in out and "Title: 30-Day Plan" in out and "Price: $4.99" in out
+
+
+def test_channels_says_which_keys_are_set_never_their_values(monkeypatch, capsys, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    for name in ("BFL_API_KEY", "ETSY_KEYSTRING", "ETSY_SHOP_ID", "ETSY_ACCESS_TOKEN", "ETSY_TAXONOMY_ID",
+                 "LEMONSQUEEZY_API_KEY", "LEMONSQUEEZY_STORE_ID"):
+        monkeypatch.delenv(name, raising=False)
+    (tmp_path / ".env").write_text("BFL_API_KEY=very-secret-key\n")
+    cli.main(["channels", "--pack", "storefront"])
+    out = capsys.readouterr().out
+    assert "ready" in out.splitlines()[0] and "etsy" in out and "missing ETSY_KEYSTRING" in out
+    assert "very-secret-key" not in out

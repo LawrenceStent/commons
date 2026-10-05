@@ -48,7 +48,8 @@ def test_real_api_calls_in_a_simulation_are_recorded_in_usd():
     assert led.real()["api_spend"] == 0
     m.charge_usage("a", "claude-haiku-4-5", CALL, cycle=1, real=True)
     assert led.balance(purse("a")) == 10**6 - 2 * COST  # notional, in credits
-    assert led.real() == {"capital_in": COST, "revenue": 0, "api_spend": COST, "fees": 0}
+    assert led.real() == {"capital_in": COST, "revenue": 0, "api_spend": COST, "services_spend": 0, "fees": 0,
+                          "spend": COST, "sales_held": 0}
     assert m.real_spent_total() == COST
     led.check()
 
@@ -71,6 +72,7 @@ def test_live_society_pays_the_real_bill_from_purses_once():
     m = Meter(led, daily_ceiling=10**12)
     m.charge_usage("a", "claude-haiku-4-5", CALL, cycle=1, real=True)
     assert led.balance(purse("a")) == 10**6 - COST
-    assert led.real() == {"capital_in": 10**6, "revenue": 0, "api_spend": COST, "fees": 0}
+    assert led.real() == {"capital_in": 10**6, "revenue": 0, "api_spend": COST, "services_spend": 0, "fees": 0,
+                          "spend": COST, "sales_held": 0}
     assert led.total(SIM) == 0
     led.check()

@@ -4,6 +4,7 @@
     uv run commons tick ...        resume a saved society, play a few cycles, save it (scheduled forward tests)
     uv run commons tick-all ...    tick every unpaused society, one after another
     uv run commons list            every society on this machine; pause NAME / resume NAME / pace NAME MINUTES
+    uv run commons channels        a pack's outside services and their keys; link NAME ITEM CHANNEL ID
     uv run commons sim ...         a scripted society (no models)
     uv run commons console ...     the dashboard on a scripted society
     uv run commons found ...       found a society from a brief, or approve its blueprints
@@ -19,11 +20,14 @@
 import sys
 from importlib import import_module
 
+from commons.adapters import secrets
+
 COMMANDS = {
     "run": "live", "sim": "sim", "console": "console", "found": "found", "approve": "approve", "rate": "rate",
     "calibrate": "calibrate", "metrics": "metrics", "golden": "golden", "tick": "tick",
     "tick-all": "tick:main_all", "list": "societies:main_list", "pause": "societies:main_pause",
     "resume": "societies:main_resume", "pace": "societies:main_pace",
+    "channels": "store:main_channels", "link": "store:main_link",
 }
 
 
@@ -35,6 +39,7 @@ def main(argv: list[str] | None = None) -> None:
     if argv[0] not in COMMANDS:
         print((__doc__ or "").strip())
         sys.exit(f"unknown command {argv[0]!r}")
+    secrets.load_env()  # keys for outside services, from a git-ignored .env (see .env.example)
     module, _, function = COMMANDS[argv[0]].partition(":")
     getattr(import_module(f"commons.interfaces.cli.{module}"), function or "main")(argv[1:])
 

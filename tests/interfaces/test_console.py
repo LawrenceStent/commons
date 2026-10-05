@@ -81,7 +81,8 @@ def test_dashboard_separates_real_money_from_credits():
     w.meter.charge_usage("coop-a", "claude-haiku-4-5", Usage(input_tokens=1000), cycle=w.cycle, real=True)
     snap = snapshot({"world": w, "running": False, "speed": 4, "reason": None, "rss_limit": 1})
     assert snap["money"]["currency"] == "SIM"
-    assert snap["money"]["real"] == {"capital_in": 1000, "revenue": 0, "api_spend": 1000, "fees": 0}
+    assert snap["money"]["real"] == {"capital_in": 1000, "revenue": 0, "api_spend": 1000, "services_spend": 0,
+                                     "fees": 0, "spend": 1000, "sales_held": 0}
     assert snap["ledger"]["flows"].get("api", 0) == 0  # the real bill isn't mixed into credit flows
 
 

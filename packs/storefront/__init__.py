@@ -7,17 +7,21 @@ reaches the gate. Listing, repricing and dropping a product are publish requests
 A product that stops selling raises a drop request, never a drop. Set `[gate] publish = "ask"` in the operator folder
 to allow requests at all (the default denies them).
 
-Scripted runs and dry runs sell on fake channels in simulated credits. A live society has no channel until the real
-ones are connected (P2.7, test mode first).
+Scripted runs and dry runs sell on fake channels in simulated credits. A live society uses the real channels whose
+keys are in .env (see .env.example): Etsy by API (drafts until ETSY_ACTIVATE=yes), Lemon Squeezy by hand from a kit,
+then linked (`commons link`). Real sales are booked in USD, beside the credits their makers earn.
 """
 
+from commons.adapters import secrets
 from commons.agents.scripted import Cooperator, Defector, FreeRider
 from commons.domain.community import Community
 from commons.domain.pack import Pack
 from commons.domain.scorecard import Metric, mean_grade, useful, useful_share
 from packs.storefront.calibration import CASES
-from packs.storefront.channels import fake_channels
+from packs.storefront.channels import USD, fake_channels
 from packs.storefront.desk import Stage, StoreDesk
+from packs.storefront.images import FluxImages
+from packs.storefront.live_channels import ChannelError, EtsyChannel, LemonSqueezyChannel
 from packs.storefront.screen import screen
 from packs.storefront.work import TEMPLATES, WORK_SOURCE
 
@@ -94,6 +98,45 @@ def live_population(llm) -> list[Community]:
     ]
 
 
+def live_desk() -> StoreDesk:
+    """The real channels and image service whose keys are in .env (see .env.example); none, if none are. Etsy listings
+    stay drafts (free, checked by you in Etsy) unless ETSY_ACTIVATE=yes. A $5 sale earns its maker about one job's
+    worth of credits; the dollars themselves are booked in USD, yours."""
+    secrets.load_env()
+    activate = (secrets.get("ETSY_ACTIVATE") or "").lower() in ("yes", "true", "1")
+    channels = [EtsyChannel.from_env(draft_only=not activate), LemonSqueezyChannel.from_env()]
+    key = secrets.get("BFL_API_KEY")
+    images = FluxImages(key, secrets.get("BFL_MODEL") or "flux-2-klein-9b",
+                        round(float(secrets.get("BFL_PRICE_PER_IMAGE") or 0.03) * USD)) if key else None
+    return StoreDesk({c.name: c for c in channels if c}, credit_per_dollar=80_000, real=True, images=images)
+
+
+SERVICES = {
+    "images (BFL FLUX.2)": ("BFL_API_KEY",),
+    "etsy": ("ETSY_KEYSTRING", "ETSY_SHOP_ID", "ETSY_ACCESS_TOKEN", "ETSY_TAXONOMY_ID"),
+    "lemonsqueezy": ("LEMONSQUEEZY_API_KEY", "LEMONSQUEEZY_STORE_ID"),
+}
+
+
+def health(check: bool = False) -> list[str]:
+    """Which services have keys (names only, never values); with `check`, one free read-only call to each channel."""
+    secrets.load_env()
+    out = [f"{s:22} {'ready' if not (m := secrets.missing(*names)) else 'missing ' + ', '.join(m)}"
+           for s, names in SERVICES.items()]
+    if check and (etsy := EtsyChannel.from_env(draft_only=True)):
+        try:
+            etsy.shop_info()
+            out.append("etsy: the shop answers")
+        except ChannelError as e:
+            out.append(f"etsy: {e}")
+    if check and (lemon := LemonSqueezyChannel.from_env()):
+        try:
+            out.append(f"lemonsqueezy: {lemon.order_count()} order(s) visible")
+        except ChannelError as e:
+            out.append(f"lemonsqueezy: {e}")
+    return out
+
+
 def _store(w):
     return w.desk.products.values() if w.desk else []
 
@@ -130,5 +173,6 @@ PACK = Pack(
     screen=screen,
     # simulated credits: a $5 sale is worth about one job's reward
     desk=lambda seed: StoreDesk(fake_channels(seed), credit_per_dollar=16_000),
-    live_desk=lambda seed: StoreDesk({}),  # no channel until the real ones are connected (P2.7)
+    live_desk=lambda seed: live_desk(),
+    health=health,
 )
