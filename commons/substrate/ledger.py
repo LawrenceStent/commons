@@ -107,20 +107,8 @@ class Ledger:
              currency: str | None = None) -> int:
         """Atomically apply legs that sum to zero in one currency. Internal accounts may not go negative."""
         cur = currency or self.currency
-        if cur not in EXTERNAL:
-            raise ValueError(f"unknown currency {cur}")
         legs = [(a, n) for a, n in legs if n]
-        if sum(n for _, n in legs) != 0:
-            raise ValueError(f"unbalanced entry: {legs}")
-        foreign = [a for a, _ in legs if a in ALL_EXTERNAL and a not in EXTERNAL[cur]]
-        if foreign:
-            raise WrongCurrency(f"{cur} entry can't touch {', '.join(foreign)}")
-        after: dict[str, int] = {}
-        for account, n in legs:
-            after[account] = after.get(account, self.balance(account, cur)) + n
-        for account, amount in after.items():
-            if amount < 0 and account not in EXTERNAL[cur]:
-                raise InsufficientFunds(f"{account} would be {amount} {cur}")
+        after = self._balances_after(legs, cur)
         self.db.execute("BEGIN")
         try:
             entry = self.db.execute(
@@ -144,6 +132,23 @@ class Ledger:
         self._balances.update({(a, cur): n for a, n in after.items()})
         self.hub.emit("ledger.post", cycle, entry=entry, currency=cur, type=kind, memo=memo, legs=legs)
         return entry
+
+    def _balances_after(self, legs: list[tuple[str, int]], cur: str) -> dict[str, int]:
+        """Each account's balance once the legs apply, or why they can't."""
+        if cur not in EXTERNAL:
+            raise ValueError(f"unknown currency {cur}")
+        if sum(n for _, n in legs) != 0:
+            raise ValueError(f"unbalanced entry: {legs}")
+        foreign = [a for a, _ in legs if a in ALL_EXTERNAL and a not in EXTERNAL[cur]]
+        if foreign:
+            raise WrongCurrency(f"{cur} entry can't touch {', '.join(foreign)}")
+        after: dict[str, int] = {}
+        for account, n in legs:
+            after[account] = after.get(account, self.balance(account, cur)) + n
+        for account, amount in after.items():
+            if amount < 0 and account not in EXTERNAL[cur]:
+                raise InsufficientFunds(f"{account} would be {amount} {cur}")
+        return after
 
     def transfer(self, src: str, dst: str, amount: Micros, *, cycle: int, kind: str, memo: str = "",
                  currency: str | None = None) -> int:
