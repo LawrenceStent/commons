@@ -98,7 +98,8 @@ class EtsyChannel:
                 "type": "download", "is_supply": "false", "tags": ",".join(tags)}
         listing = str(self._call("POST", f"/shops/{self.shop}/listings", urllib.parse.urlencode(form).encode(),
                                  "application/x-www-form-urlencoded")["listing_id"])
-        for kind, (field, ctype) in {"pdf": ("file", "application/pdf"), "cover": ("image", "image/png")}.items():
+        uploads = {"pdf": ("file", "application/pdf"), "pdf_a4": ("file", "application/pdf"), "cover": ("image", "image/png")}
+        for kind, (field, ctype) in uploads.items():  # both paper sizes (Etsy allows five files), then the cover
             if files and kind in files:
                 path = Path(files[kind])
                 body, multipart = _multipart({"name": path.name} if field == "file" else {}, field, path.name,

@@ -11,6 +11,9 @@ Your decisions (5 Oct):
 4. **Dropping a product** requires the gate too. Kill criteria never drop anything themselves: they raise a drop
    request with the reason and the numbers, and you decide.
 
+5. **Prices** (6 Oct): at least $5, aiming well above with bundles and packs (up to $49.99). **Typst** typesets
+   every PDF (US Letter and A4) and cover; **every listing discloses AI use**. How each sale earns: `docs/REVENUE.md`.
+
 Done when (CHECKLIST.md): the first real dollar settles through the ledger.
 
 ## Rules (code, not prompts; the earn-online pack's screen, as OSINT's is)

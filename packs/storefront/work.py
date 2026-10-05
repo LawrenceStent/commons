@@ -48,7 +48,8 @@ TEMPLATES: dict[str, tuple[str, str]] = {  # in this order: same seed, same jobs
         "Write the store listing for {subject}.",
         "Four labelled lines or sections: Title (at most 140 characters), Description (what's included, page count, "
         "that it's a digital download to print at home), Tags (at most 13, comma-separated, each at most 20 "
-        "characters), Price (USD, between 1.99 and 19.99). " + HONEST,
+        "characters), Price (USD, at least 5.00 and at most 49.99: price for the value; bundles and packs well above "
+        "the floor). " + HONEST,
     ),
 }
 

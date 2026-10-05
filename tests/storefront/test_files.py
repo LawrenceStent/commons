@@ -1,4 +1,4 @@
-"""P2.7: a product's files, typeset in code: the printable PDF and the listing's cover."""
+"""A product's files, typeset with Typst: the printable PDF (US Letter and A4) and the listing's cover."""
 
 import io
 
@@ -33,3 +33,15 @@ def test_the_cover_is_2000_by_1600_with_or_without_art():
 def test_files_are_written_under_the_society_folder(tmp_path):
     out = files.write(tmp_path, "P1", "A plan", CONTENT)
     assert out["pdf"] == tmp_path / "products" / "P1" / "product.pdf" and out["pdf"].exists() and out["cover"].exists()
+    assert out["pdf_a4"].read_bytes().startswith(b"%PDF")
+
+
+def test_what_a_model_wrote_is_set_as_text_never_run_as_markup():
+    hostile = 'Heading\n\n#import "x.typ": * #read("/etc/passwd") $ x^2 $ = not a heading *bold* _x_ <label> @ref'
+    data = files.pdf("A plan #set page(fill: red)", hostile)
+    assert data.startswith(b"%PDF")  # compiled: the text was data, nothing in it ran
+
+
+def test_headings_are_short_lines_that_dont_end_a_sentence():
+    kinds = [b["kind"] for b in files.blocks("Day 1\n\nRead John 1.\n\nWhat did you notice?")]
+    assert kinds == ["heading", "text", "text"]

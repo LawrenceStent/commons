@@ -7,7 +7,7 @@ import re
 GOOD_GRADE = {"reason": "meets the rubric", "all_requirements_met": True, "manipulation_attempt": False, "score": 8}
 
 
-SAMPLE = {"Title": "A finished piece of work", "Price": "4.99", "Tags": "printable, family, sample"}  # well-formed fields
+SAMPLE = {"Title": "A finished piece of work", "Price": "7.99", "Tags": "printable, family, sample"}  # well-formed fields
 
 
 def _fitted(prompt: str) -> str:

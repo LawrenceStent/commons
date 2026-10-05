@@ -23,7 +23,7 @@ def store(publish="ask", channels=None, drop_after=48):
     w.step()
     w.desk.products["P1"] = Product("P1", "J1", "scribes", "30-Day KJV Bible Reading Plan | Printable PDF",
                                     "Thirty short daily readings, KJV references. 3 pages. A digital download.",
-                                    ("bible plan", "kjv", "printable"), round(4.99 * USD), 0.9)
+                                    ("bible plan", "kjv", "printable"), round(7.99 * USD), 0.9)
     return w
 
 
@@ -40,7 +40,7 @@ def test_a_listing_waits_for_you_then_goes_on_every_channel_chosen_and_sells():
     out = desk(w, "list_product", channels=["etsy", "lemonsqueezy"])
     assert out and "waiting for the operator's approval" in out.message
     r = w.gate.pending()[0]
-    assert r.risk == "publish" and "Title: 30-Day KJV" in r.detail and "$4.99" in r.detail and "etsy, lemonsqueezy" in r.detail
+    assert r.risk == "publish" and "Title: 30-Day KJV" in r.detail and "$7.99" in r.detail and "etsy, lemonsqueezy" in r.detail
     w.step()
     assert w.desk.products["P1"].listings == {}  # nothing public before you decide
     approve_all(w)
@@ -59,7 +59,7 @@ def test_a_listing_that_breaks_a_rule_or_its_limits_never_reaches_the_gate():
     out = desk(w, "list_product", channels=["etsy"])
     assert not out and "pressure" in out.message and w.gate.requests == {}
     w.desk.products["P1"].description = "A plan."
-    w.desk.products["P1"].price = 49 * USD
+    w.desk.products["P1"].price = 99 * USD
     assert "price" in desk(w, "list_product", channels=["etsy"]).message
     assert "choose channels" in desk(w, "list_product", channels=["amazon"]).message
 
@@ -88,11 +88,11 @@ def test_a_price_change_goes_through_the_gate_too():
     desk(w, "list_product", channels=["etsy"])
     approve_all(w)
     w.step()
-    assert desk(w, "set_price", price=6.5)
-    assert w.desk.products["P1"].price == round(4.99 * USD)  # not until you approve
+    assert desk(w, "set_price", price=12.5)
+    assert w.desk.products["P1"].price == round(7.99 * USD)  # not until you approve
     approve_all(w)
     w.step()
-    assert w.desk.products["P1"].price == round(6.5 * USD)
+    assert w.desk.products["P1"].price == round(12.5 * USD)
 
 
 def test_only_the_maker_can_ask_for_its_product():
@@ -149,3 +149,14 @@ def _png():
 def _illustrate_with(w, images):
     w.desk.images = images
     return desk(w, "illustrate", prompt="a quiet wheat field at dawn, soft light")
+
+
+def test_every_listing_discloses_ai_use_once_and_names_flux_for_an_illustration():
+    from packs.storefront.desk import disclosed
+
+    w = store()
+    desk(w, "list_product", channels=["etsy"])
+    detail = w.gate.pending()[0].detail
+    assert "About this product: written and designed with the help of AI tools, and reviewed by a person" in detail
+    again = disclosed(disclosed("A plan.", art=False), art=True)
+    assert again.count("About this product:") == 1 and "FLUX.2" in again and again.startswith("A plan.")
