@@ -12,6 +12,9 @@ keys are in .env (see .env.example): Etsy by API (drafts until ETSY_ACTIVATE=yes
 then linked (`commons link`). Real sales are booked in USD, beside the credits their makers earn.
 """
 
+import os
+import shutil
+
 from commons.adapters import secrets
 from commons.agents.scripted import Cooperator, Defector, FreeRider
 from commons.domain.community import Community
@@ -20,7 +23,7 @@ from commons.domain.scorecard import Metric, mean_grade, useful, useful_share
 from packs.storefront.calibration import CASES
 from packs.storefront.channels import USD, fake_channels
 from packs.storefront.desk import Stage, StoreDesk
-from packs.storefront.images import FluxImages
+from packs.storefront.images import KLEIN, FluxImages, LocalFluxImages
 from packs.storefront.live_channels import ChannelError, EtsyChannel, LemonSqueezyChannel
 from packs.storefront.screen import screen
 from packs.storefront.work import TEMPLATES, WORK_SOURCE
@@ -106,11 +109,19 @@ def live_desk() -> StoreDesk:
     secrets.load_env()
     activate = (secrets.get("ETSY_ACTIVATE") or "").lower() in ("yes", "true", "1")
     channels = [EtsyChannel.from_env(draft_only=not activate), LemonSqueezyChannel.from_env()]
-    key = secrets.get("BFL_API_KEY")
-    images = FluxImages(key, secrets.get("BFL_MODEL") or "flux-2-klein-9b",
-                        round(float(secrets.get("BFL_PRICE_PER_IMAGE") or 0.03) * USD)) if key else None
+    images = image_service()
     return StoreDesk({c.name: c for c in channels if c}, credit_per_dollar=80_000, real=True, images=images,
                      cycle_seconds=0)  # the wall clock: the kill criteria count real days
+
+
+def image_service():
+    """IMAGES=local: FLUX.2 [klein] 4B on this Mac (mflux; MFLUX_MODEL names it or its saved folder). Otherwise BFL's
+    API if BFL_API_KEY is set, else none (covers are typographic)."""
+    if (secrets.get("IMAGES") or "").lower() == "local":
+        return LocalFluxImages(os.path.expanduser(secrets.get("MFLUX_MODEL") or KLEIN))
+    key = secrets.get("BFL_API_KEY")
+    return FluxImages(key, secrets.get("BFL_MODEL") or "flux-2-klein-9b",
+                      round(float(secrets.get("BFL_PRICE_PER_IMAGE") or 0.03) * USD)) if key else None
 
 
 SERVICES = {
@@ -125,10 +136,17 @@ def health(check: bool = False) -> list[str]:
     secrets.load_env()
     out = [f"{s:22} {'ready' if not (m := secrets.missing(*names)) else 'missing ' + ', '.join(m)}"
            for s, names in SERVICES.items()]
+    if (secrets.get("IMAGES") or "").lower() == "local":
+        model = os.path.expanduser(secrets.get("MFLUX_MODEL") or KLEIN)
+        found = shutil.which("mflux-generate-flux2") or os.path.exists(os.path.expanduser("~/.local/bin/mflux-generate-flux2"))
+        out.append(f"{'images (local mflux)':22} " + ("ready, " + model if found else "mflux isn't installed (docs/IMAGES.md)"))
     if check and (etsy := EtsyChannel.from_env(draft_only=True)):
         try:
-            etsy.shop_info()
-            out.append("etsy: the shop answers")
+            shop = etsy.shop_info()
+            currency = str(shop.get("currency_code") or "?")
+            out.append(f"etsy: the shop answers; it sells in {currency}" + (
+                "" if currency == etsy.currency and etsy.rate else
+                f" (set ETSY_CURRENCY={currency}" + (" and ETSY_USD_RATE" if currency != "USD" else "") + " in .env)"))
         except ChannelError as e:
             out.append(f"etsy: {e}")
     if check and (lemon := LemonSqueezyChannel.from_env()):

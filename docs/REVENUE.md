@@ -5,6 +5,9 @@ How the storefront (Phase 2) can earn, and what each sale leaves after costs. Yo
 use. Fee figures are from memory, not checked today: confirm them against Etsy's and Lemon Squeezy's current fee pages
 before relying on them.
 
+Since 7 Oct images are drawn locally (FLUX.2 [klein] 4B through mflux, `docs/IMAGES.md`), so their cost below is $0
+unless you switch back to BFL's API. The go-live plan, with what a test costs: `docs/GO-LIVE.md`.
+
 ## Costs per sale
 
 | | Etsy | Lemon Squeezy |

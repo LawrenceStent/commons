@@ -43,18 +43,18 @@ def test_etsy_lists_a_digital_draft_uploads_its_files_and_activates_it(tmp_path)
                       {"pdf": tmp_path / "p.pdf", "cover": tmp_path / "c.png"})
     assert listing == "777"
     steps = [(m, path) for m, path, _, _ in calls]
-    assert steps == [("POST", "/shops/shop1/listings"), ("POST", "/shops/shop1/listings/777/files"),
+    assert steps == [("GET", "/shops/shop1"), ("POST", "/shops/shop1/listings"), ("POST", "/shops/shop1/listings/777/files"),
                      ("POST", "/shops/shop1/listings/777/images"), ("PATCH", "/shops/shop1/listings/777")]
-    form = calls[0][3].decode()
+    form = calls[1][3].decode()
     assert "type=download" in form and "price=4.99" in form and "who_made=i_did" in form and "taxonomy_id=2078" in form
-    assert calls[0][2]["x-api-key"] == "key:secret" and b"state=active" in calls[3][3]
+    assert calls[1][2]["x-api-key"] == "key:secret" and b"state=active" in calls[4][3]
 
 
 def test_etsy_draft_only_stops_before_activating(tmp_path):
     transport, calls = etsy_fake()
     ch = EtsyChannel("key", "", "shop1", "old", "r", 1, transport=transport, token_file=None, draft_only=True)
     ch.list("A", "B", ("t",), USD * 5, 1.0)
-    assert [m for m, *_ in calls] == ["POST"]
+    assert [m for m, *_ in calls] == ["GET", "POST"]  # the shop's currency, then the draft
 
 
 def test_etsy_refreshes_an_expired_token_and_keeps_the_new_pair(tmp_path):
@@ -163,3 +163,43 @@ def test_lemon_squeezy_reports_a_variant_gone_or_unpublished():
     assert ch(200, {"data": {"attributes": {"status": "published"}}}).taken_down("42") is None
     assert "draft" in ch(200, {"data": {"attributes": {"status": "draft"}}}).taken_down("42")
     assert "no longer has" in ch(404, None).taken_down("42")
+
+
+def gbp_shop(currency_code="GBP", rate=0.75):
+    calls = []
+
+    def transport(method, url, headers, body):
+        calls.append((method, url, body))
+        if method == "GET" and url.endswith("/shops/shop1"):
+            return 200, json.dumps({"currency_code": currency_code}).encode()
+        if method == "POST" and url.endswith("/listings"):
+            return 201, json.dumps({"listing_id": 9}).encode()
+        if "/transactions" in url:
+            return 200, json.dumps({"results": [{"transaction_id": 5, "listing_id": 9, "quantity": 1,
+                                                 "price": {"amount": 600, "divisor": 100, "currency_code": "GBP"}}]}).encode()
+        return 200, b"{}"
+    ch = EtsyChannel("k", "", "shop1", "a", "", 1, transport=transport, token_file=None, draft_only=True,
+                     currency="GBP", rate=rate, fees="uk")
+    return ch, calls
+
+
+def test_a_uk_shop_lists_in_pounds_and_its_sales_come_back_in_dollars():
+    ch, calls = gbp_shop()
+    ch.list("A", "B", ("t",), round(7.99 * USD), 1.0)
+    assert b"price=5.99" in calls[1][2]  # $7.99 at 0.75 to the dollar
+    ch.set_price("9", 10 * USD)
+    assert b'"price": 7.5' in calls[-1][2]
+    sale = ch.sales(1)[0]
+    assert sale.gross == 8 * USD  # £6.00 is $8.00
+    assert sale.fee == round(8 * USD * (0.065 + 0.04 + 0.0048) + 0.20 / 0.75 * USD) + 200_000
+
+
+def test_a_shop_in_another_currency_is_refused_before_anything_is_listed():
+    ch, calls = gbp_shop(currency_code="GBP")
+    ch.currency, ch.rate = "USD", 1.0  # .env says USD, the shop says GBP
+    with pytest.raises(ChannelError, match="sells in GBP"):
+        ch.list("A", "B", ("t",), 5 * USD, 1.0)
+    assert [m for m, *_ in calls] == ["GET"]
+    no_rate, _ = gbp_shop(rate=None)
+    with pytest.raises(ChannelError, match="ETSY_USD_RATE"):
+        no_rate.list("A", "B", ("t",), 5 * USD, 1.0)

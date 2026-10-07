@@ -99,8 +99,8 @@ ASSEMBLER = 0.15  # of a bundle's sales, to the co-op that put it together; the 
 TOOLS = (
     {"name": "drop_product", "description": "Ask the operator to unlist one of your products everywhere. Free; waits "
      "for their approval.", "input_schema": _schema({"product_id": S, "reason": S}, ["product_id", "reason"])},
-    {"name": "illustrate", "description": "Ask the operator to pay for one illustration for a product's cover "
-     "(FLUX.2, a few cents): describe the picture, no words in it, no real people, logos or brands. Waits for their "
+    {"name": "illustrate", "description": "Ask the operator for one illustration for a product's cover (FLUX.2; "
+     "free on this machine, a few cents by API): describe the picture, no words in it, no real people, logos or brands. Waits for their "
      "approval; without one the cover is typographic.",
      "input_schema": _schema({"product_id": S, "prompt": S}, ["product_id", "prompt"])},
     {"name": "make_bundle", "description": "Put 2 to 6 existing products (yours or other co-ops') together as one "
@@ -402,8 +402,9 @@ class StoreDesk:
             return False, why
         p.art_prompt = prompt
         cost = getattr(self.images, "price", 0) / USD
+        how = f"for about ${cost:.2f}" if cost else "on this machine (no charge)"
         out = w.approvals.request(coop, "steward", "illustrate", "spend", p.id,
-                                  f"Illustrate {p.id} ({p.title}) for about ${cost:.2f}:\n{prompt}")
+                                  f"Illustrate {p.id} ({p.title}) {how}:\n{prompt}")
         return out.ok, out.message
 
     def _ask(self, w, coop: str, tool: str, p: Product, detail: str) -> tuple[bool, str]:
@@ -495,7 +496,8 @@ class StoreDesk:
         path.write_bytes(art)
         with w.lock:
             p.art = str(path)
-            w.meter.record_bill(p.maker, "illustration", getattr(self.images, "price", 0), cycle=w.cycle)
+            if price := getattr(self.images, "price", 0):
+                w.meter.record_bill(p.maker, "illustration", price, cycle=w.cycle)
         return True, f"{p.id} has an illustration ({path}); it goes on the cover when you list it"
 
     def link(self, product_id: str, channel: str, listing: str) -> str:

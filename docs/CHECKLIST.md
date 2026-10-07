@@ -704,7 +704,11 @@ Plan, your decisions (5 Oct) and stages: `docs/PHASE2-PLAN.md`.
       (5 Oct). Stripe payment links aren't built; they would join behind the same sales port
 - [x] Decide charter mutability (5 Oct: by request for comment, then your gate; P2.5)
 - [x] Decide kill criteria (7 Oct: `docs/PHASE2-PLAN.md` decision 6; built in `packs/storefront/desk.py`)
-- [ ] P2.7 with your keys: `commons channels --check`, one product end to end (Etsy draft, Lemon Squeezy test mode)
+- [x] Go-live plan (7 Oct): `docs/GO-LIVE.md`. Lemon Squeezy first, at £0; Etsy (about £14) later
+- [x] Local images (7 Oct): FLUX.2 [klein] 4B through mflux (`IMAGES=local`, `docs/IMAGES.md`); ComfyUI documented
+      for colouring books, not built
+- [x] Etsy prices in the shop's currency (7 Oct): `ETSY_CURRENCY`, `ETSY_USD_RATE`, UK fees; checked before listing
+- [ ] P2.7 with your keys: `commons channels --check`, one product end to end (Lemon Squeezy test mode; Etsy later)
 - [ ] Done when: first dollar settles through the ledger (P2.8)
 
 ## Phase 3 — Multi-channel

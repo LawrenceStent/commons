@@ -24,7 +24,8 @@ Your decisions (5 Oct):
    - **after you deny** one, the rules wait **30 days** before asking again (one that expires unanswered may be asked
      again next cycle); an approved pause writes the society's `paused` file (`commons resume NAME` undoes it)
 
-Done when (CHECKLIST.md): the first real dollar settles through the ledger.
+Done when (CHECKLIST.md): the first real dollar settles through the ledger. How we get there, who does what, and
+what it costs: `docs/GO-LIVE.md` (7 Oct: Lemon Squeezy first, images local through mflux, Etsy later).
 
 ## Rules (code, not prompts; the earn-online pack's screen, as OSINT's is)
 

@@ -1,4 +1,12 @@
-"""Illustrations for covers: FLUX.2 through Black Forest Labs' API (your choice, 6 Oct: klein or pro), behind the gate.
+"""Illustrations for covers: FLUX.2, made on this Mac (mflux, your choice 7 Oct) or through Black Forest Labs' API,
+behind the gate either way.
+
+Local (the default when IMAGES=local): FLUX.2 [klein] 4B, Apache 2.0 weights, through mflux (Apple's MLX). No key,
+no bill. Each image is its own `mflux-generate-flux2` process, so the model's memory is returned as soon as the
+picture is made. Set up once: `uv tool install mflux`, then `mflux-save --model flux2-klein-4b --quantize 4
+--path ~/models/flux2-klein-4b-q4` (docs/IMAGES.md).
+
+The API (BFL_API_KEY):
 
 An illustration costs real money, so it is a "spend" request: the maker asks with a prompt, the prompt is screened by
 the storefront's rules first (no real people, trademarks or the rest), and nothing is generated until you approve.
@@ -8,18 +16,23 @@ The bill goes to the ledger as a real service bill and counts against the daily 
     poll     GET polling_url (x-key) until status is Ready                               ->  result.sample (a URL)
     fetch    GET the sample within 10 minutes (signed URLs expire)
 
-Only hosts ending in bfl.ai are ever contacted. Check that your BFL plan's terms let you sell what you generate.
+Only hosts ending in bfl.ai are ever contacted. Licensing what you sell is yours to check (you, 7 Oct).
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
+import shutil
+import subprocess
+import tempfile
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 from commons.adapters import secrets
 
@@ -95,3 +108,38 @@ class FluxImages:
         if status >= 400:
             raise ImageError(f"the image service answered {status}")
         return status, data
+
+
+KLEIN = "flux2-klein-4b"  # the only FLUX.2 checkpoint under Apache 2.0
+
+
+@dataclass
+class LocalFluxImages:
+    """FLUX.2 [klein] on this Mac through mflux. `model` is mflux's name for it or the folder `mflux-save` wrote (a
+    4-bit copy loads faster and needs well under 10 GB). The seed comes from the prompt, so the same prompt draws
+    the same picture."""
+    model: str = KLEIN
+    steps: int = 4  # klein is distilled for few steps
+    price: int = 0  # nothing to pay: the ledger books no bill
+    command: str = "mflux-generate-flux2"
+    wait: float = 900.0  # the first run loads the model from disk
+
+    def generate(self, prompt: str, width: int = 1440, height: int = 1088) -> bytes:
+        exe = shutil.which(self.command) or str(Path.home() / ".local" / "bin" / self.command)
+        if not Path(exe).exists():
+            raise ImageError(f"{self.command} isn't installed (uv tool install mflux; see docs/IMAGES.md)")
+        seed = int(hashlib.sha256(prompt.encode()).hexdigest()[:8], 16)
+        with tempfile.TemporaryDirectory() as folder:
+            out = Path(folder) / "image.png"
+            cmd = [exe, "--model", self.model, "--prompt", prompt, "--width", str(width), "--height", str(height),
+                   "--steps", str(self.steps), "--seed", str(seed), "--output", str(out), "--no-exif"]
+            if Path(self.model).expanduser().exists():
+                cmd[2] = str(Path(self.model).expanduser())
+                cmd += ["--base-model", KLEIN]
+            try:
+                done = subprocess.run(cmd, capture_output=True, text=True, timeout=self.wait)
+            except subprocess.TimeoutExpired as e:
+                raise ImageError(f"no image after {self.wait:.0f}s") from e
+            if done.returncode != 0 or not out.exists():
+                raise ImageError(f"mflux failed ({done.returncode}): {(done.stderr or done.stdout)[-300:]}")
+            return out.read_bytes()

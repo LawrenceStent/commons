@@ -11,6 +11,12 @@ Etsy (Open API v3): full listing through the API.
     tokens     an OAuth access token lasts an hour; on a 401 it is refreshed with the refresh token and kept in
                runs/etsy-token.json (git-ignored), since Etsy rotates refresh tokens
     `draft_only=True` stops before activating: the first live step, to check everything at no cost
+    currency   Etsy prices a listing in the shop's own currency. The society works in USD, so a shop in another
+               currency (a UK shop: GBP) needs ETSY_CURRENCY and ETSY_USD_RATE (shop currency per dollar): prices
+               go out converted and sales come back converted. Before the first listing the shop's currency is
+               checked against ETSY_CURRENCY, and nothing is listed if they differ
+    fees       estimated per sale from the shop's region (ETSY_FEES): 6.5% transaction, payment processing, the
+               UK's 0.48% regulatory fee, and the $0.20 renewal each sale brings
 
 Lemon Squeezy: its API can't create or change products (they are read only), so listing there is manual. When you
 approve, the store writes a kit (the PDF, the cover, the text) and tells you; you create the product in Lemon Squeezy
@@ -59,6 +65,12 @@ def _multipart(fields: dict[str, str], name: str, filename: str, data: bytes, ct
     return b"".join(parts) + f"--{boundary}--\r\n".encode(), f"multipart/form-data; boundary={boundary}"
 
 
+# Etsy's fees by shop region (ETSY_FEES): share of the sale (transaction + processing + regulatory) and the fixed
+# processing fee in the shop's currency. Figures as of Oct 2026; check them against Etsy's fee page.
+ETSY_FEES = {"us": (0.065 + 0.03, 0.25), "uk": (0.065 + 0.04 + 0.0048, 0.20)}
+RENEWAL = 200_000  # µ$: the $0.20 listing fee, charged again when a listing sells
+
+
 class EtsyChannel:
     name, manual = "etsy", False
     API = "https://api.etsy.com/v3/application"
@@ -66,8 +78,11 @@ class EtsyChannel:
 
     def __init__(self, keystring: str, secret: str, shop: str, access: str, refresh: str, taxonomy: int,
                  transport: Transport = urllib_transport, token_file: Path | None = Path("runs/etsy-token.json"),
-                 draft_only: bool = False):
+                 draft_only: bool = False, currency: str = "USD", rate: float | None = None, fees: str = "us"):
         self.keystring, self.secret, self.shop, self.taxonomy = keystring, secret, shop, taxonomy
+        self.currency, self.fees = currency.upper(), ETSY_FEES.get(fees.lower(), ETSY_FEES["us"])
+        self.rate = 1.0 if self.currency == "USD" else rate  # shop currency per dollar
+        self.checked = False  # the shop's currency, checked once before the first listing
         self.access, self.refresh, self.transport, self.token_file, self.draft_only = access, refresh, transport, token_file, draft_only
         if token_file and token_file.exists():  # a refreshed pair from an earlier run wins over .env's
             saved = json.loads(token_file.read_text())
@@ -81,8 +96,12 @@ class EtsyChannel:
         if secrets.missing(*names):
             return None
         g = secrets.get
+        rate = float(raw) if (raw := g("ETSY_USD_RATE")) else None
+        currency = g("ETSY_CURRENCY") or "USD"
+        fees = g("ETSY_FEES") or ("uk" if currency.upper() == "GBP" else "us")
         return cls(g("ETSY_KEYSTRING") or "", g("ETSY_SHARED_SECRET") or "", g("ETSY_SHOP_ID") or "",
-                   g("ETSY_ACCESS_TOKEN") or "", g("ETSY_REFRESH_TOKEN") or "", int(g("ETSY_TAXONOMY_ID") or 0), **kw)
+                   g("ETSY_ACCESS_TOKEN") or "", g("ETSY_REFRESH_TOKEN") or "", int(g("ETSY_TAXONOMY_ID") or 0),
+                   currency=currency, rate=rate, fees=fees, **kw)
 
     def __getstate__(self) -> dict:  # a saved society keeps no keys: they come back from the environment on resume
         return {"seen": self.seen, "draft_only": self.draft_only}
@@ -95,7 +114,8 @@ class EtsyChannel:
 
     # ── the port ───────────────────────────────────────────────
     def list(self, title, description, tags, price, quality, files=None) -> str:
-        form = {"quantity": "999", "title": title, "description": description, "price": f"{price / USD:.2f}",
+        self._check_currency()
+        form = {"quantity": "999", "title": title, "description": description, "price": f"{self._local(price):.2f}",
                 "who_made": "i_did", "when_made": "made_to_order", "taxonomy_id": str(self.taxonomy),
                 "type": "download", "is_supply": "false", "tags": ",".join(tags)}
         listing = str(self._call("POST", f"/shops/{self.shop}/listings", urllib.parse.urlencode(form).encode(),
@@ -114,7 +134,7 @@ class EtsyChannel:
 
     def set_price(self, listing: str, price: int) -> None:
         body = {"products": [{"sku": "", "property_values": [],
-                              "offerings": [{"price": round(price / USD, 2), "quantity": 999, "is_enabled": True}]}]}
+                              "offerings": [{"price": self._local(price), "quantity": 999, "is_enabled": True}]}]}
         self._call("PUT", f"/listings/{listing}/inventory", json.dumps(body).encode(), "application/json")
 
     def unlist(self, listing: str) -> None:
@@ -140,9 +160,38 @@ class EtsyChannel:
                 continue
             self.seen.add(tid)
             price = t["price"]
-            gross = round(price["amount"] / price["divisor"] * int(t.get("quantity", 1)) * USD)
-            out.append(Sale(str(t["listing_id"]), gross, round(gross * 0.095) + 450_000, cycle))  # Etsy's fees, est.
+            local = price["amount"] / price["divisor"] * int(t.get("quantity", 1))
+            gross = round(self._dollars(local, price.get("currency_code", self.currency)) * USD)
+            out.append(Sale(str(t["listing_id"]), gross, self._fee(gross), cycle))
         return out
+
+    # ── money: the society's dollars, the shop's currency ──────
+    def _local(self, price: int) -> float:
+        """A price in µ$ as the shop's currency, to the cent."""
+        if self.rate is None:
+            raise ChannelError(f"the shop sells in {self.currency}: set ETSY_USD_RATE ({self.currency} per dollar)")
+        return round(price / USD * self.rate, 2)
+
+    def _dollars(self, amount: float, currency: str) -> float:
+        if currency.upper() == "USD":
+            return amount
+        if currency.upper() != self.currency or not self.rate:
+            raise ChannelError(f"a sale in {currency}, but the shop is set up as {self.currency}")
+        return amount / self.rate
+
+    def _fee(self, gross: int) -> int:
+        """Etsy's fees on a sale, estimated, in µ$."""
+        share, fixed = self.fees
+        return round(gross * share + fixed / (self.rate or 1.0) * USD) + RENEWAL
+
+    def _check_currency(self) -> None:
+        if self.checked:
+            return
+        actual = str(self.shop_info().get("currency_code") or "").upper()
+        if actual and actual != self.currency:
+            raise ChannelError(f"the Etsy shop sells in {actual} but ETSY_CURRENCY is {self.currency}: set "
+                               f"ETSY_CURRENCY={actual} and ETSY_USD_RATE ({actual} per dollar) in .env")
+        self.checked = True
 
     def shop_info(self) -> dict:
         """The shop (read only): proves the keys and the token work."""

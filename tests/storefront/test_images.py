@@ -45,3 +45,30 @@ def test_a_save_keeps_neither_key_nor_transport(monkeypatch):
     monkeypatch.setenv("BFL_API_KEY", "from-env")
     back = pickle.loads(pickle.dumps(FluxImages("secret", model="flux-2-pro", transport=fake()[0])))
     assert back.key == "from-env" and back.model == "flux-2-pro" and b"secret" not in pickle.dumps(back)
+
+
+def test_local_flux_runs_mflux_once_per_image_with_a_seed_from_the_prompt(tmp_path):
+    from packs.storefront.images import KLEIN, LocalFluxImages
+    log = tmp_path / "args"
+    fake = tmp_path / "mflux-generate-flux2"
+    fake.write_text(f"#!/bin/sh\necho \"$@\" >> {log}\nwhile [ $# -gt 0 ]; do [ \"$1\" = --output ] && printf PNG > \"$2\"; shift; done\n")
+    fake.chmod(0o755)
+    images = LocalFluxImages(str(tmp_path), command=str(fake))  # a saved folder: named with its base model
+    assert images.generate("a quiet field at dawn, watercolour") == b"PNG"
+    images.generate("a quiet field at dawn, watercolour")
+    first, second = log.read_text().splitlines()
+    seed = [line.split("--seed ")[1].split()[0] for line in (first, second)]
+    assert seed[0] == seed[1] and f"--base-model {KLEIN}" in first and "--steps 4" in first and "--width 1440" in first
+    assert images.price == 0
+
+
+def test_local_flux_says_what_is_missing_or_what_failed(tmp_path):
+    import pytest
+    from packs.storefront.images import ImageError, LocalFluxImages
+    with pytest.raises(ImageError, match="isn't installed"):
+        LocalFluxImages(command=str(tmp_path / "nope")).generate("a field")
+    broken = tmp_path / "broken"
+    broken.write_text("#!/bin/sh\necho out of memory >&2\nexit 3\n")
+    broken.chmod(0o755)
+    with pytest.raises(ImageError, match="out of memory"):
+        LocalFluxImages(command=str(broken)).generate("a field")

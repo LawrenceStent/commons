@@ -136,7 +136,8 @@ those two files. Nothing is loaded or run.
 
 ## commons channels, link
 
-The storefront's outside services (Phase 2): FLUX.2 images (BFL), Etsy and Lemon Squeezy. Keys go in `.env` (copy
+The storefront's outside services (Phase 2): FLUX.2 images (local through mflux, `IMAGES=local`, see `docs/IMAGES.md`;
+or BFL's API), Etsy and Lemon Squeezy. Keys go in `.env` (copy
 `.env.example`; git-ignored, never printed, never saved with a society).
 
 ```sh
@@ -145,7 +146,9 @@ uv run commons channels --pack storefront --check    # one free, read-only call 
 uv run commons link shop P3 lemonsqueezy 123456      # a product you created by hand in Lemon Squeezy, linked
 ```
 
-Etsy lists by API, but stays at drafts (free; you check them in Etsy) until `ETSY_ACTIVATE=yes`. Lemon Squeezy's API
+Etsy lists by API, but stays at drafts (free; you check them in Etsy) until `ETSY_ACTIVATE=yes`. A shop that doesn't sell
+in dollars (a UK shop sells in GBP) needs `ETSY_CURRENCY` and `ETSY_USD_RATE`: `--check` shows the shop's currency, and
+nothing is listed while `.env` disagrees with it. Lemon Squeezy's API
 can't create products: when you approve a listing there, the store writes the PDF and cover under
 `STATE/../products/P3/` and tells you; you create the product in Lemon Squeezy (test mode first) and `link` it, and
 its orders and refunds are read from then on. Every listing, price change, drop and illustration is a gate request:
