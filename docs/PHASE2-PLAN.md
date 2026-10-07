@@ -13,6 +13,16 @@ Your decisions (5 Oct):
 
 5. **Prices** (6 Oct): at least $5, aiming well above with bundles and packs (up to $49.99). **Typst** typesets
    every PDF (US Letter and A4) and cover; **every listing discloses AI use**. How each sale earns: `docs/REVENUE.md`.
+6. **Kill criteria** (7 Oct), counted in calendar days (the wall clock live, not cycles), each only a request to you:
+   - **a product** raises a drop request when it has had **no sale for 60 days**; when **at least 3 of its sales, and
+     more than 20%, were refunded**; when **a channel took it down** (Etsy or Lemon Squeezy shows it gone, inactive
+     or unpublished); or when it **no longer passes the store's rules** (listed products are re-screened daily, so a
+     tightened rule reaches what's already listed)
+   - **the store** raises a pause request (the gate's govern class) when **nothing has sold for 90 days**, or when
+     its **real spend beat its real sales after fees by more than $25 over the last 30 days** (spend: model calls,
+     illustrations, and Etsy's $0.20 listing fee, now booked as a real bill)
+   - **after you deny** one, the rules wait **30 days** before asking again (one that expires unanswered may be asked
+     again next cycle); an approved pause writes the society's `paused` file (`commons resume NAME` undoes it)
 
 Done when (CHECKLIST.md): the first real dollar settles through the ledger.
 
@@ -39,7 +49,8 @@ Done when (CHECKLIST.md): the first real dollar settles through the ledger.
 - **Money:** real sales arrive in USD (the live society is real money end to end); the ledger books revenue per
   channel, fees and refunds; the real-dollar caps still apply to spending.
 - **Requests for comment** (kernel): a proposal type for charter changes with a comment window, then the gate.
-- **Drop requests:** the kill criteria (no sale in N days, say) raise them; the gate decides.
+- **Drop and pause requests:** the kill criteria (decision 6) raise them; the gate decides. Code:
+  `packs/storefront/desk.py` (the constants at the top), tests in `tests/storefront/test_store.py`.
 
 ## Stages
 
@@ -50,7 +61,8 @@ Done when (CHECKLIST.md): the first real dollar settles through the ledger.
 - [x] P2.3 The gate's publish class: listing requests, batch approval in the console and `commons approve`
 - [x] P2.4 The sales port, a fake channel, and the ledger's sales, fees and refunds by channel
 - [x] P2.5 Requests for comment: charter changes with a comment window, then the gate
-- [x] P2.6 Kill criteria as drop requests to the gate
+- [x] P2.6 Kill criteria as drop requests to the gate; settled 7 Oct (decision 6): 60 quiet days, refunds,
+      takedowns, the rules re-checked daily, a 30-day wait after a denial, and store-wide pause requests
 - [~] P2.7 Built and tested against fakes (6 Oct); waiting for your keys. Product files typeset in code (PDF and cover);
       FLUX.2 illustrations through BFL as spend requests; Etsy by API (drafts until ETSY_ACTIVATE=yes); Lemon Squeezy
       by hand from a kit, then `commons link` (its API can't create products); real sales booked in USD beside the

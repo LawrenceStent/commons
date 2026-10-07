@@ -164,7 +164,8 @@ kill-switch.
 - [x] Dashboard: "$" only ever means real money; credits show as "cr"; a Real money box shows
       capital in, customer revenue, real API spend, and today's real spend against the kill-switch
 - [ ] Phase 2: live society on a USD ledger. Upkeep becomes the actual API bill, publishing fees go to the
-      treasury rather than the compute sink, and there are per-co-op daily caps
+      treasury rather than the compute sink, and there are per-co-op daily caps (7 Oct: Etsy's listing fee is now
+      booked as a real bill, `ext:services`)
 
 ### 1.1 Turn-based engine (prerequisite for LLM agents)
 - [x] Mock market board, parts and rubrics, `StubGrader` (`commons/domain/market.py`)
@@ -696,10 +697,15 @@ live mode, then K6, K7, K8.
 ## Phase 2 — One real channel (digital products)
 
 Plan, your decisions (5 Oct) and stages: `docs/PHASE2-PLAN.md`.
-- [ ] Gate enforced via PreToolUse hook + egress allowlist; batch approval in console
-- [ ] Storefront + Stripe connector
-- [ ] Decide: charter mutability, kill criteria
-- [ ] Done when: first dollar settles through the ledger
+- [x] Gate enforced in the tool layer plus the egress allowlist (K5), with publish, spend and govern requests and
+      batch approval in the console and `commons approve` (P2.3); a PreToolUse hook wasn't needed, since agents
+      only act through the world's own tools
+- [x] Storefront and channels: Etsy by API, Lemon Squeezy by kit and `commons link` (P2.4, P2.7), your choice
+      (5 Oct). Stripe payment links aren't built; they would join behind the same sales port
+- [x] Decide charter mutability (5 Oct: by request for comment, then your gate; P2.5)
+- [x] Decide kill criteria (7 Oct: `docs/PHASE2-PLAN.md` decision 6; built in `packs/storefront/desk.py`)
+- [ ] P2.7 with your keys: `commons channels --check`, one product end to end (Etsy draft, Lemon Squeezy test mode)
+- [ ] Done when: first dollar settles through the ledger (P2.8)
 
 ## Phase 3 — Multi-channel
 - [ ] Content, services, affiliate venture templates

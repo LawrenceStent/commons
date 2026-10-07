@@ -7,6 +7,7 @@ Etsy (Open API v3): full listing through the API.
     price      PUT listings/{id}/inventory (one offering)
     unlist     PATCH state=inactive
     sales      GET shops/{shop}/transactions, newest first, until one already seen
+    taken down GET listings/{id}: gone, or in any state but active (draft too, once listings are activated)
     tokens     an OAuth access token lasts an hour; on a 401 it is refreshed with the refresh token and kept in
                runs/etsy-token.json (git-ignored), since Etsy rotates refresh tokens
     `draft_only=True` stops before activating: the first live step, to check everything at no cost
@@ -14,7 +15,8 @@ Etsy (Open API v3): full listing through the API.
 Lemon Squeezy: its API can't create or change products (they are read only), so listing there is manual. When you
 approve, the store writes a kit (the PDF, the cover, the text) and tells you; you create the product in Lemon Squeezy
 and link it (`commons link NAME P1 lemonsqueezy VARIANT_ID`). From then on its sales and refunds are read from the
-orders API. Test mode first: a test-mode key only sees test orders.
+orders API. Test mode first: a test-mode key only sees test orders. A linked variant that is gone or no longer
+published counts as taken down.
 """
 
 from __future__ import annotations
@@ -118,6 +120,18 @@ class EtsyChannel:
     def unlist(self, listing: str) -> None:
         self._state(listing, "inactive")
 
+    @property
+    def listing_fee(self) -> int:
+        return 0 if self.draft_only else 200_000  # $0.20 when a listing goes active (again at each sale and renewal)
+
+    def taken_down(self, listing: str) -> str | None:
+        try:
+            state = self._call("GET", f"/listings/{listing}").get("state", "")
+        except ChannelError as e:
+            return "Etsy no longer has the listing" if " 404 " in str(e) else None
+        expected = ("active", "draft") if self.draft_only else ("active",)
+        return None if state in expected else f"Etsy shows it as {state or 'unknown'}"
+
     def sales(self, cycle: int) -> list[Sale]:
         out = []
         for t in self._call("GET", f"/shops/{self.shop}/transactions?limit=100").get("results", []):
@@ -166,7 +180,7 @@ class EtsyChannel:
 
 
 class LemonSqueezyChannel:
-    name, manual = "lemonsqueezy", True
+    name, manual, listing_fee = "lemonsqueezy", True, 0
     API = "https://api.lemonsqueezy.com/v1"
 
     def __init__(self, key: str, store: str, transport: Transport = urllib_transport):
@@ -218,6 +232,19 @@ class LemonSqueezyChannel:
                 self.refunded.add(oid)
                 out.append(Sale(variant, gross, fee, cycle, refund=True))
         return out
+
+    def taken_down(self, listing: str) -> str | None:
+        try:
+            status, data = self.transport("GET", f"{self.API}/variants/{urllib.parse.quote(listing)}",
+                                          {"Authorization": f"Bearer {self.key}", "Accept": "application/vnd.api+json"}, None)
+        except ChannelError:
+            return None
+        if status == 404:
+            return "Lemon Squeezy no longer has the product"
+        if status >= 400:
+            return None
+        state = json.loads(data).get("data", {}).get("attributes", {}).get("status", "")
+        return None if state == "published" else f"Lemon Squeezy shows it as {state or 'unknown'}"
 
     def order_count(self) -> int:
         """Orders visible to this key (read only): proves the key works (a test-mode key sees test orders)."""

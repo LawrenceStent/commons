@@ -7,16 +7,24 @@
                      request carrying everything that would go public. Nothing is listed until you approve
     set_price        a new price, through the gate the same way
     drop_product     unlisting, through the gate the same way (your decision, 5 Oct: dropping needs you)
-    kill criteria    a listed product with no sale for `drop_after` cycles raises a drop request; it is still you
-                     who decides
+    kill criteria    your decisions (7 Oct), each only a request to you, never a drop or a pause by itself:
+                     a listed product raises a drop request when it has had no sale for 60 days, when at least 3 of
+                     its sales and more than 20% were refunded, when a channel took it down, or when it no longer
+                     passes the store's rules (re-checked daily, so a tightened rule reaches what's already listed).
+                     After you deny one, the rules wait 30 days before asking again. The store raises a pause
+                     request when nothing has sold for 90 days, or when its real spend (models, illustrations,
+                     listing fees) beat its real sales after fees by more than $25 over the last 30 days
     sales            collected from every channel each cycle and paid to the maker, after the channel's fee, by the
                      ledger's revenue rule; `credit_per_dollar` scales dollars to the society's money (1:1 in a
                      live society; scaled down for simulated credits)
+
+Days are calendar days: the wall clock in a live society, `cycle_seconds` a cycle in a simulated one.
 """
 
 from __future__ import annotations
 
 import re
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -24,12 +32,21 @@ from pathlib import Path
 from typing import Any
 
 from commons.application.screening import screen
+from commons.domain.status import RequestStatus
+from commons.domain.pack import screened
 from commons.substrate.ledger import purse
 from packs.storefront import files
 from packs.storefront.channels import USD, Channel
 
 MAX_TITLE, MAX_TAGS, MAX_TAG = 140, 13, 20
 PRICES = (5.00, 49.99)  # your floor (6 Oct): $5, so channel fees stay small; aim well above with bundles and packs
+DAY = 86_400
+# the kill criteria (your decisions, 7 Oct): requests to you, never a drop or a pause by themselves
+QUIET_DAYS = 60  # a listed product with no sale this long
+REFUNDS = (3, 0.20)  # at least this many refunds, and more than this share of its sales
+SNOOZE_DAYS = 30  # after you deny a request, the rules wait this long before asking again
+STORE_QUIET_DAYS = 90  # nothing in the store sold: a pause request
+LOSS_DAYS, LOSS_LIMIT = 30, 25 * USD  # real spend over real sales (after fees) in this window: a pause request
 
 
 class Stage(StrEnum):
@@ -54,13 +71,20 @@ class Product:
     wanted: dict = field(default_factory=dict)  # what a pending request asked for (channels, price)
     listed_at: int | None = None
     last_sale: int | None = None
+    listed_t: float | None = None  # the same, as calendar time (seconds), for the kill criteria
+    sold_t: float | None = None
     sold: int = 0
+    refunds: int = 0
     revenue: int = 0  # µ$ gross
     content: str = ""  # the product itself (its content part), for the PDF
     files: dict = field(default_factory=dict)  # pdf, cover: paths, written when a listing is requested
     art: str = ""  # an approved illustration (a path), for the cover
     art_prompt: str = ""  # what an illustration request asked for
     parts: tuple[str, ...] = ()  # a bundle: the products it's made of
+    flags: dict[str, str] = field(default_factory=dict)  # the daily check: channels that took it down, the rules
+    checked_t: float = 0.0
+    drop_ask: str = ""  # the drop request the rules raised, while it waits for you
+    snoozed_until: float = 0.0  # you denied one: no new request before this
 
 
 def _schema(props: dict, required: list[str]) -> dict:
@@ -136,12 +160,22 @@ class StoreDesk:
     channels: Mapping[str, Channel]
     credit_per_dollar: int = USD  # credits (µ) the maker earns per dollar a sale brings in, after fees
     real: bool = False  # real channels: each sale is also booked in USD (buyer -> sales, fee -> ext:fees)
-    drop_after: int = 48  # cycles without a sale before a drop request is raised
+    quiet_days: float = QUIET_DAYS
+    cycle_seconds: float = DAY  # the calendar time a cycle stands for; 0: the wall clock (a live society)
     images: Any = None  # an illustration service (packs/storefront/images.py), if one is set up
     folder: str | None = None  # where product files go; the society's folder by default
     tools: tuple = TOOLS
     products: dict[str, Product] = field(default_factory=dict)
     made: set[str] = field(default_factory=set)  # jobs already turned into products
+    first_listed_t: float | None = None
+    store_sold_t: float | None = None
+    net_usd: int = 0  # µ$ real sales after the channels' fees, refunds taken off
+    days: list[tuple[float, int, int]] = field(default_factory=list)  # (when, real spend, net_usd), one a day
+    store_ask: str = ""
+    store_snoozed_until: float = 0.0
+
+    def now(self, cycle: int) -> float:
+        return cycle * self.cycle_seconds if self.cycle_seconds else time.time()
 
     # ── the cycle ──────────────────────────────────────────────
     def open(self, w) -> None:
@@ -151,14 +185,88 @@ class StoreDesk:
         for name, channel in sorted(self.channels.items()):
             for sale in channel.sales(w.cycle):
                 self._book(w, name, sale)
+        now = self.now(w.cycle)
+        for p in self.products.values():
+            if p.stage == Stage.LISTED and now - p.checked_t >= DAY:
+                self._check(w, p, now)
 
     def close(self, w) -> None:
-        """The kill criteria: a request to you, never a drop by itself."""
+        """The kill criteria: requests to you, never a drop or a pause by themselves."""
+        now = self.now(w.cycle)
         for p in self.products.values():
-            quiet_since = p.last_sale or p.listed_at
-            if p.stage == Stage.LISTED and quiet_since is not None and w.cycle - quiet_since >= self.drop_after:
-                why = f"no sale in {w.cycle - quiet_since} cycles on {', '.join(sorted(p.listings))}"
-                w.approvals.request(p.maker, "rule", "drop_product", "publish", p.id, self._detail(p, "Drop", why))
+            if p.stage != Stage.LISTED:
+                continue
+            p.drop_ask, p.snoozed_until = self._answered(w, p.drop_ask, now, p.snoozed_until)
+            if p.drop_ask or now < p.snoozed_until or not (reasons := self._drop_reasons(p, now)):
+                continue
+            numbers = (f"listed {(now - (p.listed_t or now)) / DAY:.0f} days; sold {p.sold}, refunded {p.refunds}, "
+                       f"${p.revenue / USD:.2f} gross")
+            out = w.approvals.request(p.maker, "rule", "drop_product", "publish", p.id,
+                                      self._detail(p, "Drop", "; ".join(reasons) + f" ({numbers})"))
+            p.drop_ask = out.id or ""
+        self._review_store(w, now)
+
+    def _check(self, w, p: Product, now: float) -> None:
+        """Once a day: has a channel taken it down, and does it still pass the store's rules (which may have changed)?"""
+        p.checked_t, p.flags = now, {}
+        for c, listing in sorted(p.listings.items()):
+            if listing and (why := self.channels[c].taken_down(listing)):
+                p.flags[c] = f"{c} took it down ({why})"
+        if why := screened(w.pack, "listing", f"Title: {p.title}\n{p.description}\nTags: {', '.join(p.tags)}"):
+            p.flags["rules"] = f"it no longer passes the store's rules: {why}"
+
+    def _drop_reasons(self, p: Product, now: float) -> list[str]:
+        out = []
+        since = max(p.listed_t or 0.0, p.sold_t or 0.0)
+        if p.listed_t is not None and now - since >= self.quiet_days * DAY:
+            out.append(f"no sale in {(now - since) / DAY:.0f} days on {', '.join(sorted(p.listings))}")
+        made = p.sold + p.refunds  # `sold` already has the refunds taken off
+        if p.refunds >= REFUNDS[0] and p.refunds > REFUNDS[1] * made:
+            out.append(f"{p.refunds} of its {made} sales refunded ({p.refunds / made:.0%})")
+        return out + [p.flags[k] for k in sorted(p.flags)]
+
+    @staticmethod
+    def _answered(w, ask: str, now: float, snoozed: float) -> tuple[str, float]:
+        """A request the rules raised: still waiting (kept), denied (no new one for SNOOZE_DAYS), or anything else
+        (expired unanswered, approved, failed): cleared, so the rules may ask again."""
+        r = w.gate.requests.get(ask) if ask else None
+        if r is None:
+            return "", snoozed
+        if r.status == RequestStatus.PENDING:
+            return ask, snoozed
+        return "", (now + SNOOZE_DAYS * DAY if r.status == RequestStatus.DENIED else snoozed)
+
+    def _review_store(self, w, now: float) -> None:
+        """The store as a whole: a pause request (the gate's govern class) when it has stopped selling or is losing
+        real money. Only once something has been listed."""
+        if self.first_listed_t is None:
+            return
+        spend = w.ledger.balance("ext:anthropic", "USD") + w.ledger.balance("ext:services", "USD") if self.real else 0
+        if not self.days or now - self.days[-1][0] >= DAY:
+            self.days.append((now, spend, self.net_usd))
+            self.days = [d for d in self.days if now - d[0] <= (LOSS_DAYS + 1) * DAY]
+        self.store_ask, self.store_snoozed_until = self._answered(w, self.store_ask, now, self.store_snoozed_until)
+        if self.store_ask or now < self.store_snoozed_until:
+            return
+        reasons = []
+        since = self.store_sold_t or self.first_listed_t
+        if now - since >= STORE_QUIET_DAYS * DAY:
+            reasons.append(f"nothing in the store has sold for {(now - since) / DAY:.0f} days")
+        base = next((d for d in reversed(self.days) if now - d[0] >= LOSS_DAYS * DAY), self.days[0])
+        spent, earned = spend - base[1], self.net_usd - base[2]
+        if self.real and spent - earned > LOSS_LIMIT:
+            reasons.append(f"in the last {min(LOSS_DAYS, round((now - base[0]) / DAY))} days it spent "
+                           f"${spent / USD:.2f} of real money and took ${earned / USD:.2f} after fees, "
+                           f"${(spent - earned) / USD:.2f} down (the limit is ${LOSS_LIMIT / USD:.0f})")
+        if reasons:
+            listed = [p for p in self.products.values() if p.stage == Stage.LISTED]
+            detail = (f"Pause the society: {'; '.join(reasons)}\nListed: {len(listed)} products; sold "
+                      f"{sum(p.sold for p in self.products.values())} in all. Ticks skip a paused society until "
+                      "`commons resume NAME`.")
+            makers = sorted(p.maker for p in (listed or self.products.values()) if p.maker in w.communities)
+            if makers:  # filed in the name of the co-op with the most listings, so its members hear of it too
+                who = max(sorted(set(makers)), key=makers.count)
+                self.store_ask = w.approvals.request(who, "rule", "pause_society", "govern", "society", detail).id or ""
 
     def _make(self, record: dict) -> None:
         self.made.add(record["job"])
@@ -181,18 +289,18 @@ class StoreDesk:
             for who, share in self._shares(p, max(net, 0)):
                 if back := min(share, w.ledger.balance(purse(who))):
                     w.ledger.transfer(purse(who), "market", back, cycle=w.cycle, kind="refund", memo=p.id)
-            p.sold, p.revenue = p.sold - 1, p.revenue - sale.gross
+            p.sold, p.revenue, p.refunds = p.sold - 1, p.revenue - sale.gross, p.refunds + 1
             w.tell(p.maker, "refund", f"{p.id} was refunded on {channel}: ${sale.gross / USD:.2f}")
             return
         p.sold, p.revenue, p.last_sale = p.sold + 1, p.revenue + sale.gross, w.cycle
+        p.sold_t = self.store_sold_t = self.now(w.cycle)
         for who, share in self._shares(p, max(net, 0)):
             if share > 0:
                 w.ledger.settle_revenue(who, share, cycle=w.cycle, memo=f"{p.id} on {channel}")
         w.tell(p.maker, "sale", f"{p.id} {p.title!r} sold on {channel} for ${sale.gross / USD:.2f}"
                                 f" (fee ${sale.fee / USD:.2f})")
 
-    @staticmethod
-    def _book_dollars(w, p: Product, channel: str, sale) -> None:
+    def _book_dollars(self, w, p: Product, channel: str, sale) -> None:
         """The real money, in USD beside the credits, never mixed with them: what the buyer paid, the channel's fee,
         and what's left, held in `sales` (yours). A refund reverses it, as far as `sales` holds."""
         sign = -1 if sale.refund else 1
@@ -201,6 +309,7 @@ class StoreDesk:
             return  # nothing left to reverse here: the refund came out of money already paid out to you
         w.ledger.post(legs, cycle=w.cycle, kind="refund" if sale.refund else "sale", memo=f"{p.id} on {channel}",
                       currency="USD")
+        self.net_usd += sign * (sale.gross - sale.fee)
 
     # ── tools ──────────────────────────────────────────────────
     def call(self, w, coop: str, tool: str, args: dict) -> tuple[bool, str]:
@@ -317,6 +426,8 @@ class StoreDesk:
     # ── what you approved ──────────────────────────────────────
     def carry_out(self, w, r) -> tuple[bool, str]:
         """Runs outside the world's lock (channels and images are the network); takes it to change the product."""
+        if r.tool == "pause_society":
+            return self._pause(w, r)
         p = self.products.get(r.target)
         if p is None:
             return False, f"no product {r.target}"
@@ -335,6 +446,12 @@ class StoreDesk:
         with w.lock:
             p.listings.update(done)
             p.stage, p.listed_at = Stage.LISTED, w.cycle
+            p.listed_t = p.checked_t = self.now(w.cycle)
+            self.first_listed_t = self.first_listed_t or p.listed_t
+            if self.real:
+                for c in done:
+                    if fee := self.channels[c].listing_fee:
+                        w.meter.record_bill(p.maker, f"listing {p.id} on {c}", fee, cycle=w.cycle)
         note = "".join(f" {c}: create it by hand from {p.files.get('pdf', 'its files')} and the listing above, then "
                        f"run `commons link <society> {p.id} {c} <id>`." for c in kits)
         return True, f"{p.id} listed on {', '.join(sorted(c for c in done if c not in kits)) or 'no channel by API'}." + note
@@ -353,8 +470,20 @@ class StoreDesk:
         for c, listing in p.listings.items():
             self.channels[c].unlist(listing)
         with w.lock:
-            p.listings, p.stage = {}, Stage.DROPPED
+            p.listings, p.stage, p.flags, p.drop_ask = {}, Stage.DROPPED, {}, ""
         return True, f"{p.id} unlisted" + (f"; archive it by hand on {', '.join(manual)}" if manual else "")
+
+    def _pause(self, w, r) -> tuple[bool, str]:
+        """A society on the schedule (a registry folder) gets the `paused` file `commons pause` writes; a one-off run
+        is halted."""
+        ledger = Path(w.params.storage.ledger_path)
+        folder = ledger.parent.parent if ledger.parent.name == "state" else ledger.parent
+        if ledger.name != ":memory:" and ((folder / "state").is_dir() or (folder / "society.toml").exists()):
+            (folder / "paused").write_text(f"paused {time.strftime('%Y-%m-%d %H:%M')} by the store's rules ({r.id})\n")
+            return True, f"paused: ticks skip it until `commons resume {folder.name}`"
+        with w.lock:
+            w.meter.halt(f"paused by the store's rules ({r.id})", w.cycle)
+        return True, "the run is halted"
 
     def _illustrate(self, w, p: Product) -> tuple[bool, str]:
         folder = self._folder(w)

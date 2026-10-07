@@ -1,7 +1,7 @@
 """P2.3, P2.4, P2.6: the store. Listing, repricing and dropping go through the gate as publish requests carrying
 everything that would go public; nothing reaches a channel until you approve. A product can be on several channels
-(combinations). Sales pay the maker after the channel's fee. A product that stops selling raises a drop request; you
-still decide."""
+(combinations). Sales pay the maker after the channel's fee. The kill criteria (7 Oct) raise drop and pause requests;
+you still decide, and a denial holds them off for 30 days."""
 
 from commons.application.actions import Actions
 from commons.application.society import Params, World
@@ -13,12 +13,12 @@ from packs.storefront.channels import USD, FakeChannel
 from packs.storefront.desk import Product, Stage, StoreDesk
 
 
-def store(publish="ask", channels=None, drop_after=48):
+def store(publish="ask", channels=None, quiet_days=60, real=False):
     pack = load("storefront")
     channels = {"etsy": FakeChannel("etsy", base_rate=0.9), "lemonsqueezy": FakeChannel("lemonsqueezy", base_rate=0.9)} \
         if channels is None else channels
     w = World(Params(**{**pack.params, "seed": 0, "verify": False, "jobs_per_cycle": 0}), pack=pack,
-              desk=StoreDesk(channels, credit_per_dollar=16_000, drop_after=drop_after))
+              desk=StoreDesk(channels, credit_per_dollar=16_000, quiet_days=quiet_days, real=real))  # a cycle is a day
     w.gate.policy = GatePolicy(publish=publish)
     w.step()
     w.desk.products["P1"] = Product("P1", "J1", "scribes", "30-Day KJV Bible Reading Plan | Printable PDF",
@@ -70,17 +70,113 @@ def test_publishing_needs_your_policy_and_a_live_store_has_no_channel_yet():
     assert load("storefront").live_desk(0).channels == {}
 
 
+def drops(w):
+    return [r for r in w.gate.pending() if r.tool == "drop_product"]
+
+
 def test_a_product_that_stops_selling_raises_a_drop_request_and_only_you_drop_it():
-    w = store(channels={"etsy": FakeChannel("etsy", base_rate=0.0)}, drop_after=3)
+    w = store(channels={"etsy": FakeChannel("etsy", base_rate=0.0)}, quiet_days=3)
     desk(w, "list_product", channels=["etsy"])
     approve_all(w)
     w.run(5)
     p = w.desk.products["P1"]
-    drop = [r for r in w.gate.pending() if r.tool == "drop_product"]
-    assert p.stage == Stage.LISTED and len(drop) == 1 and drop[0].actor == "rule" and "no sale in" in drop[0].detail
+    assert p.stage == Stage.LISTED and len(drops(w)) == 1 and drops(w)[0].actor == "rule"
+    assert "no sale in 3 days" in drops(w)[0].detail and "sold 0" in drops(w)[0].detail
     approve_all(w)
     w.step()
     assert p.stage == Stage.DROPPED and p.listings == {}
+
+
+def test_the_quiet_period_is_sixty_calendar_days_not_cycles():
+    w = store(channels={"etsy": FakeChannel("etsy", base_rate=0.0)})
+    desk(w, "list_product", channels=["etsy"])
+    approve_all(w)
+    w.run(59)
+    assert drops(w) == []
+    w.run(2)
+    assert len(drops(w)) == 1 and "no sale in 60 days" in drops(w)[0].detail
+    hourly = store(channels={"etsy": FakeChannel("etsy", base_rate=0.0)})
+    hourly.desk.cycle_seconds = 3600  # a society ticking hourly: 61 cycles is under 3 days
+    desk(hourly, "list_product", channels=["etsy"])
+    approve_all(hourly)
+    hourly.run(61)
+    assert drops(hourly) == []
+
+
+def test_after_you_deny_a_drop_the_rules_wait_thirty_days_before_asking_again():
+    w = store(channels={"etsy": FakeChannel("etsy", base_rate=0.0)}, quiet_days=3)
+    desk(w, "list_product", channels=["etsy"])
+    approve_all(w)
+    w.run(5)
+    w.web_desk.decide([drops(w)[0].id], False, reason="give it the summer")
+    w.run(29)
+    assert drops(w) == []
+    w.run(3)
+    assert len(drops(w)) == 1 and w.desk.products["P1"].stage == Stage.LISTED
+
+
+def test_frequent_refunds_raise_a_drop_request():
+    from packs.storefront.channels import Sale
+    w = store(channels={"etsy": FakeChannel("etsy", base_rate=0.0)})
+    desk(w, "list_product", channels=["etsy"])
+    approve_all(w)
+    w.step()
+    p, listing = w.desk.products["P1"], w.desk.products["P1"].listings["etsy"]
+    for refund in (False,) * 10 + (True,) * 2:
+        w.desk._book(w, "etsy", Sale(listing, p.price, USD, w.cycle, refund=refund))
+    w.step()
+    assert drops(w) == []  # 2 of 10: not yet
+    w.desk._book(w, "etsy", Sale(listing, p.price, USD, w.cycle, refund=True))
+    w.step()
+    assert len(drops(w)) == 1 and "3 of its 10 sales refunded (30%)" in drops(w)[0].detail
+
+
+def test_a_channel_takedown_or_a_rule_it_now_breaks_raises_a_drop_request():
+    etsy = FakeChannel("etsy", base_rate=0.0)
+    w = store(channels={"etsy": etsy})
+    desk(w, "list_product", channels=["etsy"])
+    approve_all(w)
+    w.run(2)
+    assert drops(w) == []
+    etsy.down.add(w.desk.products["P1"].listings["etsy"])
+    w.run(2)
+    assert len(drops(w)) == 1 and "etsy took it down" in drops(w)[0].detail
+    w2 = store(channels={"etsy": FakeChannel("etsy", base_rate=0.0)})
+    desk(w2, "list_product", channels=["etsy"])
+    approve_all(w2)
+    w2.step()
+    w2.desk.products["P1"].description += " Official merchandise."  # as if a rule had tightened since it was listed
+    w2.run(2)
+    assert len(drops(w2)) == 1 and "no longer passes the store's rules" in drops(w2)[0].detail
+
+
+def test_a_store_that_stops_selling_raises_one_pause_request():
+    w = store(channels={"etsy": FakeChannel("etsy", base_rate=0.0)}, quiet_days=1000)
+    desk(w, "list_product", channels=["etsy"])
+    approve_all(w)
+    w.run(89)
+    assert not [r for r in w.gate.pending() if r.tool == "pause_society"]
+    w.run(3)
+    pauses = [r for r in w.gate.pending() if r.tool == "pause_society"]
+    assert len(pauses) == 1 and pauses[0].risk == "govern" and "nothing in the store has sold for 90 days" in pauses[0].detail
+    approve_all(w)
+    w.step()
+    assert w.meter.halted  # an in-memory run has no folder to pause, so it halts
+
+
+def test_a_store_losing_real_money_raises_a_pause_request():
+    w = store(channels={"etsy": FakeChannel("etsy", base_rate=0.0)}, quiet_days=1000, real=True)
+    w.meter.real_ceiling = 1000 * USD
+    desk(w, "list_product", channels=["etsy"])
+    approve_all(w)
+    w.step()
+    w.meter.record_bill("scribes", "illustration", 20 * USD, cycle=w.cycle)
+    w.step()
+    assert not [r for r in w.gate.pending() if r.tool == "pause_society"]  # $20 down: under the limit
+    w.meter.record_bill("scribes", "illustration", 6 * USD, cycle=w.cycle)
+    w.step()
+    pauses = [r for r in w.gate.pending() if r.tool == "pause_society"]
+    assert len(pauses) == 1 and "$26.00 down" in pauses[0].detail
 
 
 def test_a_price_change_goes_through_the_gate_too():

@@ -42,8 +42,9 @@ THE RULES (the world enforces them: work or listings that break one are refused)
 
 SELLING
 A finished product becomes a draft in your desk. Listing it (on one channel or several), changing its price and
-dropping it are requests to the operator: nothing goes public until they approve. A product that hasn't sold for a
-long time raises a drop request by itself. Sales pay the maker, after the channel's fee."""
+dropping it are requests to the operator: nothing goes public until they approve. A product that hasn't sold for 60
+days, is often refunded, is taken down by a channel or no longer passes the rules raises a drop request by itself.
+Sales pay the maker, after the channel's fee."""
 
 GRADER_SYSTEM = """You grade work for a society that makes digital products for Christian and patriotic American \
 families. For each submission you get a task, a rubric, and the submitted work. Judge whether the work does the task \
@@ -108,7 +109,8 @@ def live_desk() -> StoreDesk:
     key = secrets.get("BFL_API_KEY")
     images = FluxImages(key, secrets.get("BFL_MODEL") or "flux-2-klein-9b",
                         round(float(secrets.get("BFL_PRICE_PER_IMAGE") or 0.03) * USD)) if key else None
-    return StoreDesk({c.name: c for c in channels if c}, credit_per_dollar=80_000, real=True, images=images)
+    return StoreDesk({c.name: c for c in channels if c}, credit_per_dollar=80_000, real=True, images=images,
+                     cycle_seconds=0)  # the wall clock: the kill criteria count real days
 
 
 SERVICES = {

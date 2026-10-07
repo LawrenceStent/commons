@@ -140,3 +140,26 @@ def test_etsy_sign_in_uses_pkce_and_swaps_the_code_for_tokens():
 
     assert etsy_login.exchange("key", "code-1", "verifier-123", transport) == {"access_token": "a", "refresh_token": "r"}
     assert sent["grant_type"] == ["authorization_code"] and sent["code_verifier"] == ["verifier-123"]
+
+
+def answering(status, body):
+    return lambda method, url, headers, data: (status, json.dumps(body).encode() if body is not None else b"gone")
+
+
+def test_etsy_reports_a_listing_it_took_down_and_charges_a_fee_only_when_activating():
+    def ch(status, body, draft_only=False):
+        return EtsyChannel("k", "", "s", "a", "", 1, transport=answering(status, body), token_file=None, draft_only=draft_only)
+    assert ch(200, {"state": "active"}).taken_down("777") is None
+    assert "removed" in ch(200, {"state": "removed"}).taken_down("777")
+    assert "no longer has" in ch(404, None).taken_down("777")
+    assert ch(500, None).taken_down("777") is None  # unreachable isn't a takedown
+    assert ch(200, {"state": "draft"}, draft_only=True).taken_down("777") is None
+    assert ch(200, {}).listing_fee == 200_000 and ch(200, {}, draft_only=True).listing_fee == 0
+
+
+def test_lemon_squeezy_reports_a_variant_gone_or_unpublished():
+    def ch(status, body):
+        return LemonSqueezyChannel("key", "1", transport=answering(status, body))
+    assert ch(200, {"data": {"attributes": {"status": "published"}}}).taken_down("42") is None
+    assert "draft" in ch(200, {"data": {"attributes": {"status": "draft"}}}).taken_down("42")
+    assert "no longer has" in ch(404, None).taken_down("42")

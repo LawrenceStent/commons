@@ -45,6 +45,14 @@ class Channel(Protocol):
         """Sales since the last call."""
         ...
 
+    @property
+    def listing_fee(self) -> int: ...  # µ$ the channel charges to publish a listing (a real bill)
+
+    def taken_down(self, listing: str) -> str | None:
+        """Why the channel no longer shows a listing we didn't unlist (removed, deactivated), or None. Never raises:
+        a channel that can't be reached hasn't taken anything down."""
+        ...
+
 
 @dataclass
 class FakeChannel:
@@ -54,7 +62,9 @@ class FakeChannel:
     fee_share: float = 0.065  # of the sale
     fee_fixed: int = 200_000  # µ$ a sale
     base_rate: float = 0.08  # chance a cycle that a $5 listing graded 1.0 sells
+    listing_fee: int = 0
     listings: dict[str, tuple[int, float]] = field(default_factory=dict)  # id -> (price µ$, quality)
+    down: set[str] = field(default_factory=set)  # listings the channel took down (tests)
     seq: int = 0
 
     def list(self, title, description, tags, price, quality, files=None) -> str:
@@ -74,6 +84,9 @@ class FakeChannel:
 
     def unlist(self, listing: str) -> None:
         self.listings.pop(listing, None)
+
+    def taken_down(self, listing: str) -> str | None:
+        return "removed by the channel" if listing in self.down else None
 
     def sales(self, cycle: int) -> list[Sale]:
         out = []

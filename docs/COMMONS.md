@@ -94,8 +94,8 @@ Commons replaces the planner with **a market and a reputation**:
 | 1.3 | LLM grader, model backends (structured output), calibration set | ✅ Done 25 Sep; local Hermes 8B scores 8/9 and resists injection; Anthropic calibration optional |
 | 1.4 | LLM agent runtime: steward tool loop, members, observation renderer, live runner | ✅ Done 25 Sep (tested with fake models) |
 | 1.5 | Live runs: local first, then Anthropic with a spend cap | ⏳ In progress: local smoke run done 25 Sep; small local models can't trade |
-| K1–K8 | Framework: one kernel, many societies (packs, founding from a brief, tempo and efficiency) | K1–K5 done 28–30 Sep (kernel/pack split; allocation, bonds and efficiency; founding from a brief, the archive, doctrine; the tech-for-good pack with grants, a grader panel, a scorecard and your ratings; web access for agents behind the gate); K6–K8 planned (`docs/FRAMEWORK.md`) |
-| 2 | One real channel: digital products, a storefront, Stripe, the human gate | Planned (becomes pack 0's live mode) |
+| K1–K8 | Framework: one kernel, many societies (packs, founding from a brief, tempo and efficiency) | K1–K5 done 28–30 Sep (kernel/pack split; allocation, bonds and efficiency; founding from a brief, the archive, doctrine; the tech-for-good pack with grants, a grader panel, a scorecard and your ratings; web access for agents behind the gate); K6 stage 1 (paper trading), K7 (OSINT) and K8 (many societies) done 4–5 Oct (`docs/FRAMEWORK.md`) |
+| 2 | One real channel: digital products (the storefront pack), Etsy and Lemon Squeezy, the human gate | ⏳ P2.1–P2.6 done 5–7 Oct (kill criteria settled 7 Oct); P2.7 built, waiting for your keys; P2.8 the first real dollar (`docs/PHASE2-PLAN.md`) |
 | 3 | More channels: content, services, affiliate | Planned |
 | 4 | On-chain settlement (Coinbase Agentic Wallets, x402) | Planned |
 
@@ -880,12 +880,17 @@ Findings:
 5. **Decide:** vote-weighting cap, grader panel, charter mutability.
 
 ### Phase 2: One real channel (digital products)
+Plan, your decisions and stages: `docs/PHASE2-PLAN.md`; what each sale earns: `docs/REVENUE.md`.
 - Gate enforced in two places (built in K5 for reads): the tool layer and a network egress allowlist, with batch
-  approval in the console. Phase 2 adds the first publish tool behind it.
-- Storefront plus Stripe; a live society on a USD ledger. Upkeep becomes the actual API bill, and
-  publishing fees go to the treasury. Per-community daily caps.
-- `venture.py`: hypothesis, KPIs, artifacts, channel binding.
-- Decide charter mutability and **kill criteria** *before* going live.
+  approval in the console. Phase 2 adds publish, spend and govern requests behind it.
+- The storefront pack sells on Etsy (by API) and Lemon Squeezy (by kit, then `commons link`), your
+  choice; Stripe payment links could join behind the same sales port.
+  A live society on a USD ledger: real sales are booked in USD beside the makers' credits.
+- Charter changes by request for comment, then your gate (decided 5 Oct).
+- **Kill criteria** (decided 7 Oct), each only a request to you: a product with no sale for 60 days, at least 3 and
+  over 20% of its sales refunded, taken down by a channel, or no longer passing the rules raises a drop request; a
+  store with nothing sold for 90 days, or more than $25 down in real money over 30 days, raises a pause request. After
+  you deny one, the rules wait 30 days before asking again.
 - **Done when:** the society ships a product you'd have approved anyway, and the first dollar settles
   through the ledger.
 
@@ -1029,7 +1034,8 @@ adversarially, then mainnet with per-community daily caps.
 
 ### Project
 - **Emotional investment.** Decide kill criteria before going live: what observation would show the
-  society is producing noise, and how long to let it run.
+  society is producing noise, and how long to let it run. For the storefront these are decided (7 Oct; Phase 2
+  above), and they only ever ask you, so the decision to stop stays yours.
 
 ---
 
@@ -1053,6 +1059,9 @@ adversarially, then mainnet with per-community daily caps.
 | 25 Sep | Only mostly bad records forget slowly | Claude | 1.2: honest-but-quiet records drifted to distrusted | — |
 | 25 Sep | Fork inherits good evidence halved, bad in full | Claude | Exit without laundering | — |
 | 26 Sep | The world refuses bids and awards below the trust line (0.35), not the agents | **You** | LLM primes kept hiring a known defector; judgement is fallible, a function isn't | If the line proves too harsh for honest newcomers after a bad start |
+| 5 Oct | Phase 2 sells faith and patriotic digital products on Etsy and Lemon Squeezy; charter changes by request for comment, then the gate; drops only through the gate | **You** | One real channel, with nothing public or irreversible done without you | After the first sales |
+| 6 Oct | A $5 price floor, Typst for every PDF, AI use disclosed on every listing | **You** | Channel fees eat small sales; looks worth buying; honesty and Etsy's rules | When sales data shows which prices sell |
+| 7 Oct | Kill criteria: 60 quiet days, refunds (3 and 20%), channel takedowns, the rules re-checked daily; store pause at 90 quiet days or $25 down in 30 days; 30 days' wait after a denial | **You** | Etsy takes weeks to surface a listing and seasonal products need a season; the rules only ask, so stopping stays your call | After 60 days live, with real numbers |
 
 ---
 

@@ -151,6 +151,12 @@ can't create products: when you approve a listing there, the store writes the PD
 its orders and refunds are read from then on. Every listing, price change, drop and illustration is a gate request:
 set `[gate] publish = "ask"` (and `spend = "ask"` for illustrations) in the society's operator folder.
 
+The kill criteria (`docs/PHASE2-PLAN.md` decision 6) only ever ask. A drop request comes from the rules (actor `rule`)
+when a product hasn't sold for 60 days, is often refunded, was taken down by a channel or no longer passes the rules.
+A `pause_society` request (risk `govern`) comes when the store has sold nothing for 90 days or is more than $25 down
+in real money over 30 days. Deny one and the rules wait 30 days before asking again. Approving a pause writes the
+`paused` file, so ticks skip the society until `uv run commons resume NAME`.
+
 ## commons sim
 
 Runs a scripted society (no models, no spend) and prints a summary and its scorecard. This is how incentive rules are
