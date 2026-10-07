@@ -43,8 +43,8 @@ a pause request if it's more than $25 down in real money over 30 days (decision 
       and `LEMONSQUEEZY_STORE_ID` in `.env` (copy `.env.example`)
 - [ ] **You:** the legal side: FLUX.2 [klein] 4B's Apache 2.0 licence, AI-made products (every listing already
       discloses AI use), what Lemon Squeezy needs from a UK seller to pay out, and HMRC
-- [~] **Claude:** local images: mflux installed and the 4-bit model saved to `~/models/flux2-klein-4b-q4`; one test
-      cover drawn. `IMAGES=local` in `.env`
+- [x] **Claude:** local images (7 Oct): mflux installed, the 4-bit model saved to `~/models/flux2-klein-4b-q4` (4.3 GB),
+      a test image drawn (1024×768 in about 20 s, 7.7 GB peak). You still set `IMAGES=local` in `.env`
 - [ ] **Claude:** a storefront society (`commons found`, pack `storefront`) whose operator folder asks you for every
       publish, spend and govern request (`[gate] publish = "ask"`, `spend = "ask"`, `govern = "ask"`)
 - [ ] **Claude:** `uv run commons channels --pack storefront --check` shows Lemon Squeezy answering and local images

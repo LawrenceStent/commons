@@ -33,6 +33,9 @@ mflux-generate-flux2 --model ~/models/flux2-klein-4b-q4 --base-model flux2-klein
   --seed 1 --output /tmp/test.png
 ```
 
+Measured on your M4 Pro (7 Oct): 1024×768 in about 20 seconds, 7.7 GB of memory at the peak. If the output file
+already exists, mflux writes `name_1.png` beside it rather than replacing it.
+
 ## How the store uses it
 
 `packs/storefront/images.py` `LocalFluxImages` runs `mflux-generate-flux2` once per approved image:
