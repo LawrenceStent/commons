@@ -21,7 +21,10 @@ matter most are code, not prompts, and breaking one halts the whole society unti
 3. **A co-op claims a job**, by the kernel's allocation rule (most trusted, best fit, least loaded).
 4. **Reading the web.** Members search and fetch through the gate. Every request passes the screen first, then
    your `[gate]` policy and allowlist, then the network layer's own allowlist. Pages read join the society's
-   archive as passages that can be cited.
+   archive as passages that can be cited. Search can be GOV.UK's API (free), Tavily (a key), Wikipedia, or several
+   joined (`search = "govuk+tavily+wikipedia"`). PDFs are read page by page, each page marked `[page N]`; scans
+   with no text layer are refused. Every HTML page ends with its links, documents first, so members can follow a
+   publication page to its PDF or spreadsheet.
 5. **Writing.** Members write each part from the archive. Formats are rules: wrong length or a missing section is
    refused at hand-in, with the reason, before any grader reads it. The screen reads every hand-in too, and personal
    data (phone numbers, personal email, street addresses, dates of birth) is refused.
@@ -59,6 +62,10 @@ For example, a search like "where the grid's backup works" trips the "where … 
 conservative setting; the log and your inbox say exactly what was refused and why.
 
 ## Setting one up
+
+A ready-made set for UK climate investigations is in `society.uk-climate.example/`: a brief, five questions and an
+operator folder with 36 vetted hosts (government, regulators, Parliament, courts, news, NGOs). Its README has the
+commands. The general case:
 
 ```sh
 # your questions, one per line, each tagged

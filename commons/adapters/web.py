@@ -7,7 +7,8 @@ the gate approved something by mistake, this layer refuses:
     - anything but https, IP-literal hosts, and hosts that resolve to private, loopback or link-local addresses
     - redirects to anywhere the allowlist doesn't cover (each hop is checked; at most 3)
     - pages a site's robots.txt disallows for us (search APIs, which are meant for programs, skip robots)
-    - anything that isn't text (html, plain, json, xml), and bodies over `max_bytes`
+    - anything that isn't text (html, plain, json, xml) or a PDF, and bodies over `max_bytes` (`pdf_max_bytes` for a
+      PDF, whose text is extracted page by page, each page marked "[page N]" so a citation can say where)
 
 Reads only: GET, no cookies, no credentials, a User-Agent that says what we are. Page text is untrusted: whoever
 shows it to a model fences it as reference material.
@@ -16,6 +17,7 @@ shows it to a model fences it as reference material.
 from __future__ import annotations
 
 import html
+import io
 import ipaddress
 import json
 import re
@@ -27,10 +29,12 @@ import urllib.robotparser
 from collections.abc import Callable
 from html.parser import HTMLParser
 
+from commons.adapters import secrets
 from commons.application.ports import Page, SearchResult, WebError, host_of
 
 USER_AGENT = "CommonsResearchBot/0.1 (a small research simulation; read-only, rate-limited)"
 TEXT_TYPES = ("text/html", "text/plain", "application/json", "application/xml", "text/xml", "application/xhtml+xml")
+PDF = "application/pdf"
 
 # (url, headers) -> (status, headers, body). The default is urllib without automatic redirects; tests pass a fake.
 Transport = Callable[[str, dict], tuple[int, dict, bytes]]
@@ -112,8 +116,13 @@ class _Text(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.out, self.title, self._skip, self._in_title = [], "", 0, False
+        self.links: list[tuple[str, str]] = []  # (href, its text), in page order
+        self._href: str | None = None
+        self._anchor: list[str] = []
 
     def handle_starttag(self, tag, attrs):
+        if tag == "a" and not self._skip:
+            self._href, self._anchor = dict(attrs).get("href"), []
         if tag in self.SKIP:
             self._skip += 1
         elif tag == "title":
@@ -122,6 +131,9 @@ class _Text(HTMLParser):
             self.out.append("\n")
 
     def handle_endtag(self, tag):
+        if tag == "a" and self._href:
+            self.links.append((self._href, " ".join("".join(self._anchor).split())))
+            self._href = None
         if tag in self.SKIP and self._skip:
             self._skip -= 1
         elif tag == "title":
@@ -134,21 +146,57 @@ class _Text(HTMLParser):
             self.title += data
         elif not self._skip:
             self.out.append(data)
+            if self._href:
+                self._anchor.append(data)
 
 
-def html_to_text(html: str) -> tuple[str, str]:
+DOCUMENTS = (".pdf", ".csv", ".xlsx", ".xls", ".ods", ".json", ".zip")
+MAX_LINKS = 40
+
+
+def html_to_text(html: str, base: str = "") -> tuple[str, str]:
+    """A page's title and text. With `base` (the page's url), the text ends with the page's links, so an agent can
+    follow them: documents (PDFs, spreadsheets) first, then the rest, at most MAX_LINKS."""
     p = _Text()
     p.feed(html)
     text = re.sub(r"[ \t\r\f\v]+", " ", "".join(p.out))
-    text = re.sub(r"\n\s*\n+", "\n\n", text)
-    return p.title.strip(), text.strip()
+    text = re.sub(r"\n\s*\n+", "\n\n", text).strip()
+    if base and (links := page_links(p.links, base)):
+        text += "\n\nLinks on this page:\n" + "\n".join(f"- {label}: {url}" if label else f"- {url}" for url, label in links)
+    return p.title.strip(), text
+
+
+def page_links(raw: list[tuple[str, str]], base: str) -> list[tuple[str, str]]:
+    seen, docs, rest = {base.split("#")[0]}, [], []
+    for href, label in raw:
+        url = urllib.parse.urljoin(base, href.strip()).split("#")[0]
+        if not url.startswith(("https://", "http://")) or url in seen:
+            continue
+        seen.add(url)
+        (docs if urllib.parse.urlsplit(url).path.lower().endswith(DOCUMENTS) else rest).append((url, label[:100]))
+    return (docs + rest)[:MAX_LINKS]
+
+
+def pdf_to_text(body: bytes, max_pages: int = 400) -> tuple[str, str]:
+    """A PDF's title and text, each page headed "[page N]"; scanned pages (no text layer) come out empty."""
+    from pypdf import PdfReader
+    from pypdf.errors import PdfReadError
+    try:
+        reader = PdfReader(io.BytesIO(body))
+        title = str((reader.metadata or {}).get("/Title") or "").strip()
+        pages = [f"[page {i + 1}]\n{(page.extract_text() or '').strip()}" for i, page in enumerate(reader.pages[:max_pages])]
+    except (PdfReadError, ValueError, KeyError, TypeError) as e:
+        raise WebError(f"couldn't read the PDF: {e}") from e
+    text = re.sub(r"[ \t\r\f\v]+", " ", "\n\n".join(pages))
+    return title, re.sub(r"\n\s*\n+", "\n\n", text).strip()
 
 
 class Fetcher:
     def __init__(self, egress: Egress, transport: Transport | None = None, max_bytes: int = 2_000_000,
-                 max_chars: int = 20_000):
+                 max_chars: int = 20_000, pdf_max_bytes: int = 30_000_000, pdf_max_chars: int = 200_000):
         self.egress, self.max_bytes, self.max_chars = egress, max_bytes, max_chars
-        self.transport = transport or urllib_transport(max_bytes=max_bytes)
+        self.pdf_max_bytes, self.pdf_max_chars = pdf_max_bytes, pdf_max_chars
+        self.transport = transport or urllib_transport(max_bytes=max(max_bytes, pdf_max_bytes))
         self._robots: dict[str, urllib.robotparser.RobotFileParser] = {}
         self.requests = 0  # every request that reached the transport, robots.txt included
 
@@ -156,14 +204,16 @@ class Fetcher:
         for _ in range(4):
             self.egress.check(url)  # every hop, before anything is sent
             self.requests += 1
-            status, headers, body = self.transport(url, {"User-Agent": USER_AGENT, "Accept": "text/html,text/plain,application/json"})
+            status, headers, body = self.transport(url, {"User-Agent": USER_AGENT,
+                                                        "Accept": "text/html,text/plain,application/json,application/pdf"})
             if status in (301, 302, 303, 307, 308) and headers.get("location"):
                 url = urllib.parse.urljoin(url, headers["location"])
                 continue
             if status >= 400:
                 raise WebError(f"{host_of(url)} answered {status}")
-            if len(body) > self.max_bytes:
-                raise WebError(f"the page at {url[:80]} is larger than {self.max_bytes} bytes")
+            limit = self.pdf_max_bytes if headers.get("content-type", "").startswith(PDF) else self.max_bytes
+            if len(body) > limit:
+                raise WebError(f"the page at {url[:80]} is larger than {limit} bytes")
             return url, headers, body
         raise WebError("too many redirects")
 
@@ -187,11 +237,20 @@ class Fetcher:
             raise WebError(f"{host_of(url)}'s robots.txt asks bots not to read {urllib.parse.urlsplit(url).path}")
         final, headers, body = self._get(url)
         ctype = headers.get("content-type", "text/html").split(";")[0].strip().lower()
+        if ctype == PDF or body[:5] == b"%PDF-":
+            title, text = pdf_to_text(body)
+            if not text.replace("[page", "").strip(" \n]0123456789"):
+                raise WebError(f"{url[:80]} is a PDF with no text layer (a scan)")
+            return Page(final, title or final.rsplit("/", 1)[-1], text[: self.pdf_max_chars])
         if ctype not in TEXT_TYPES:
-            raise WebError(f"{url[:80]} is {ctype}, not text")
+            raise WebError(f"{url[:80]} is {ctype}, not text or a PDF")
         raw = body.decode("utf-8", "replace")
-        title, text = html_to_text(raw) if "html" in ctype else ("", raw)
-        return Page(final, title or final, text[: self.max_chars])
+        if "html" not in ctype:
+            return Page(final, final, raw[: self.max_chars])
+        title, text = html_to_text(raw, base=final)
+        body_text, _, links = text.partition("\n\nLinks on this page:\n")
+        links = f"\n\nLinks on this page:\n{links}" if links else ""  # kept whole: the page is cut, not its links
+        return Page(final, title or final, body_text[: max(0, self.max_chars - len(links))] + links)
 
     def text(self, url: str) -> str:
         """An API call's body as text (a price feed's CSV, say). APIs are meant for programs: robots.txt doesn't apply."""
@@ -226,6 +285,107 @@ class WikipediaSearch:
         return out
 
 
+class GovUkSearch:
+    """GOV.UK's public search API: free, no key; everything published on gov.uk (departments, the Environment Agency,
+    Ofwat's publications, statistics). Its host must be on the allowlist like any other."""
+    host = "www.gov.uk"
+
+    def __init__(self, fetcher: Fetcher):
+        self.fetcher = fetcher
+
+    def search(self, query: str, k: int = 5) -> list[SearchResult]:
+        q = urllib.parse.urlencode([("q", query[:200]), ("count", k), ("fields", "title"), ("fields", "link"),
+                                    ("fields", "description")])
+        data = self.fetcher.json(f"https://{self.host}/api/search.json?{q}")
+        out = []
+        for hit in data.get("results", [])[:k]:
+            link = str(hit.get("link", ""))
+            url = link if link.startswith("https://") else f"https://{self.host}{link}"
+            out.append(SearchResult(str(hit.get("title", "")), url, str(hit.get("description", ""))))
+        return out
+
+
+# (url, headers, body) -> (status, body): Tavily is a POST with a key, which the read-only Fetcher never sends
+Poster = Callable[[str, dict, bytes], tuple[int, bytes]]
+
+
+def urllib_post(url: str, headers: dict, body: bytes) -> tuple[int, bytes]:
+    req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    try:
+        with urllib.request.build_opener(_NoRedirect).open(req, timeout=20) as r:
+            return r.status, r.read(2_000_000)
+    except urllib.error.HTTPError as e:
+        return e.code, e.read()[:2000] if e.fp else b""
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        raise WebError(f"couldn't reach {host_of(url)}: {getattr(e, 'reason', e)}") from e
+
+
+class TavilySearch:
+    """Tavily's web search API (TAVILY_API_KEY; 1,000 free searches a month). The whole web, so its results can name
+    pages on hosts the allowlist doesn't cover: those can't be read until you add the host."""
+    host = "api.tavily.com"
+
+    def __init__(self, fetcher: Fetcher, key: str | None = None, post: Poster = urllib_post):
+        self.fetcher, self.key, self.post = fetcher, key, post
+
+    def search(self, query: str, k: int = 5) -> list[SearchResult]:
+        key = self.key or secrets.get("TAVILY_API_KEY")
+        if not key:
+            raise WebError("no TAVILY_API_KEY set")
+        url = f"https://{self.host}/search"
+        self.fetcher.egress.check(url)  # the same allowlist as every read
+        self.fetcher.requests += 1
+        body = json.dumps({"query": query[:400], "max_results": k, "search_depth": "basic"}).encode()
+        status, data = self.post(url, {"Content-Type": "application/json", "Authorization": f"Bearer {key}",
+                                       "User-Agent": USER_AGENT}, body)
+        if status >= 400:
+            raise WebError(f"Tavily answered {status}")
+        try:
+            results = json.loads(data).get("results", [])
+        except json.JSONDecodeError as e:
+            raise WebError("Tavily didn't return JSON") from e
+        return [SearchResult(str(r.get("title", "")), str(r.get("url", "")), str(r.get("content", ""))) for r in results[:k]]
+
+
+class MultiSearch:
+    """Several providers asked in turn (`[gate] search = "govuk+tavily"`), their results interleaved without repeats.
+    A provider that fails is skipped, as long as another answers."""
+
+    def __init__(self, providers: list):
+        self.providers = providers
+
+    @property
+    def host(self) -> str:
+        return self.providers[0].host
+
+    def search(self, query: str, k: int = 5) -> list[SearchResult]:
+        lists, errors = [], []
+        for p in self.providers:
+            try:
+                lists.append(p.search(query, k))
+            except WebError as e:
+                errors.append(f"{p.host}: {e}")
+        if not lists:
+            raise WebError("; ".join(errors) or "no search provider")
+        out, seen = [], set()
+        for rank in range(k):
+            for results in lists:
+                if rank < len(results) and results[rank].url not in seen:
+                    seen.add(results[rank].url)
+                    out.append(results[rank])
+        return out[: k * len(lists)]
+
+
+SEARCHERS = {"wikipedia": WikipediaSearch, "govuk": GovUkSearch, "tavily": TavilySearch}
+
+
+def searcher(spec: str, fetcher: Fetcher):
+    """The search a `[gate] search` setting names: one provider, several joined with "+", or none."""
+    names = [n for n in spec.split("+") if n and n != "none"]
+    providers = [SEARCHERS[n](fetcher) for n in names]
+    return None if not providers else providers[0] if len(providers) == 1 else MultiSearch(providers)
+
+
 class WebAccess:
     """The web port (commons.application.ports.WebPort): a fetcher behind the allowlist, and an optional search provider. The
     allowlist follows the operator's [gate] policy, re-read every cycle."""
@@ -251,4 +411,4 @@ class WebAccess:
     @classmethod
     def default(cls, search: str = "wikipedia") -> WebAccess:
         fetcher = Fetcher(Egress(()))  # no hosts until the operator allows some
-        return cls(fetcher, WikipediaSearch(fetcher) if search == "wikipedia" else None)
+        return cls(fetcher, searcher(search, fetcher))

@@ -1,0 +1,26 @@
+# UK climate investigations (9 Oct). Copy to societies/<name>/operator/ after founding.
+# Reads on these hosts run at once (your decision: vetted hosts allowed); every other host is refused.
+# Widen the list here; the network layer enforces it independently of the gate.
+
+[gate]
+read = "allow"
+search = "govuk+tavily+wikipedia"   # GOV.UK's search (free), Tavily (TAVILY_API_KEY), Wikipedia
+per_cycle = 8                       # web calls per co-op per cycle
+allow_hosts = [
+  # search
+  "www.gov.uk", "api.tavily.com", "en.wikipedia.org",
+  # government, regulators, data
+  "assets.publishing.service.gov.uk", "environment.data.gov.uk", "check-for-flooding.service.gov.uk",
+  "www.data.gov.uk", "www.legislation.gov.uk", "www.ons.gov.uk", "www.metoffice.gov.uk",
+  "www.ofwat.gov.uk", "www.ofgem.gov.uk", "www.theccc.org.uk", "www.neso.energy", "api.carbonintensity.org.uk",
+  "www.nstauthority.co.uk", "www.sepa.org.uk", "naturalresources.wales",
+  # Parliament
+  "hansard.parliament.uk", "committees.parliament.uk", "commonslibrary.parliament.uk", "lordslibrary.parliament.uk",
+  "bills.parliament.uk", "questions-statements.parliament.uk",
+  # courts
+  "www.judiciary.uk", "www.bailii.org", "caselaw.nationalarchives.gov.uk",
+  # news and analysis, for leads
+  "www.bbc.co.uk", "www.theguardian.com", "www.carbonbrief.org", "www.reuters.com",
+  # NGOs and research
+  "www.sas.org.uk", "theriverstrust.org", "www.wwf.org.uk", "www.lse.ac.uk", "www.ipcc.ch",
+]

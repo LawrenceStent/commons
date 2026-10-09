@@ -9,7 +9,7 @@ from commons.domain.status import RequestStatus
 RISKS = ("read", "contact", "publish", "spend", "govern")  # govern: a co-op changing its own constitution
 TOOLS = {"web_search": "read", "web_fetch": "read"}  # tool -> risk class
 POLICIES = ("ask", "allow", "deny")
-SEARCH = ("wikipedia", "none")
+SEARCH = ("wikipedia", "govuk", "tavily", "none")  # join several with "+": "govuk+tavily"
 
 
 class GateError(ValueError):
@@ -42,8 +42,8 @@ class GatePolicy:
         hosts = cfg.get("allow_hosts", [])
         if not isinstance(hosts, list) or not all(isinstance(h, str) and h.strip() for h in hosts):
             raise GateError("[gate] allow_hosts must be a list of host names")
-        if cfg.get("search", "wikipedia") not in SEARCH:
-            raise GateError(f"[gate] search must be one of {', '.join(SEARCH)}")
+        if not all(n in SEARCH for n in str(cfg.get("search", "wikipedia")).split("+")):
+            raise GateError(f"[gate] search must be one of {', '.join(SEARCH)}, or several joined with +")
         return cls(**{**{k: cfg[k] for k in RISKS if k in cfg}, "allow_hosts": tuple(h.strip().lower() for h in hosts),
                       "search": cfg.get("search", "wikipedia"), "per_cycle": int(cfg.get("per_cycle", 6)),
                       "ttl": int(cfg.get("ttl", 10))})
