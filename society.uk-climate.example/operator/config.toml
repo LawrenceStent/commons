@@ -4,6 +4,7 @@
 
 [gate]
 read = "allow"
+publish = "ask"                     # work the screen flags waits for your editorial decision, not a halt
 search = "govuk+tavily+wikipedia"   # GOV.UK's search (free), Tavily (TAVILY_API_KEY), Wikipedia
 per_cycle = 8                       # web calls per co-op per cycle
 allow_hosts = [
@@ -20,9 +21,9 @@ allow_hosts = [
   # courts
   "www.judiciary.uk", "www.bailii.org", "caselaw.nationalarchives.gov.uk", "judiciary.scot", "www.judiciary.scot", "www.scotcourts.gov.uk",
   # news and analysis, for leads
-  "www.bbc.co.uk", "www.bbc.com", "www.theguardian.com", "www.carbonbrief.org", "www.reuters.com",
+  "www.bbc.co.uk", "www.bbc.com", "www.theguardian.com", "www.carbonbrief.org", "www.reuters.com", "www.thenational.scot", "www.heraldscotland.com",
   # campaign groups (your green light, 9 Oct): leads, to check against the primary record
-  "www.upliftuk.org", "www.clientearth.org", "www.greenpeace.org.uk", "friendsoftheearth.uk",
+  "www.upliftuk.org", "www.stopcambo.org.uk", "www.clientearth.org", "www.greenpeace.org.uk", "friendsoftheearth.uk",
   # NGOs and research
   "www.sas.org.uk", "theriverstrust.org", "www.wwf.org.uk", "www.lse.ac.uk", "www.ipcc.ch",
 ]

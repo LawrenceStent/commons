@@ -47,7 +47,7 @@ matter most are code, not prompts, and breaking one halts the whole society unti
 | Subjects are organisations, events, infrastructure or public records, never people | the screen: founding, every load | founding refused, with the reason |
 | No requests for personal data, no locating or tracking people, no people-finder sites | the screen: briefs, questions, every web search and fetch | refused; **the society halts** until you reset it |
 | No pages about people (register officer pages, profiles) | the screen: every fetch | refused; the society halts |
-| No personal data in the work | the screen: every hand-in | refused; the society halts |
+| No personal data in the work | the screen: every hand-in | with `[gate] publish = "ask"`: held for your editorial decision (approve and the same text passes; deny and the co-op rewrites), no halt. Otherwise refused, and the society halts |
 | Read only, public pages only, allowlisted hosts only, robots.txt respected | the gate (your `[gate]` policy) and the network layer, independently | refused |
 | Every claim cites a real source | the citation rule at grading | a made-up citation fails the part |
 | Claims say no more than their sources | the grader, shown the cited passages | an unsupported claim misses the rubric |
@@ -57,7 +57,7 @@ matter most are code, not prompts, and breaking one halts the whole society unti
 | Formats (length, sections) | at hand-in | refused with the reason |
 
 The screen's rules are deliberately broad (`packs/osint/screen.py`): a refused public-interest question can be
-reworded; a leaked address can't be unleaked. Because a refusal halts the society, a false positive stops it too.
+reworded; a leaked address can't be unleaked. Because a refusal halts the society, a false positive stops it too. Two did on 9 Oct (a date in a citation read as a phone number; "30 Jan 2025 Court rules" as a street address): both rules are tightened, and work the screen flags can now wait for your editorial decision instead (`publish = "ask"`). Searches and reads that target people still halt.
 For example, a search like "where the grid's backup works" trips the "where … works" rule. That's the price of the
 conservative setting; the log and your inbox say exactly what was refused and why.
 

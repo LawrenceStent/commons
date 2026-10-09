@@ -107,3 +107,35 @@ def test_years_before_a_court_are_not_street_addresses(text):
 def test_real_street_addresses_are_still_refused(text):
     from packs.osint.screen import screen
     assert "street address" in (screen("work", text) or "")
+
+
+def _osint_world(publish="ask"):
+    pack = load("osint")
+    w = World(Params(**{**pack.params, "seed": 0, "verify": False}), pack=pack)
+    w.gate.policy = GatePolicy(publish=publish)
+    w.step()
+    return w
+
+
+def test_flagged_work_waits_for_your_editorial_decision_and_doesnt_halt():
+    """Your decision, 9 Oct: work the screen flags is held for you, not a halt; approve it and the same text passes."""
+    from commons.application.screening import REVIEW, review_work
+    w = _osint_world()
+    coop = next(iter(w.communities))
+    text = "Findings: the regulator's office at 14 Acacia Avenue confirmed the fine."
+    held = review_work(w, coop, "steward", text)
+    assert held is not None and not held.ok and "editorial review" in held.message and not w.meter.halted
+    pending = [r for r in w.gate.pending() if r.tool == REVIEW]
+    assert len(pending) == 1 and pending[0].risk == "publish" and "Acacia Avenue" in pending[0].detail
+    assert review_work(w, coop, "steward", text).message == held.message  # asked once, not again
+    w.web_desk.decide([pending[0].id], True)
+    w.step()  # approvals run at the start of the next cycle
+    assert review_work(w, coop, "steward", text) is None  # you let it through
+    assert review_work(w, coop, "steward", text + " Also 10 Downing Street.") is not None  # other text: checked again
+
+
+def test_without_publish_review_flagged_work_halts_as_before():
+    from commons.application.screening import review_work
+    w = _osint_world(publish="deny")
+    out = review_work(w, next(iter(w.communities)), "steward", "write to 10 Downing Street")
+    assert out is not None and not out.ok and "street address" in out.message and w.meter.halted

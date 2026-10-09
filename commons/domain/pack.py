@@ -107,6 +107,9 @@ class Pack:
     without: frozenset[str] = frozenset()  # kernel actions this society doesn't have: not offered, refused by rule
     screen: Callable[[str, str], str | None] | None = None  # (kind, text) -> why it's refused; see `screened`
     halt_on_screen: bool = False  # a screened attempt halts the society until you reset it
+    # work the screen flags waits for your editorial decision (a "publish" gate request) instead of halting, when the
+    # operator's [gate] publish is "ask"; searches and reads that target people still halt (your decision, 9 Oct)
+    review_flagged_work: bool = False
     health: Callable[[bool], list[str]] | None = None  # its outside services: keys set? (and, if asked, do they answer?)
 
     @property

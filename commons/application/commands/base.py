@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from commons.application.observation import Outcome
-from commons.application.screening import screen
+from commons.application.screening import review_work, screen
 from commons.domain.grading import is_tagged
 from commons.domain.ids import ContractId
 from commons.domain.status import JobStatus
@@ -78,7 +78,7 @@ class CommandBase:
         them)."""
         if (err := self._size_ok(artifact)) is not None:
             return err
-        if (err := self._screened("work", artifact)) is not None:
+        if (err := review_work(self.w, self.me.name, self.actor, artifact)) is not None:
             return err
         if is_tagged(artifact) or not (problems := part.format.problems(artifact)):
             return None

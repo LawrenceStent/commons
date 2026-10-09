@@ -137,6 +137,7 @@ PACK = Pack(
     scorecard=SCORECARD,
     screen=screen,
     halt_on_screen=True,
+    review_flagged_work=True,
     # subjects come from your questions, screened; a venture would let a co-op pick its own
     without=frozenset({"propose_venture"}),
 )
