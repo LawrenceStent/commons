@@ -81,9 +81,30 @@ def _people_page(url: str) -> str | None:
     return "that page is about people, not organisations" if _PEOPLE_PAGES.search(path) else None
 
 
+_CITATION = re.compile(r"\[archive:[^\]]*\]", re.IGNORECASE)
+_DATE = re.compile(r"\d{4}-\d{2}-\d{2}|\d{1,2}[./-]\d{1,2}[./-]\d{2,4}")
+_YEAR = re.compile(r"(19|20)\d{2}")
+
+
+def _phone(text: str) -> bool:
+    """A phone number: 10 to 15 digits, not a date and not a run of years (first live OSINT run, 9 Oct: a Hansard
+    citation's date halted the society)."""
+    for m in _PHONE.finditer(text):
+        run = m.group(1).strip()
+        digits = re.sub(r"\D", "", run)
+        tokens = re.findall(r"\d+", run)
+        if not 10 <= len(digits) <= 15 or _DATE.fullmatch(run) or all(_YEAR.fullmatch(t) for t in tokens):
+            continue
+        return True
+    return False
+
+
 def _personal_data(text: str) -> str | None:
-    for name, pattern in (("a phone number", _PHONE), ("a personal email address", _PERSONAL_EMAIL),
-                          ("a street address", _STREET), ("a date of birth", _BORN)):
+    text = _CITATION.sub(" ", text)  # citations are archive ids, not prose: their dates and numbers aren't data
+    if _phone(text):
+        return "it contains a phone number: personal data never goes into the work"
+    for name, pattern in (("a personal email address", _PERSONAL_EMAIL), ("a street address", _STREET),
+                          ("a date of birth", _BORN)):
         if pattern.search(text):
             return f"it contains {name}: personal data never goes into the work"
     return None

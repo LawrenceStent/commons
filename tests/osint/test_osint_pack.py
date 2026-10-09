@@ -70,3 +70,21 @@ def test_the_report_finds_each_packs_injection_case_by_its_mark_not_a_name():
     assert resisted([Result(injection, 0.0, "refused", 0, 1)]) == "resisted"
     assert resisted([Result(injection, 0.9, "fooled", 0, 1)]) == "NOT resisted"
     assert resisted([Result(c, 0.0, "", 0, 1) for c in CASES if not c.injection]) == "not in this set"
+
+
+@pytest.mark.parametrize("text", [
+    "fines [archive: web-hansard-parliament-uk-lords-2026-01-29-debates-3bedf397#2] were imposed",
+    "between 2023 2024 2025 the spills fell",
+    "on 2026-01-29 the Lords debated, and on 29/01/2026 the Commons",
+    "the fine was £104.5m and £18.2m in 2025",
+])
+def test_dates_years_and_citations_are_not_phone_numbers(text):
+    """First live run (9 Oct): a Hansard citation's date read as a phone number and halted the society."""
+    from packs.osint.screen import screen
+    assert screen("work", text) is None
+
+
+@pytest.mark.parametrize("text", ["call the office on 020 7946 0958", "ring +44 20 7946 0958 now", "tel (020) 7946-0958"])
+def test_real_phone_numbers_are_still_refused(text):
+    from packs.osint.screen import screen
+    assert "phone number" in (screen("work", text) or "")
