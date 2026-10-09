@@ -40,8 +40,11 @@ _PEOPLE_PAGES = re.compile(r"/(officers|persons-with-significant-control|people|
 _PHONE = re.compile(r"(?<!\d)(\+?\d[\d\s().-]{8,}\d)(?!\d)")
 _PERSONAL_EMAIL = re.compile(r"\b[\w.+-]+@(gmail|googlemail|yahoo|hotmail|outlook|live|icloud|me|aol|proton|protonmail|"
                              r"gmx|mail)\.[a-z.]+\b", re.IGNORECASE)
-_STREET = re.compile(r"\b\d{1,5}[a-z]?\s+(\w+\s){0,3}(street|st|road|rd|avenue|ave|lane|ln|drive|dr|close|way|crescent|"
-                     r"court|ct|place|terrace|grove|boulevard|blvd)\b", re.IGNORECASE)
+# a house number, one to three capitalised words of street name, then the kind of street: "10 Downing Street",
+# "221B Baker Street". Not a year ("30 Jan 2025 Court rules ..." halted the first live run, 9 Oct) and not lower case
+# ("2025 court ruling").
+_STREET = re.compile(r"\b(\d{1,4}[A-Za-z]?),?\s+((?:[A-Z][\w'-]*\s+){1,3})(Street|St|Road|Rd|Avenue|Ave|Lane|Ln|Drive|"
+                     r"Dr|Close|Way|Crescent|Court|Ct|Place|Terrace|Grove|Boulevard|Blvd)\b")
 _BORN = re.compile(r"\bborn\s+(on\s+)?(\d{1,2}\s+\w+|\w+\s+\d{1,2})[,\s]+\d{4}\b", re.IGNORECASE)
 
 
@@ -103,8 +106,9 @@ def _personal_data(text: str) -> str | None:
     text = _CITATION.sub(" ", text)  # citations are archive ids, not prose: their dates and numbers aren't data
     if _phone(text):
         return "it contains a phone number: personal data never goes into the work"
-    for name, pattern in (("a personal email address", _PERSONAL_EMAIL), ("a street address", _STREET),
-                          ("a date of birth", _BORN)):
+    if any(not _YEAR.fullmatch(m.group(1)) for m in _STREET.finditer(text)):
+        return "it contains a street address: personal data never goes into the work"
+    for name, pattern in (("a personal email address", _PERSONAL_EMAIL), ("a date of birth", _BORN)):
         if pattern.search(text):
             return f"it contains {name}: personal data never goes into the work"
     return None

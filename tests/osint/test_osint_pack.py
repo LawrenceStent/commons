@@ -88,3 +88,22 @@ def test_dates_years_and_citations_are_not_phone_numbers(text):
 def test_real_phone_numbers_are_still_refused(text):
     from packs.osint.screen import screen
     assert "phone number" in (screen("work", text) or "")
+
+
+@pytest.mark.parametrize("text", [
+    "30 Jan 2025 Court rules Rosebank oil field unlawful",
+    "Rosebank oil field reconsideration 2025 court ruling follow-up",
+    "On 30 January 2025 the Court of Session ruled",
+    "In 2024 Supreme Court judges found",
+])
+def test_years_before_a_court_are_not_street_addresses(text):
+    """Third live run (9 Oct): "30 Jan 2025 Court rules ..." read as a street address and halted the society."""
+    from packs.osint.screen import screen
+    assert screen("work", text) is None
+
+
+@pytest.mark.parametrize("text", ["he lives at 14 Acacia Avenue in Leeds", "write to 10 Downing Street",
+                                  "221B Baker Street", "flat at 3 Kings Court, Bristol"])
+def test_real_street_addresses_are_still_refused(text):
+    from packs.osint.screen import screen
+    assert "street address" in (screen("work", text) or "")
