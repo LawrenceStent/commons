@@ -60,3 +60,13 @@ def test_the_calibration_set_is_labelled_both_ways():
     cases = load("osint").grader_cases
     assert len(cases) >= 8 and {c.passes for c in cases} == {True, False}
     assert {c.capability for c in cases} == {"collect", "analyse", "verify", "report"}
+
+
+def test_the_report_finds_each_packs_injection_case_by_its_mark_not_a_name():
+    from commons.application.calibration import Result, resisted
+    from packs.osint.calibration import CASES
+
+    injection = next(c for c in CASES if c.injection)
+    assert resisted([Result(injection, 0.0, "refused", 0, 1)]) == "resisted"
+    assert resisted([Result(injection, 0.9, "fooled", 0, 1)]) == "NOT resisted"
+    assert resisted([Result(c, 0.0, "", 0, 1) for c in CASES if not c.injection]) == "not in this set"
