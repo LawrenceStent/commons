@@ -1,7 +1,8 @@
 """The contract-net: how a prime buys a part of a job from another co-op.
 
 The contract-net spans cycles, and every stage has a deadline, so no one can stall another:
-    open       bids arrive; the prime awards from the next cycle   -> expired after `bid_window`
+    open       bids arrive; the prime awards from the next cycle   -> after `bid_window`, awarded by rule to the best
+               eligible bid if there is one (most trusted, then cheapest), else expired
     awarded    advance paid; contractor delivers                    -> failed after `deliver_ttl`:
                the prime keeps its complaint, the advance is gone
     delivered  the grader judges it (or, with prime reviews, the prime) -> accepted, rejected; if the prime can't pay
@@ -21,6 +22,7 @@ from commons.domain.contract import Contract
 from commons.domain.ids import ContractId, JobId
 from commons.domain.market import MarketJob
 from commons.domain.money import Micros
+from commons.protocol.contract import Award
 from commons.domain.status import (
     ContractStatus,
     JobStatus,
@@ -42,8 +44,9 @@ class ContractNet:
             if c.deadline >= now:
                 continue
             if c.status == ContractStatus.OPEN:
-                c.expire(at=now)
-                self.w.events.publish(ev.ContractExpired(c))
+                if not self.award_by_rule(c):
+                    c.expire(at=now)
+                    self.w.events.publish(ev.ContractExpired(c))
             elif c.status == ContractStatus.AWARDED:
                 # non-delivery is objective: the substrate files the prime's complaint for it
                 c.fail(at=now)
@@ -79,6 +82,31 @@ class ContractNet:
                      announced=self.w.cycle, deadline=self.w.cycle + self.w.params.contracts.bid_window)
         self.w.contracts[cid] = c
         self.w.events.publish(ev.ContractOpened(c))
+
+    def award_by_rule(self, c: Contract) -> bool:
+        """The bid window closed and the prime didn't choose (your decision, 9 Oct: in the first live OSINT runs no
+        steward ever awarded, so no job could finish). The commons awards as a steward would: the same eligibility,
+        independence and advance, to the most trusted eligible bidder, then the cheapest, then by name."""
+        prime = self.w.communities.get(c.prime)
+        job = self.w.jobs.get(c.job_id)
+        if prime is None or not c.bids:
+            return False
+        ranked = sorted(c.bids.items(), key=lambda b: (-round(self.w.trust(c.prime, b[0], c.capability), 2), b[1], b[0]))
+        for bidder, price in ranked:
+            if not self.w.eligible(c.prime, bidder, c.capability)[0]:
+                continue
+            if job is not None and job.independence_refusal(c.capability, bidder, self.w.contracts):
+                continue
+            advance = round(price * c.advance_frac)
+            try:
+                self.w.ledger.transfer(purse(c.prime), purse(bidder), advance, cycle=self.w.cycle, kind="contract",
+                                       memo=f"advance {c.id} (awarded by rule)")
+            except InsufficientFunds:
+                return False  # the prime can't pay any advance it owes: the contract expires
+            self.w.send(prime, Award(job_id=c.id, winner=bidder, price=price, advance=advance))
+            self.award(c, bidder, price, advance)
+            return True
+        return False
 
     def award(self, c: Contract, bidder: str, price: Micros, advance: Micros) -> None:
         c.award(bidder, price, advance, deliver_by=self.w.cycle + self.w.params.contracts.deliver_ttl)

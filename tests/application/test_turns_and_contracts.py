@@ -372,3 +372,38 @@ def test_pay_scales_with_the_share_of_claims_the_checker_found_supported():
         paid[tally] = w.ledger.balance(purse("prime")) - before
     full, three_quarters = paid.values()
     assert full > 0 and abs(three_quarters - 0.75 * full) <= 1
+
+
+def _close_bidding(w: World, cid):
+    while w.contracts[cid].status == "open" and w.cycle <= w.contracts[cid].deadline + 1:
+        w.step()
+
+
+def test_a_contract_the_prime_never_awards_goes_to_the_best_bid_when_bidding_closes():
+    """Your decision, 9 Oct: in the first live OSINT runs no steward ever awarded, so no job could finish."""
+    w = world()
+    job = claimed_job_needing_build(w)
+    job.deadline = w.cycle + 20  # time enough for the window to close
+    cid = act(w, "prime").announce(job.id, "build", 30_000, 0.5).id
+    assert act(w, "sub").bid(cid, 25_000) and act(w, "other").bid(cid, 20_000)
+    for _ in range(3):
+        w.rep.attest("prime", "other", "build", 1.0)  # the prime trusts "other" more
+    _close_bidding(w, cid)
+    c = w.contracts[cid]
+    assert c.status == "awarded" and c.winner == "other" and c.price == 20_000
+    paid = w.ledger.db.execute("SELECT p.account, p.amount FROM entries e JOIN postings p ON p.entry_id = e.id "
+                               "WHERE e.memo = ?", (f"advance {cid} (awarded by rule)",)).fetchall()
+    assert (purse("other"), 10_000) in paid  # the advance, paid as a steward's award would be
+    w.ledger.check()
+
+
+def test_bidding_closes_with_no_eligible_bid_and_the_contract_expires():
+    w = world()
+    job = claimed_job_needing_build(w)
+    job.deadline = w.cycle + 20
+    cid = act(w, "prime").announce(job.id, "build", 30_000, 0.5).id
+    assert act(w, "sub").bid(cid, 20_000)
+    for _ in range(6):
+        w.rep.attest("prime", "sub", "build", 0.0)  # sub falls below the trust line after bidding
+    _close_bidding(w, cid)
+    assert w.contracts[cid].status == "expired"
