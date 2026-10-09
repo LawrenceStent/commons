@@ -10,7 +10,7 @@ allow_hosts = [
   # search
   "www.gov.uk", "api.tavily.com", "en.wikipedia.org",
   # government, regulators, data
-  "assets.publishing.service.gov.uk", "environment.data.gov.uk", "check-for-flooding.service.gov.uk",
+  "assets.publishing.service.gov.uk", "*.blog.gov.uk", "environment.data.gov.uk", "check-for-flooding.service.gov.uk",
   "www.data.gov.uk", "www.legislation.gov.uk", "www.ons.gov.uk", "www.metoffice.gov.uk",
   "www.ofwat.gov.uk", "www.ofgem.gov.uk", "www.theccc.org.uk", "www.neso.energy", "api.carbonintensity.org.uk",
   "www.nstauthority.co.uk", "www.sepa.org.uk", "naturalresources.wales",
@@ -18,9 +18,9 @@ allow_hosts = [
   "hansard.parliament.uk", "committees.parliament.uk", "commonslibrary.parliament.uk", "lordslibrary.parliament.uk",
   "bills.parliament.uk", "questions-statements.parliament.uk",
   # courts
-  "www.judiciary.uk", "www.bailii.org", "caselaw.nationalarchives.gov.uk",
+  "www.judiciary.uk", "www.bailii.org", "caselaw.nationalarchives.gov.uk", "judiciary.scot", "www.judiciary.scot", "www.scotcourts.gov.uk",
   # news and analysis, for leads
-  "www.bbc.co.uk", "www.theguardian.com", "www.carbonbrief.org", "www.reuters.com",
+  "www.bbc.co.uk", "www.bbc.com", "www.theguardian.com", "www.carbonbrief.org", "www.reuters.com",
   # NGOs and research
   "www.sas.org.uk", "theriverstrust.org", "www.wwf.org.uk", "www.lse.ac.uk", "www.ipcc.ch",
 ]
