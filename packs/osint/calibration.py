@@ -26,13 +26,13 @@ UNSOURCED_COLLECT = """1. The blockage cost global trade $9.6 billion a day.
 3. The ship's owner paid a huge settlement."""
 
 GOOD_ANALYSE = """Findings
-The canal was blocked for six days in March 2021 [archive: suez-wiki#2]. Several hundred ships waited to pass [archive: suez-authority#1]. Estimates of the trade held up run to billions of dollars a day [archive: shipping-insurer#4].
+The canal was blocked for six days in March 2021, from the ship's grounding to its refloating [archive: suez-wiki#2]. Several hundred ships waited to pass at the peak, and the canal authority reported clearing the queue within days of reopening [archive: suez-authority#1]. Estimates of the trade held up run to billions of dollars a day, based on the value of goods normally carried [archive: shipping-insurer#4].
 
 Confidence
-High on the dates and duration: two independent sources agree. Medium on the number of ships: one official source. Low on the cost per day: it is a single estimate, and its method is not given.
+High on the dates and duration: two independent sources agree. Medium on the number of ships: one official source, which counts differently from press reports. Low on the cost per day: it is a single estimate, it measures goods delayed rather than money lost, and its method is not given.
 
 Gaps
-The sources do not settle what the blockage cost shipping companies themselves, as opposed to the value of goods delayed, nor how much of the delay was recovered within weeks."""
+The sources do not settle what the blockage cost shipping companies themselves, as opposed to the value of goods delayed, nor how much of the delay was recovered within weeks. None says how many ships rerouted around Africa instead of waiting."""
 
 OVERSTATED_ANALYSE = """Findings
 The blockage definitely cost the world economy over $50 billion [archive: shipping-insurer#4], proving that a single canal is the world's greatest point of failure [archive: suez-wiki#2].

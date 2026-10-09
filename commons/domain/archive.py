@@ -122,3 +122,15 @@ class ArchiveIndex:
 
     def get(self, passage_id: PassageId) -> Passage | None:
         return self.passages.get(passage_id)
+
+    def coverage(self, passage_id: PassageId, query: str) -> float:
+        """The share of the query's words the passage contains: how well a hit answers what was asked."""
+        q = set(_terms(query))
+        return len(q & set(self._tf.get(passage_id, ()))) / len(q) if q else 0.0
+
+    def of_source(self, name: str) -> list[Passage]:
+        """A source's passages in order, named by its file (web/<slug>.md) or its stem (web-<slug>)."""
+        name = name.strip()
+        stem = _stem(name) if "/" in name or name.endswith(".md") else name.lower()
+        found = [x for x in self.passages.values() if x.source == name or x.id.split("#", 1)[0] == stem]
+        return sorted(found, key=lambda x: int(x.id.rsplit("#", 1)[1]))

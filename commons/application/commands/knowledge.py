@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     pass
 
 MAX_READ = 5  # passages per read_archive call
+WEAK = 0.5  # a search whose best passage shares less than this share of the query's words found nothing useful
 
 
 class KnowledgeCommands(CommandBase):
@@ -52,8 +53,14 @@ class KnowledgeCommands(CommandBase):
             return Outcome(False, "this society has no archive")
         hits = self.w.archive.search(str(query))
         if not hits:
-            return Outcome(True, f"nothing in the archive matches {query!r}")
+            return Outcome(True, f"nothing in the archive matches {query!r}. If you need it, web_search for it, then "
+                                 "web_fetch a page: what you read joins the archive.")
+        best = max(self.w.archive.coverage(p.id, query) for p, _ in hits)
         lines = [f"{p.id} ({p.source}): {' '.join(p.text.split())[:160]}…" for p, _ in hits]
+        if best < WEAK:  # the closest passages share few of the words asked about: almost certainly not what's needed
+            return Outcome(True, f"nothing in the archive covers {query!r} well (the closest passage shares {best:.0%} of "
+                                 "its words), so it has probably not been read yet: web_search for it, then web_fetch a "
+                                 "page. Weak matches, only if one is clearly relevant:\n" + "\n".join(lines[:2]))
         return Outcome(True, "Archive passages (read the ones you need in full with one read_archive call):\n" + "\n".join(lines))
 
     @command()
@@ -62,6 +69,12 @@ class KnowledgeCommands(CommandBase):
         round of thinking each (in a live run, stewards read one at a time and every read re-sent the conversation).
         An unknown id is named in the answer; the call fails only if none was found."""
         ids = list(dict.fromkeys([passage_ids] if isinstance(passage_ids, str) else map(str, passage_ids)))[:MAX_READ]
+        if len(ids) == 1 and "#" not in ids[0] and (whole := self.w.archive.of_source(ids[0])):
+            first = whole[:MAX_READ]  # a source's name: its first passages, and the ids of the rest
+            rest = f"\n\n{ids[0]} has {len(whole)} passages; read more by id: {', '.join(x.id for x in whole[MAX_READ:])}" \
+                if len(whole) > MAX_READ else ""
+            text = "\n\n".join(f"Reference material from {p.source} ({p.id}):\n{p.text}" for p in first)
+            return Outcome(True, text + rest, ",".join(p.id for p in first))
         found = [p for pid in ids if (p := self.w.archive.get(pid)) is not None]
         missing = [f"no archive passage {pid}; search_archive gives valid ids" for pid in ids
                    if pid not in {p.id for p in found}]

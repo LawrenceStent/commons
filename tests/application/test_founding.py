@@ -112,3 +112,39 @@ def test_the_archive_is_searched_on_demand():
     both = act.read_archive(ids + ["nope#9"])  # several in one call; an unknown id is named, not fatal
     assert both and both.message.count("Reference material") == 2 and "no archive passage nope#9" in both.message
     assert len(act.read_archive([pid] * 9).message.split("Reference material")) - 1 <= 5
+
+
+def test_a_search_the_archive_cant_answer_says_so_and_points_to_the_web():
+    """First live OSINT run (9 Oct): stewards searched the archive 33 times, often for subjects nobody had read yet,
+    and kept getting the closest unrelated page. A weak best match now says so."""
+    from commons.application.actions import Actions
+    from commons.domain.archive import ArchiveIndex
+
+    arc = ArchiveIndex()
+    arc.add_page("https://www.gov.uk/guidance/the-thames-barrier", "The Thames Barrier",
+                 "The Thames Barrier protects London from tidal flooding. It closed 200 times by 2024.\n\n"
+                 "Closures happen for tidal surges and for river water flows. The Environment Agency operates it.")
+    w = World(Params(seed=0, verify=False), archive=arc)
+    w.step()
+    act = Actions(w, w.communities["coop-a"])
+    weak = act.search_archive("Ofwat water company fines penalties 2023 enforcement")
+    assert weak and "covers" in weak.message and "web_search" in weak.message
+    strong = act.search_archive("Thames Barrier closures tidal flooding")
+    assert strong and strong.message.startswith("Archive passages") and "thames-barrier#1" in strong.message
+    assert "web_search" in act.search_archive("xylophone").message
+
+
+def test_reading_a_source_by_its_file_name_gives_its_first_passages():
+    from commons.application.actions import Actions
+    from commons.domain.archive import ArchiveIndex
+
+    arc = ArchiveIndex()
+    ids = arc.add_page("https://www.ofwat.gov.uk/report.pdf", "Report",
+                       "\n\n".join(f"Section {n}. " + "word " * 180 for n in range(8)))
+    w = World(Params(seed=0, verify=False), archive=arc)
+    w.step()
+    act = Actions(w, w.communities["coop-a"])
+    for name in ("web/www-ofwat-gov-uk-report-pdf.md", "web-www-ofwat-gov-uk-report-pdf"):
+        read = act.read_archive(name)
+        assert read and read.message.count("Reference material") == 5 and f"read more by id: {ids[5]}" in read.message
+    assert not act.read_archive("web/nothing-here.md")
