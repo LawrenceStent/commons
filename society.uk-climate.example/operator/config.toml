@@ -25,5 +25,5 @@ allow_hosts = [
   # campaign groups (your green light, 9 Oct): leads, to check against the primary record
   "www.upliftuk.org", "www.stopcambo.org.uk", "www.clientearth.org", "www.greenpeace.org.uk", "friendsoftheearth.uk",
   # NGOs and research
-  "www.sas.org.uk", "theriverstrust.org", "www.wwf.org.uk", "www.lse.ac.uk", "www.ipcc.ch",
+  "www.sas.org.uk", "theriverstrust.org", "www.wwf.org.uk", "www.lse.ac.uk", "www.gem.wiki", "globalenergymonitor.org", "www.ipcc.ch",
 ]
