@@ -36,6 +36,8 @@ class Events:
             self.w.activity.add(self.w.cycle, *entry)
         for kind, fields in telemetry(event, self.w):
             self.w.hub.emit(kind, self.w.cycle, **fields)
+        if (answers := getattr(self.w, "answers", None)) is not None:  # finished jobs, written out as reports
+            answers.observe(event)
 
 
 # ── what co-ops are told ───────────────────────────────────────

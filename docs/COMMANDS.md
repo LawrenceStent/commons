@@ -76,6 +76,9 @@ a society folder (re-read every cycle).
 a model call in flight finishes first. Real money needs `--yes-spend`, and the real-dollar kill-switch halts at
 `--real-ceiling`. Web reads follow the operator's `[gate]` policy (default: each waits for your approval).
 
+Every finished job (paid, or failed and marked NOT VERIFIED) is written as a report, Markdown and PDF, to
+`answers/<run>/` in the society's folder, with a `README.md` index. Dry runs with the fake backend write none.
+
 ## commons tick
 
 Resumes a saved society, plays a few cycles, saves it and stops: for forward tests that run for weeks on a schedule

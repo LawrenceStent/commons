@@ -111,6 +111,9 @@ class Pack:
     # work the screen flags waits for your editorial decision (a "publish" gate request) instead of halting, when the
     # operator's [gate] publish is "ask"; searches and reads that target people still halt (your decision, 9 Oct)
     review_flagged_work: bool = False
+    # finished jobs written out as reports (commons/application/services/answers.py): the parts in reading order, with
+    # their headings; parts not named come after, under their own names
+    report_parts: tuple[tuple[str, str], ...] = ()
     health: Callable[[bool], list[str]] | None = None  # its outside services: keys set? (and, if asked, do they answer?)
 
     @property

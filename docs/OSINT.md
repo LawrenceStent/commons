@@ -42,6 +42,12 @@ matter most are code, not prompts, and breaking one halts the whole society unti
    with the share supported (3 of 4 supported: 75% of the value). The society runs on grants: a fixed budget each
    cycle, shared by the work that passes, by value.
 
+9. **The answer, written out.** In a live run, every job that's paid or fails is written to
+   `societies/<name>/answers/<run>/` as Markdown and PDF, with a `README.md` index of the run: the answer, the
+   analysis, the sources gathered and the independent check, each citation turned into a numbered source with its
+   title and link, the grades with the grader's reasons, and who made each part. A failed job is marked NOT VERIFIED,
+   with why (`commons/application/services/answers.py`).
+
 ## The rules, and where each is enforced
 
 | Rule | Where | What happens |

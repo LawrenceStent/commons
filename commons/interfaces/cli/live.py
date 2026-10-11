@@ -42,6 +42,7 @@ from commons.application.ventures import LLMAppraiser
 from commons.domain.community import Community
 from commons.domain.pack import load as load_pack
 from commons.interfaces.console.app import create_app
+from commons.application.services.answers import folder_for
 from commons.substrate.meter import KillSwitch
 
 PID = Path("runs/live.pid")
@@ -168,6 +169,7 @@ def _world(a, society, pack, m: dict, population, ledger: str) -> World:
                  gate=Gate(folder=society.folder if society else None, run=run_name),
                  archive=Archive(society.folder / "archive") if society else None,
                  ratings=Ratings(society.folder, run=run_name, every=a.rate_every) if society else None,
+                 answers=folder_for(ledger) if a.backend != "fake" else None,
                  desk=make_desk(a.seed) if make_desk else None)
 
 
