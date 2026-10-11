@@ -150,8 +150,12 @@ def _job(j: JobView, mine: set[str], *, prime: bool = False) -> str:
         elif state == "done":
             parts.append(f"    - {p.capability} [done; {can}] → {NEXT[(state, True)]}")
         else:
+            others = [q.capability for q in j.parts if q is not p and not q.done]
             if p.pending == "open":
-                nxt = "waiting: announced; award a bidder once bids arrive"
+                nxt = ("waiting: announced; award a bidder once bids arrive (if you don't, the commons awards the best "
+                       "bid when bidding closes)")
+            elif prime and p.independent and state == "open" and others:
+                nxt = f"not yet: it checks the rest, so announce it only once {', '.join(others)} is done"
             else:
                 nxt = NEXT[(state, able)]
             parts.append(f"    - {p.capability} [{state}; {can}] → {nxt}\n      spec: {p.spec}\n      rubric: {p.rubric}")
@@ -240,7 +244,9 @@ def _notes(obs: Observation) -> list[str]:
 
 def _obligations(obs: Observation) -> list[str]:
     return (_section("OBLIGATIONS: deliveries waiting for your review", [_contract(c, bids=False, work=True) for c in obs.to_review])
-            + _section("OBLIGATIONS: work you won and must deliver", [_contract(c) for c in obs.to_deliver])
+            + _section("OBLIGATIONS: work you won and must deliver",
+                       [_contract(c) + f"\n    → next: commission a draft for {c.id}, then deliver({c.id}, ...): deliver, "
+                        "not do_part (the job isn't yours, the contract is)" for c in obs.to_deliver])
             + _section("RECENT REJECTIONS you could dispute", [_contract(c, work=True) for c in obs.to_dispute])
             + _section("CLOSED CONTRACTS where you may rate the prime", [_contract(c) for c in obs.to_attest]))
 
@@ -250,7 +256,11 @@ def _market(obs: Observation) -> list[str]:
     mine = set(obs.capabilities)
     s = _section("YOU CAN COMMISSION WORK FOR (and only these)",
                  [f"  commission(ref={ref}, capability={cap}) then {how}" for ref, cap, _, _, how, _ in commissionable(obs)])
-    s += _section("YOUR ANNOUNCEMENTS (awaiting award)", [_contract(c, bids=True) for c in obs.my_announcements])
+    s += _section("YOUR ANNOUNCEMENTS (awaiting award)",
+                  [_contract(c, bids=True) + ("\n    → next: award(contract_id, bidder) to the bidder you choose; if you "
+                                              "haven't when bidding closes, the commons awards the best eligible bid"
+                                              if c.bids else "\n    → wait for bids; don't announce this part again")
+                   for c in obs.my_announcements])
     s += _section("YOUR JOBS (you are prime; the next step for each part is worked out for you)",
                   [_job(j, mine, prime=True) for j in obs.my_jobs])
     if obs.pending_claims:

@@ -52,7 +52,7 @@ class MarketCommands(CommandBase):
     def do_part(self, job_id: JobId, capability: str, artifact: str, cites: tuple[str, ...] = ()) -> Outcome:
         job = self.w.jobs.get(job_id)
         if job is None or job.prime != self.me.name or job.status != JobStatus.CLAIMED:
-            return Outcome(False, f"you are not working on job {job_id}")
+            return self._not_working_on(job_id)
         part = job.parts.get(capability)
         if part is None:
             return Outcome(False, f"job {job_id} has no {capability} part")
@@ -73,21 +73,42 @@ class MarketCommands(CommandBase):
         self.w.grading.maybe_submit(job)
         return Outcome(True, f"{capability} part of {job_id} done")
 
+    def _not_working_on(self, job_id: JobId) -> Outcome:
+        """Why a job id was refused, and what was probably meant: stewards in the live OSINT runs (9 Oct) used do_part on
+        contracts they held and passed contract ids ("J1.collect.1") or "J1.verify" where a job id goes."""
+        jid = str(job_id)
+        held = next((c for c in self.w.contracts.values() if c.winner == self.me.name
+                     and c.status == ContractStatus.AWARDED and (c.id == jid or c.job_id == jid.split(".")[0])), None)
+        if held is not None:
+            return Outcome(False, f"{jid} isn't your job: you hold contract {held.id} ({held.capability} for "
+                                  f"{held.prime}). Commission a draft for {held.id}, then deliver it with "
+                                  f"deliver({held.id}, ...), not do_part")
+        base = jid.split(".")[0]
+        if "." in jid and (job := self.w.jobs.get(base)) is not None and job.prime == self.me.name:
+            return Outcome(False, f"{jid} isn't a job id: use the job's id, {base}, and name the part as the capability")
+        if jid in self.w.contracts:
+            return Outcome(False, f"{jid} is a contract, not a job: bid on it, or if you announced it, award a bidder")
+        return Outcome(False, f"you are not working on job {jid}")
+
     @command()
     def announce(self, job_id: JobId, capability: str, max_price: Micros, advance_frac: float) -> Outcome:
         job = self.w.jobs.get(job_id)
         if job is None or job.prime != self.me.name or job.status != JobStatus.CLAIMED:
-            return Outcome(False, f"you are not working on job {job_id}")
+            return self._not_working_on(job_id)
         part = job.parts.get(capability)
         if part is None or part.artifact is not None:
             return Outcome(False, f"job {job_id} has no open {capability} part")
-        if self.w.contract_net.contracts_for(job_id, capability, LIVE_CONTRACT):
-            return Outcome(False, "a contract for that part is already in progress")
+        if live := self.w.contract_net.contracts_for(job_id, capability, LIVE_CONTRACT):
+            c = live[0]
+            what = ("open for bids: award a bidder once bids arrive, or the commons awards the best one when bidding "
+                    f"closes after cycle {c.deadline}") if c.status == ContractStatus.OPEN else f"{c.status}: wait for it"
+            return Outcome(False, f"{c.id} already covers that part ({what}); don't announce it again")
         if max_price <= 0 or not 0 <= advance_frac <= 1:
             return Outcome(False, "max_price must be positive and advance_frac within 0..1")
         if (spec := job.contract_spec(capability)) is None:
+            left = ", ".join(c for c, p in job.parts.items() if c != capability and p.artifact is None)
             return Outcome(False, f"the {capability} part checks the rest of job {job_id}: announce it once the other "
-                                  "parts are done")
+                                  f"parts are done (still to do: {left or 'nothing'})")
         n = sum(1 for c in self.w.contracts.values() if c.job_id == job_id and c.capability == capability)
         cid = f"{job_id}.{capability}.{n + 1}"
         if not self._send(Announce(job_id=cid, capability=capability, reward=max_price,

@@ -407,3 +407,39 @@ def test_bidding_closes_with_no_eligible_bid_and_the_contract_expires():
         w.rep.attest("prime", "sub", "build", 0.0)  # sub falls below the trust line after bidding
     _close_bidding(w, cid)
     assert w.contracts[cid].status == "expired"
+
+
+def test_refusals_name_the_step_a_steward_probably_meant():
+    """Live OSINT runs (9 Oct): stewards used do_part on contracts they held, passed contract ids as job ids, and
+    re-announced parts already out for bids. Each refusal now says what to do instead."""
+    w = world()
+    job = claimed_job_needing_build(w)
+    c = announce_and_award(w, job)
+    out = act(w, "sub").do_part(c.id, "build", "x")
+    assert not out and f"deliver({c.id}" in out.message and "not do_part" in out.message
+    assert f"deliver({c.id}" in act(w, "sub").do_part(job.id, "build", "x").message
+    assert "isn't a job id: use the job's id, T1" in act(w, "prime").announce("T1.build", "build", 30_000, 0.5).message
+    job2 = MarketJob("T2", "kit", 80_000, {k: Part(k, f"do {k}", f"{k} rubric") for k in ("research", "build")},
+                     posted=w.cycle, deadline=w.cycle + 9)
+    w.jobs[job2.id] = job2
+    assert act(w, "prime").claim(job2.id)
+    first = act(w, "prime").announce(job2.id, "build", 30_000, 0.5)
+    again = act(w, "prime").announce(job2.id, "build", 30_000, 0.5)
+    assert not again and f"{first.id} already covers that part" in again.message and "commons awards" in again.message
+
+
+def test_the_view_says_verify_waits_for_the_rest_and_contractors_deliver():
+    from commons.agents.llm.render import render
+    w = world()
+    job = MarketJob("T3", "checked kit", 80_000,
+                    {"research": Part("research", "do research", "rubric"),
+                     "build": Part("build", "check it", "rubric", independent=True)},
+                    posted=w.cycle, deadline=w.cycle + 9)
+    w.jobs[job.id] = job
+    assert act(w, "prime").claim(job.id)
+    view = render(w.observe(w.communities["prime"]))
+    assert "not yet: it checks the rest, so announce it only once research is done" in view
+    assert "still to do: research" in act(w, "prime").announce(job.id, "build", 30_000, 0.5).message
+    job1 = claimed_job_needing_build(w)
+    c = announce_and_award(w, job1)
+    assert f"commission a draft for {c.id}, then deliver({c.id}" in render(w.observe(w.communities["sub"]))
