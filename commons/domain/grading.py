@@ -43,9 +43,13 @@ def is_tagged(artifact: str | None) -> bool:
     return bool(_TAG.search(artifact or ""))
 
 
+_WRAPPER = re.compile(r"</?(work|draft)>", re.IGNORECASE)
+
+
 def strip_tags(text: str) -> str:
-    """Model-written work must never carry a scripted quality tag, or the hybrid grader would believe it."""
-    return _TAG.sub("", text)
+    """Model-written work must never carry a scripted quality tag, or the hybrid grader would believe it. Wrapper tags a
+    model echoes from its instructions (<work>, seen in the live OSINT runs) go too."""
+    return _WRAPPER.sub("", _TAG.sub("", text))
 
 
 def tagged(quality: float, body: str = "") -> str:

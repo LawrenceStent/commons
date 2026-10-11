@@ -346,3 +346,12 @@ def test_the_dashboard_decides_in_batches(tmp_path):
         client.post("/api/gate", json={"revoke": {"coop": "coop-a", "host": "example.org"}})
         assert client.get("/api/snapshot").json()["gate"]["standing"] == []
     assert net.calls == []
+
+
+def test_a_page_not_found_on_an_allowed_host_suggests_searching_for_it(tmp_path):
+    """Live runs (9 Oct): stewards retyped addresses from memory and got 404s; the answer now says to search."""
+    w, net = world(tmp_path, gate='read = "allow"\nallow_hosts = ["example.org"]',
+                   transport=FakeTransport({"https://example.org/old-slug": (404, {}, b"")}))
+    w.step()
+    out = act(w).web_fetch("https://example.org/old-slug")
+    assert not out and "answered 404" in out.message and "web_search for the page" in out.message

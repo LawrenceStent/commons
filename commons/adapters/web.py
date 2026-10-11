@@ -7,8 +7,9 @@ the gate approved something by mistake, this layer refuses:
     - anything but https, IP-literal hosts, and hosts that resolve to private, loopback or link-local addresses
     - redirects to anywhere the allowlist doesn't cover (each hop is checked; at most 3)
     - pages a site's robots.txt disallows for us (search APIs, which are meant for programs, skip robots)
-    - anything that isn't text (html, plain, json, xml) or a PDF, and bodies over `max_bytes` (`pdf_max_bytes` for a
-      PDF, whose text is extracted page by page, each page marked "[page N]" so a citation can say where)
+    - anything that isn't text (html, plain, json, xml), a PDF or a spreadsheet, and bodies over `max_bytes`
+      (`pdf_max_bytes` for a PDF or spreadsheet). A PDF's text is extracted page by page, each page marked "[page N]";
+      a spreadsheet (csv, ods, xlsx) becomes rows of cells joined by " | ", each sheet marked "[sheet NAME]"
 
 Reads only: GET, no cookies, no credentials, a User-Agent that says what we are. Page text is untrusted: whoever
 shows it to a model fences it as reference material.
@@ -35,6 +36,9 @@ from commons.application.ports import Page, SearchResult, WebError, host_of
 USER_AGENT = "CommonsResearchBot/0.1 (a small research simulation; read-only, rate-limited)"
 TEXT_TYPES = ("text/html", "text/plain", "application/json", "application/xml", "text/xml", "application/xhtml+xml")
 PDF = "application/pdf"
+SHEETS = {"text/csv": "csv", "application/csv": "csv", "application/vnd.oasis.opendocument.spreadsheet": "ods",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx"}
+MAX_ROWS = 3000  # per sheet
 
 # (url, headers) -> (status, headers, body). The default is urllib without automatic redirects; tests pass a fake.
 Transport = Callable[[str, dict], tuple[int, dict, bytes]]
@@ -191,6 +195,64 @@ def pdf_to_text(body: bytes, max_pages: int = 400) -> tuple[str, str]:
     return title, re.sub(r"\n\s*\n+", "\n\n", text).strip()
 
 
+def _sheet_kind(ctype: str, url: str) -> str | None:
+    if ctype in SHEETS:
+        return SHEETS[ctype]
+    ext = urllib.parse.urlsplit(url).path.lower().rsplit(".", 1)[-1]
+    return ext if ext in ("csv", "ods", "xlsx") and ctype in ("application/octet-stream", "binary/octet-stream",
+                                                                 "application/zip", "text/plain", "") else None
+
+
+def _rows_text(name: str, rows) -> str:
+    lines = []
+    for row in rows:
+        cells = ["" if c is None else " ".join(str(c).split()) for c in row]
+        while cells and not cells[-1]:
+            cells.pop()
+        if cells:
+            lines.append(" | ".join(cells))
+        if len(lines) >= MAX_ROWS:
+            lines.append(f"(more rows not shown: the first {MAX_ROWS} only)")
+            break
+    return f"[sheet {name}]\n" + "\n".join(lines) if lines else ""
+
+
+def _ods_rows(body: bytes):
+    """The sheets of an OpenDocument spreadsheet: a zip whose content.xml holds table:table elements."""
+    import zipfile
+    from xml.etree import ElementTree as ET
+    ns = {"table": "urn:oasis:names:tc:opendocument:xmlns:table:1.0", "text": "urn:oasis:names:tc:opendocument:xmlns:text:1.0"}
+    root = ET.fromstring(zipfile.ZipFile(io.BytesIO(body)).read("content.xml"))
+    rep = f"{{{ns['table']}}}number-columns-repeated"
+    for table in root.iter(f"{{{ns['table']}}}table"):
+        rows = []
+        for tr in table.iter(f"{{{ns['table']}}}table-row"):
+            row = []
+            for cell in tr:
+                value = " ".join("".join(p.itertext()) for p in cell.iter(f"{{{ns['text']}}}p"))
+                row += [value] * min(int(cell.get(rep, "1")), 50 if value else 1)  # repeated blanks pad wide rows
+            rows.append(row)
+            if len(rows) > MAX_ROWS:
+                break
+        yield table.get(f"{{{ns['table']}}}name", "sheet"), rows
+
+
+def sheet_to_text(body: bytes, kind: str) -> str:
+    """A spreadsheet as text: each sheet's non-empty rows, cells joined by " | "."""
+    import csv
+    import zipfile
+    try:
+        if kind == "csv":
+            return _rows_text("csv", csv.reader(io.StringIO(body.decode("utf-8-sig", "replace"))))
+        if kind == "xlsx":
+            from openpyxl import load_workbook
+            book = load_workbook(io.BytesIO(body), read_only=True, data_only=True)
+            return "\n\n".join(t for ws in book.worksheets if (t := _rows_text(ws.title, ws.iter_rows(values_only=True))))
+        return "\n\n".join(t for name, rows in _ods_rows(body) if (t := _rows_text(name, rows)))
+    except (zipfile.BadZipFile, KeyError, ValueError, OSError) as e:
+        raise WebError(f"couldn't read the spreadsheet: {e}") from e
+
+
 class Fetcher:
     def __init__(self, egress: Egress, transport: Transport | None = None, max_bytes: int = 2_000_000,
                  max_chars: int = 20_000, pdf_max_bytes: int = 30_000_000, pdf_max_chars: int = 200_000):
@@ -205,13 +267,16 @@ class Fetcher:
             self.egress.check(url)  # every hop, before anything is sent
             self.requests += 1
             status, headers, body = self.transport(url, {"User-Agent": USER_AGENT,
-                                                        "Accept": "text/html,text/plain,application/json,application/pdf"})
+                                                        "Accept": "text/html,text/plain,application/json,application/pdf,"
+                                                                  "text/csv,application/vnd.oasis.opendocument.spreadsheet,"
+                                                                  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"})
             if status in (301, 302, 303, 307, 308) and headers.get("location"):
                 url = urllib.parse.urljoin(url, headers["location"])
                 continue
             if status >= 400:
                 raise WebError(f"{host_of(url)} answered {status}")
-            limit = self.pdf_max_bytes if headers.get("content-type", "").startswith(PDF) else self.max_bytes
+            ctype = headers.get("content-type", "").split(";")[0].strip().lower()
+            limit = self.pdf_max_bytes if ctype == PDF or _sheet_kind(ctype, url) else self.max_bytes
             if len(body) > limit:
                 raise WebError(f"the page at {url[:80]} is larger than {limit} bytes")
             return url, headers, body
@@ -242,8 +307,13 @@ class Fetcher:
             if not text.replace("[page", "").strip(" \n]0123456789"):
                 raise WebError(f"{url[:80]} is a PDF with no text layer (a scan)")
             return Page(final, title or final.rsplit("/", 1)[-1], text[: self.pdf_max_chars])
+        if kind := _sheet_kind(ctype, final):
+            text = sheet_to_text(body, kind)
+            if not text:
+                raise WebError(f"{url[:80]} is a spreadsheet with nothing in it")
+            return Page(final, final.rsplit("/", 1)[-1], text[: self.pdf_max_chars])
         if ctype not in TEXT_TYPES:
-            raise WebError(f"{url[:80]} is {ctype}, not text or a PDF")
+            raise WebError(f"{url[:80]} is {ctype}, not text, a PDF or a spreadsheet")
         raw = body.decode("utf-8", "replace")
         if "html" not in ctype:
             return Page(final, final, raw[: self.max_chars])

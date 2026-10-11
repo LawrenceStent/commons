@@ -23,7 +23,9 @@ matter most are code, not prompts, and breaking one halts the whole society unti
    your `[gate]` policy and allowlist, then the network layer's own allowlist. Pages read join the society's
    archive as passages that can be cited. Search can be GOV.UK's API (free), Tavily (a key), Wikipedia, or several
    joined (`search = "govuk+tavily+wikipedia"`). PDFs are read page by page, each page marked `[page N]`; scans
-   with no text layer are refused. Every HTML page ends with its links, documents first, so members can follow a
+   with no text layer are refused. Spreadsheets (CSV, ODS, XLSX) are read as rows of cells joined by `|`, each sheet
+   marked `[sheet NAME]`, so per-company figures can be cited. A page that isn't found on an allowed host comes back
+   with a hint to search for it instead of retyping the address. Every HTML page ends with its links, documents first, so members can follow a
    publication page to its PDF or spreadsheet.
 5. **Writing.** Members write each part from the archive. Formats are rules: wrong length or a missing section is
    refused at hand-in, with the reason, before any grader reads it. The screen reads every hand-in too, and personal
@@ -92,6 +94,17 @@ Run it with `commons run --society inquiry` (or tick it on a schedule: `commons 
 with `commons approve inquiry` or on the dashboard. If the society halts on a screened attempt, read why in its
 activity log, then reset the kill-switch from the dashboard. Check the grader first with
 `commons calibrate --pack osint --backend lmstudio --model <id>`.
+
+## What the first live runs taught (9-11 Oct)
+
+| Found | Fixed |
+|---|---|
+| Stewards searched the archive for subjects nobody had read | a weak match says so and points to the web |
+| Contracts were never awarded, so no job could finish | the commons awards the best eligible bid when bidding closes |
+| Two false alarms halted runs (a date as a phone number, "2025 Court" as an address) | both rules tightened; flagged work waits for your editorial decision |
+| Every co-op went broke before a job could be paid (thinking took 80% of the money) | local thinking costs a fifth of Haiku; live purses start at 1M |
+| About 20 turns a run went on contract mistakes | the view and each refusal say the next step |
+| The grader caught a claim cited to a source that didn't support it (J3) | working as designed: the job wasn't paid |
 
 ## What's measured
 

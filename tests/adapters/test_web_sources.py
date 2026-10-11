@@ -122,3 +122,57 @@ def test_a_page_keeps_its_links_documents_first_even_when_its_text_is_cut():
     assert links == ["- The data: https://www.gov.uk/media/data.ods", "- Report: https://x.org/report.pdf",
                      "- About: https://www.gov.uk/about"]
     assert len(text) <= 2_000 + 10 and text.startswith("word")
+
+
+def _ods(rows) -> bytes:
+    import io
+    import zipfile
+    cells = "".join("<table:table-row>" + "".join(f"<table:table-cell><text:p>{c}</text:p></table:table-cell>" for c in r)
+                    + "</table:table-row>" for r in rows)
+    xml = ('<?xml version="1.0"?><office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" '
+           'xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" '
+           'xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"><office:body><office:spreadsheet>'
+           f'<table:table table:name="Spills">{cells}</table:table></office:spreadsheet></office:body>'
+           '</office:document-content>')
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as z:
+        z.writestr("content.xml", xml)
+    return out.getvalue()
+
+
+def _xlsx(rows) -> bytes:
+    import io
+    from openpyxl import Workbook
+    book = Workbook()
+    book.active.title = "Spills"
+    for r in rows:
+        book.active.append(r)
+    out = io.BytesIO()
+    book.save(out)
+    return out.getvalue()
+
+
+@pytest.mark.parametrize("kind,ctype,make", [
+    ("csv", "text/csv", lambda rows: "\n".join(",".join(map(str, r)) for r in rows).encode()),
+    ("ods", "application/vnd.oasis.opendocument.spreadsheet", _ods),
+    ("xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", _xlsx),
+])
+def test_spreadsheets_are_read_as_rows_of_cells(kind, ctype, make):
+    """The EA publishes per-company figures as spreadsheets (9 Oct: the storm overflow question needed them)."""
+    rows = [["Company", "Spills 2025"], ["Anglian Water", 1234], ["Thames Water", 5678]]
+    url = f"https://assets.publishing.service.gov.uk/data.{kind}"
+    page = fetcher({url: (200, {"content-type": ctype}, make(rows))}).fetch(url)
+    assert "Company | Spills 2025" in page.text and "Thames Water | 5678" in page.text
+    assert page.text.startswith("[sheet ")
+
+
+def test_a_spreadsheet_named_by_its_extension_is_read_even_without_its_type():
+    url = "https://assets.publishing.service.gov.uk/data.ods"
+    page = fetcher({url: (200, {"content-type": "application/octet-stream"}, _ods([["a", "b"]]))}).fetch(url)
+    assert "a | b" in page.text
+
+
+def test_wrapper_tags_a_model_echoes_are_stripped_from_its_work():
+    from commons.domain.grading import strip_tags, tagged
+    assert strip_tags("<work>1. Findings</work>") == "1. Findings"
+    assert strip_tags(tagged(0.9, "text")) == "text"

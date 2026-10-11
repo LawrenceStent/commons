@@ -97,6 +97,9 @@ class WebDesk:
             ok = True
         except WebError as e:
             msg, ref, ok = f"{r.tool} failed: {e}", None, False
+            if r.tool == "web_fetch" and " answered 404" in str(e):  # stewards retyped addresses from memory (9 Oct)
+                msg += (". The address is probably wrong: web_search for the page and fetch a url exactly as the "
+                        "results give it")
         with self.w.lock:
             r.status, r.result = (RequestStatus.DONE if ok else RequestStatus.FAILED), msg[:300]
             self.w.events.publish(ev.WebRead(r, ok))
