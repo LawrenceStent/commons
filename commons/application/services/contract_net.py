@@ -189,6 +189,7 @@ class ContractNet:
             return
         if isinstance(g, GradingError):
             self.w.grading.pending_reviews[cid] += 1
+            self.w.events.publish(ev.ReviewDelayed(c, str(g)))
             if self.w.grading.pending_reviews[cid] < self.w.params.market.grade_retries:
                 return
             self.w.grading.pending_reviews.pop(cid)

@@ -124,6 +124,8 @@ class Answers:
             contract = self.w.contracts.get(part.source) if part.source not in (None, "self") else None
             how = (f"bought from {contract.winner} on contract {contract.id} for {contract.price:,} credits"
                    if contract and contract.winner else "its own work" if part.source == "self" else "not handed in")
+            if contract and "by default" in (contract.reason or ""):
+                how += f" (NOT GRADED: {contract.reason})"
             parts.append({"capability": cap, "heading": headings.get(cap, cap.title()),
                           "text": cite(part.artifact) if part.artifact else "",
                           "by": done_by.get(cap, job.prime if part.source == "self" else "") or "", "how": how,

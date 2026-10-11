@@ -283,6 +283,30 @@ def _(e: ev.GradingDelayed, w):
     return []
 
 
+@activity.register
+def _(e: ev.GradingDelayed, w):  # failed grading attempts are visible in the log (11 Oct: they weren't)
+    return [(e.job.prime, "world", "change", "grading.delayed", f"{e.job.id} waits for the grader: {e.error[:200]}",
+             False, {"job": e.job.id})]
+
+
+@notices.register
+def _(e: ev.ReviewDelayed, w):
+    c = e.contract
+    return [(c.winner, "grading_delayed", f"{c.id} is waiting for the grader: {e.error[:200]}", c.id)]
+
+
+@telemetry.register
+def _(e: ev.ReviewDelayed, w):
+    return []
+
+
+@activity.register
+def _(e: ev.ReviewDelayed, w):
+    c = e.contract
+    return [(c.prime, "world", "change", "review.delayed", f"{c.id} waits for the grader: {e.error[:200]}", False,
+             {"contract": c.id})]
+
+
 @notices.register
 def _(e: ev.JobDeferred, w):
     return [(e.job.prime, "job_graded", f"{e.job.id} passed for now; its outcome settles at cycle {e.job.settle_at}",

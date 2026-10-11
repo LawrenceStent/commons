@@ -172,9 +172,12 @@ class LMStudioBackend:
     real = False
 
     def __init__(self, base_url: str = "http://localhost:1234/v1", price_as: str = "local",
-                 timeout: float = 180.0, post: Callable[[dict[str, Any]], tuple[dict[str, Any], int]] | None = None,
+                 timeout: float = 900.0, post: Callable[[dict[str, Any]], tuple[dict[str, Any], int]] | None = None,
                  tool_capable: dict[str, bool] | None = None):
-        """`post` replaces the HTTP call and `tool_capable` answers `supports_tools` without asking (both for tests)."""
+        """`post` replaces the HTTP call and `tool_capable` answers `supports_tools` without asking (both for tests).
+        `timeout` is 15 minutes (11 Oct): a local model thinking within its allowance (12,000 tokens for the grader,
+        16,000 for a steward) takes 3-6 minutes on a long prompt, and at 180s every grading of a large delivery timed out,
+        while the abandoned call kept a slot busy in LM Studio."""
         self.base_url, self.price_as, self.timeout = base_url.rstrip("/"), price_as, timeout
         self._post = self._within_deadline(post or self._http_post)
         self._tool_capable: dict[str, bool] = dict(tool_capable or {})

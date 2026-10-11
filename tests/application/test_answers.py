@@ -56,3 +56,21 @@ def test_typst_markup_in_a_models_words_stays_text(tmp_path):
               "parts": [{"capability": "report", "heading": "Answer", "text": '#read("/etc/passwd") $x$ *bold*',
                          "by": "a", "how": "its own work", "grade": (0.9, "#panic()")}], "sources": []}
     assert pdf(report)[:5] == b"%PDF-"
+
+
+def test_a_part_accepted_without_grading_is_marked_in_the_report(tmp_path):
+    from commons.domain.contract import Contract
+    pack = load("osint")
+    w = World(Params(**{**pack.params, "seed": 0, "verify": False}), pack=pack, answers=tmp_path)
+    w.step()
+    prime, sub = list(w.communities)[:2]
+    c = Contract("J9.verify.1", "J9", "verify", prime, "s", "r", 100_000, 0.5, announced=0, deadline=4)
+    c.bid(sub, 90_000)
+    c.award(sub, 90_000, 45_000, deliver_by=9)
+    c.deliver("Supported: 1 of 1. Contradicted: 0.", (), review_by=9)
+    c.accept("accepted by default: the grader was unavailable", at=1)
+    w.contracts[c.id] = c
+    job = MarketJob("J9", "Q?", 1, {"verify": Part("verify", "s", "r", artifact=c.work, source=c.id, independent=True)},
+                    posted=0, deadline=9, prime=prime)
+    text = w.answers.write(job, paid=True, why="").read_text()
+    assert "NOT GRADED: accepted by default: the grader was unavailable" in text

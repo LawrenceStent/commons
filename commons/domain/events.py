@@ -139,6 +139,13 @@ class GradingDelayed(Event):
 
 
 @dataclass(frozen=True)
+class ReviewDelayed(Event):
+    """The grader couldn't judge a delivery this cycle (it tries again next cycle, up to `grade_retries`)."""
+    contract: Contract
+    error: str
+
+
+@dataclass(frozen=True)
 class JobDeferred(Event):
     """Passed for now; its outcome settles later."""
     job: MarketJob

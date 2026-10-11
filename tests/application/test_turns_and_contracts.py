@@ -131,6 +131,14 @@ def test_a_grader_outage_accepts_the_delivery_by_default_after_retries():
     assert c.status == "delivered"
     w.grading.settle()
     assert c.status == "accepted" and "grader was unavailable" in c.reason
+    delayed = [e for e in w.activity.recent(50) if e.name == "review.delayed"]
+    assert len(delayed) == 2 and "model not loaded" in delayed[0].text  # each failed attempt is in the log (11 Oct)
+
+
+def test_the_local_backend_waits_long_enough_for_a_full_think():
+    """At 180s every grading of a large delivery timed out (11 Oct); a 12,000-token think takes 3-6 minutes."""
+    from commons.adapters.models import LMStudioBackend
+    assert LMStudioBackend().timeout >= 600
 
 
 def test_a_prime_that_cannot_pay_for_passing_work_defaults():
