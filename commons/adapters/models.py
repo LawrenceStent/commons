@@ -171,7 +171,7 @@ class LMStudioBackend:
     name = "lmstudio"
     real = False
 
-    def __init__(self, base_url: str = "http://localhost:1234/v1", price_as: str = "claude-haiku-4-5",
+    def __init__(self, base_url: str = "http://localhost:1234/v1", price_as: str = "local",
                  timeout: float = 180.0, post: Callable[[dict[str, Any]], tuple[dict[str, Any], int]] | None = None,
                  tool_capable: dict[str, bool] | None = None):
         """`post` replaces the HTTP call and `tool_capable` answers `supports_tools` without asking (both for tests)."""

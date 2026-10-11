@@ -45,9 +45,10 @@ DEFAULT = "earn_online"
 # The live economy, for any pack, calibrated on the 1.5 local runs: a steward call costs about 4,500 µcr (about 10,000
 # when the model reasons) and handling a job takes a few turns plus contractors. At the scripted defaults (reward 80k)
 # thinking bankrupted every LLM co-op within three cycles. Spawn and learn were out of reach (1.5M and 2.5M against a
-# 400k purse) until 27 Sep.
+# 400k purse) until 27 Sep. 11 Oct: purses start at 1M, and local thinking is priced at a fifth of Haiku (compute.py):
+# in the first long OSINT run every co-op went broke before its first job could be paid.
 LIVE_ECONOMY: dict[str, Any] = dict(
-    job_reward=400_000, purse_seed=400_000, treasury_seed=10_000_000, treasury_reserve=10_000_000,
+    job_reward=400_000, purse_seed=1_000_000, treasury_seed=10_000_000, treasury_reserve=10_000_000,
     upkeep=2_000, basic_budget=1_500, floor_cap=4_000, work_cost=40_000, publish_cost=60_000,
     spawn_fee=250_000, learn_cost=800_000, audit_cost=20_000, venture_fee=20_000,
     board_ttl=5, job_ttl=12, bid_window=4, deliver_ttl=5, review_ttl=3, dispute_window=4)

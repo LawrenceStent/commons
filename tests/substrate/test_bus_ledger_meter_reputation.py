@@ -202,3 +202,12 @@ def test_memory_bus_backlog_is_capped_even_with_no_readers():
         bus.compact()
     assert bus.backlog("knowledge") == 50
     assert [e.open().playbook_id for e in bus.read("knowledge", "late")][0] == "450"
+
+
+def test_local_thinking_costs_a_fifth_of_haiku_and_lm_studio_uses_it():
+    """Your decision, 11 Oct: at Haiku's price, thinking used 80% of a live society's money before any work was paid."""
+    from commons.adapters.models import LMStudioBackend
+    from commons.domain.compute import Usage, cost_micros
+    usage = Usage(input_tokens=3_000, output_tokens=600, cache_read_input_tokens=8_000)
+    assert cost_micros("local", usage) * 5 == cost_micros("claude-haiku-4-5", usage)
+    assert LMStudioBackend().price_as == "local"

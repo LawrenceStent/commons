@@ -21,6 +21,10 @@ PRICES: dict[str, Price] = {
     "claude-sonnet-5": Price(2.00, 10.00, 0.20),
     "claude-opus-5": Price(5.00, 25.00, 0.50),
     "claude-opus-5-5": Price(4.00, 20.00, 0.20),
+    # a model on this machine (LM Studio): nothing is billed, but thinking still costs the society something, so it
+    # isn't free to waste. One fifth of Haiku (your decision, 11 Oct: at Haiku's price, thinking used 80% of a live
+    # OSINT society's money in ten cycles, before any work could be paid)
+    "local": Price(0.20, 1.00, 0.02),
 }
 
 
