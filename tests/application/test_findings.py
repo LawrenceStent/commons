@@ -88,3 +88,21 @@ def test_a_finding_is_never_a_source(tmp_path):
     out = Actions(w, w.communities[prime]).do_part("J9", "analyse", f"Spills fell [archive: {lead}].")
     assert not out and "is a finding, not a source" in out.message
     assert w.grading.try_grade("s", "r", f"<q=0.9> spills [archive: {lead}]").score == 0
+
+
+def test_a_question_worked_before_is_posted_as_an_update(tmp_path):
+    """F3: the next run starts from the last one's findings instead of searching again."""
+    w = society(tmp_path)
+    w.findings.reasons["J1"] = {"analyse": "uncited confidence sentence"}
+    w.findings.record(job(w, "J1", ANALYSIS), paid=True, why="")
+    again = MarketJob("J8", Q, 1, {"collect": Part("collect", "Find public sources on this question.", "r"),
+                                   "verify": Part("verify", "Check the work.", "r", independent=True)},
+                      posted=0, deadline=9)
+    assert w.findings.brief(again)
+    spec = again.parts["collect"].spec
+    assert spec.startswith("UPDATE: this question was worked on before (1 time; verified answer of")
+    assert f'search_archive "{question_id(Q)}"' in spec and "Verified findings: 2" in spec
+    assert "Per-company counts aren't in the release." in spec and spec.endswith("Find public sources on this question.")
+    assert "Never cite the dossier itself" in spec
+    fresh = MarketJob("J9", "[org] A question never asked", 1, {"collect": Part("collect", "Find.", "r")}, posted=0, deadline=9)
+    assert not w.findings.brief(fresh) and fresh.parts["collect"].spec == "Find."

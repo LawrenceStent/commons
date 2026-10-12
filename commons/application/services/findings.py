@@ -108,6 +108,18 @@ class Findings:
             self.w.archive.replace_source(f"{PREFIX}/{qid}.md", md.read_text())
         return md
 
+    def brief(self, job: MarketJob) -> bool:
+        """F3: a question the society has worked on before is posted as an update. Each part's instructions open with
+        what was established and when, the open gaps, and where the dossier is; the work builds on it instead of
+        starting again. True if the job was briefed."""
+        state = self.load(question_id(job.title))
+        if not state or not state["outcomes"]:
+            return False
+        note = update_note(state)
+        for part in job.parts.values():
+            part.spec = f"{note}\n\n{part.spec}"
+        return True
+
     def load(self, qid: str) -> dict | None:
         path = self.folder / f"{qid}.json"
         return json.loads(path.read_text()) if path.exists() else None
@@ -138,6 +150,28 @@ class Findings:
                 "status": "paid" if paid else "failed", "why": why, "answer": texts.get(answer_cap, "") if answer_cap else "",
                 "claims": claims, "gaps": list(dict.fromkeys(gaps)),
                 "lessons": [f"{cap}: {reason}" for cap, reason in sorted(self.reasons.pop(job.id, {}).items())]}
+
+
+# ── the update note ────────────────────────────────────────────
+def update_note(state: dict) -> str:
+    """What a job on a question worked before starts from: short, so it fits in every part's instructions."""
+    outcomes = state["outcomes"]
+    paid = [o for o in outcomes if o["status"] == "paid"]
+    verified = {c["text"] for o in paid for c in o["claims"] if c["status"] == "verified"}
+    contradicted = {c["text"] for o in outcomes for c in o["claims"] if c["status"] == "contradicted"}
+    gaps = list(dict.fromkeys(g for o in outcomes for g in o["gaps"]))
+    since = paid[-1]["date"] if paid else outcomes[-1]["date"]
+    lines = [f"UPDATE: this question was worked on before ({len(outcomes)} time{'s' if len(outcomes) != 1 else ''}; "
+             + (f"verified answer of {since}" if paid else f"no verified answer yet, last tried {since}") + "). "
+             f"Its dossier is in the archive: search_archive \"{state['id']}\"; read it first.",
+             f"- Verified findings: {len(verified)}. Reuse them by citing the pages their [archive: ...] ids point to "
+             "(already in the archive: don't fetch them again). Never cite the dossier itself."]
+    if contradicted:
+        lines.append(f"- Contradicted findings: {len(contradicted)}. Don't repeat them.")
+    if gaps:
+        lines.append("- Open gaps: " + " | ".join(g[:160] for g in gaps[:3]) + (" | ..." if len(gaps) > 3 else ""))
+    lines.append(f"- Say what has changed since {since}, and close gaps where the sources allow.")
+    return "\n".join(lines)
 
 
 # ── the dossier ────────────────────────────────────────────────

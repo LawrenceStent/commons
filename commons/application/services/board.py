@@ -31,6 +31,8 @@ class JobBoard:
         for _ in range(p.market.jobs_per_cycle):
             job = self.w.pack.work_source.new_job(self.w.rng, f"J{self.w.ids.next('job')}", self.w.cycle, p.market.job_reward, p.market.board_ttl,
                                                 p.market.parts_per_job)
+            if self.w.findings is not None:  # a question worked before is posted as an update (services/findings.py)
+                self.w.findings.brief(job)
             self.w.jobs[job.id] = job
             self.w.events.publish(ev.JobPosted(job))
 

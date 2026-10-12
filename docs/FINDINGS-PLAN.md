@@ -85,7 +85,7 @@ Each stage: tests, the full suite and the golden master pass, then a commit.
 - [x] **F2** Findings: cited claims extracted with their sources and status (`findings/findings.jsonl`); contradicted
       claims from the checker's verdicts; gaps collected; dossiers indexed in the archive. Done when:
       `search_archive` finds an earlier run's verified finding and its source
-- [ ] **F3** Update jobs: a question with a dossier is posted as an update (prior answer, gaps, "what's new since");
+- [x] **F3** Update jobs: a question with a dossier is posted as an update (prior answer, gaps, "what's new since");
       the steward's view shows prior findings. Done when: a second run on the same question cites the first run's
       sources without fetching them again, and its report says what changed
 - [ ] **F4** Question lifecycle and refresh; follow-up questions proposed through the gate. Done when: answered
