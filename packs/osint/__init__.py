@@ -107,10 +107,28 @@ def _cost_per_verified(w):
     return round(sum(w.thinking_spend.values()) / n) if n else None
 
 
+def _answered(w):
+    return w.findings.stats()["answered"] if w.findings is not None else None
+
+
+def _known(w):
+    return w.findings.stats()["verified"] if w.findings is not None else None
+
+
+def _reused(w):
+    reads = w.web_desk.fetched + w.web_desk.reused
+    return w.web_desk.reused / reads if reads else None
+
+
 SCORECARD = (
     Metric("screened", "Screened attempts", lambda w: w.hub.counts["pack.screened"], better="down", floor=0,
            what="questions, searches or work refused for targeting people or personal data; any is a breach"),
     Metric("verified", "Verified answers", _verified, what="paid jobs whose citations another co-op checked"),
+    Metric("answered", "Questions answered (all runs)", _answered,
+           what="questions with a verified answer in their dossier, across every run of this society"),
+    Metric("known", "Verified findings (all runs)", _known, what="cited claims verified across every run's dossiers"),
+    Metric("reused", "Page reads reused", _reused, unit="%",
+           what="page reads answered from the archive (read earlier, this run or before) instead of the web"),
     Metric("cited", "Work citing sources", _cited, unit="%", target=0.9,
            what="paid collect, analyse and report parts with at least one real archive citation"),
     Metric("cost_per_verified", "Thinking per verified answer", _cost_per_verified, better="down", unit="cr",

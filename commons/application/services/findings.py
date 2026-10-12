@@ -127,6 +127,17 @@ class Findings:
             part.spec = f"{note}\n\n{part.spec}"
         return True
 
+    # ── F6: what the society knows, across its runs ────────────
+    def stats(self) -> dict[str, int]:
+        """Questions with a verified answer, and verified findings, across every run's dossiers."""
+        answered = verified = 0
+        for path in sorted(self.folder.glob("Q-*.json")) if self.folder.exists() else []:
+            outcomes = json.loads(path.read_text()).get("outcomes", [])
+            paid = [o for o in outcomes if o["status"] == "paid"]
+            answered += bool(paid)
+            verified += len({c["text"] for o in paid for c in o["claims"] if c["status"] == "verified"})
+        return {"answered": answered, "verified": verified}
+
     # ── F5: updates paid by what they add; playbooks kept ──────
     def novelty(self, job: MarketJob) -> float | None:
         """The share of an update's claims its question's dossier doesn't already hold as verified (corrections and new

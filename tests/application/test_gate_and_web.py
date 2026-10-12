@@ -355,3 +355,32 @@ def test_a_page_not_found_on_an_allowed_host_suggests_searching_for_it(tmp_path)
     w.step()
     out = act(w).web_fetch("https://example.org/old-slug")
     assert not out and "answered 404" in out.message and "web_search for the page" in out.message
+
+
+def test_a_page_an_earlier_run_read_is_reused_until_it_is_stale(tmp_path):
+    """F6: a page in the archive from an earlier run isn't fetched again until 30 days have passed."""
+    from commons.application.archive import Archive
+    from commons.application.services import web as web_service
+    (tmp_path / "op").mkdir()
+    (tmp_path / "op" / "config.toml").write_text('[gate]\nread = "allow"\nallow_hosts = ["example.org"]\n')
+
+    def run():
+        t = FakeTransport()
+        w = World(Params(seed=0, verify=False), operator=Operator(tmp_path / "op"), web=web(t),
+                  archive=Archive(tmp_path / "archive"))
+        w.step()
+        return w, t
+
+    first, net = run()
+    assert act(first).web_fetch("https://example.org/pumps") and first.web_desk.fetched == 1
+    second, net2 = run()
+    out = act(second).web_fetch("https://example.org/pumps")
+    assert out and "already in the archive from an earlier run" in out.message and net2.calls == []
+    assert second.web_desk.reused == 1 and second.web_desk.fetched == 0
+    original = web_service.time.time
+    web_service.time.time = lambda: original() + 31 * 86_400  # a month later the copy is stale: read again
+    try:
+        third, net3 = run()
+        assert act(third).web_fetch("https://example.org/pumps") and "https://example.org/pumps" in net3.calls
+    finally:
+        web_service.time.time = original

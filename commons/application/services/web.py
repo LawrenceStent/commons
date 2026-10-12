@@ -4,6 +4,8 @@ ask the gate and to record results. Pages read join the archive, so citing them 
 
 from __future__ import annotations
 
+import time
+
 from typing import TYPE_CHECKING
 
 from commons.application.observation import (
@@ -21,10 +23,21 @@ if TYPE_CHECKING:
     from commons.application.society import World
 
 
+REFRESH_DAYS = 30  # a page read longer ago than this is read again (sources change: next year's data, new rulings)
+
+
+def _stale(read_on: str, now: float | None = None) -> bool:
+    if not read_on:
+        return True
+    return (now or time.time()) - time.mktime(time.strptime(read_on, "%Y-%m-%d")) >= REFRESH_DAYS * 86_400
+
+
 class WebDesk:
     def __init__(self, world: World):
         self.w = world
         self.web_pages = {}  # url -> archive passage ids, for pages read this run
+        self.fetched = 0  # pages read from the web this run
+        self.reused = 0  # page reads answered from the archive instead (read earlier this run, or in an earlier run)
 
     def begin_cycle(self) -> None:
         """A new cycle for the gate: fresh web budgets, your decisions from file, expired requests. Under the lock."""
@@ -57,9 +70,17 @@ class WebDesk:
         if tool == "web_fetch":
             with self.w.lock:
                 if target in self.web_pages:
+                    self.reused += 1
                     ids = self.web_pages[target]
                     return Outcome(True, f"already read: {target} is archive passages {', '.join(ids)}; use read_archive",
                                    ids[0] if ids else None)
+                ids, read_on = self.w.archive.page(target)
+                if ids and not _stale(read_on):  # an earlier run read it: no need to ask the site again (F6)
+                    self.reused += 1
+                    self.web_pages[target] = ids
+                    return Outcome(True, f"already in the archive from an earlier run (read {read_on or 'before'}): "
+                                         f"{target} is archive passages {', '.join(ids[:12])}{' …' if len(ids) > 12 else ''}"
+                                         "; use read_archive", ids[0])
             host = host_of(target)
         else:
             if self.w.web.search_host is None or self.w.gate.policy.search == "none":
@@ -88,7 +109,9 @@ class WebDesk:
             else:
                 page = web.fetch(r.target)
                 with self.w.lock:
-                    ids = self.w.archive.add_page(page.url, page.title, page.text, fetched=f"cycle {self.w.cycle}")
+                    self.fetched += 1
+                    ids = self.w.archive.replace_page(page.url, page.title, page.text,
+                                                      fetched=f"{time.strftime('%Y-%m-%d')}, cycle {self.w.cycle}")
                     self.web_pages[r.target] = self.web_pages[page.url] = ids
                 first = p.text if ids and (p := self.w.archive.get(ids[0])) else ""
                 msg, ref = (f"read {page.url} ({page.title[:80]}) into the archive as {len(ids)} passage(s): "

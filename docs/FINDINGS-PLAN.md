@@ -75,6 +75,8 @@ changed. A finding whose source has changed is marked "to re-check".
 
 ## Stages
 
+All built 12 Oct (L1, F1-F6); not yet tried on a live run.
+
 Each stage: tests, the full suite and the golden master pass, then a commit.
 
 - [x] **F0** Pages read from the web are kept between runs (the archive fix, 12 Oct)
@@ -91,7 +93,7 @@ Each stage: tests, the full suite and the golden master pass, then a commit.
 - [x] **F4** Question lifecycle and refresh; follow-up questions proposed through the gate. Done when: answered
       questions wait until a refresh is due and open ones are posted first
 - [x] **F5** Pay updates by what they add; keep published playbooks between runs
-- [ ] **F6** Measure it: pages fetched again, cycles to a paid answer per question, verified findings over time,
+- [x] **F6** Measure it: pages fetched again, cycles to a paid answer per question, verified findings over time,
       your ratings; a knowledge panel on the dashboard
 
 F1-F3 deliver the main benefit: the next run starts from the last one's verified findings. F4-F6 make it a lasting

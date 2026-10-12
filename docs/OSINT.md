@@ -48,6 +48,13 @@ matter most are code, not prompts, and breaking one halts the whole society unti
    title and link, the grades with the grader's reasons, and who made each part. A failed job is marked NOT VERIFIED,
    with why (`commons/application/services/answers.py`).
 
+10. **What carries over to the next run** (`docs/FINDINGS-PLAN.md`). Pages read are kept in `archive/web/` and
+    reused for 30 days without asking the site again. Each question has a dossier in `archive/findings/` (its best
+    answer, verified, unverified and contradicted findings, gaps, lessons, history) that co-ops search like any
+    archive material; a dossier is never a source. A question with a dossier is posted as an update and paid by what
+    it adds; open questions come first, answered ones after 30 days; co-ops may propose follow-up questions, which
+    come to your gate. Every action is in the society's changelog: `commons log NAME`.
+
 ## The rules, and where each is enforced
 
 | Rule | Where | What happens |

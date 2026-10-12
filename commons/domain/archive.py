@@ -86,18 +86,40 @@ class ArchiveIndex:
             ids.append(p.id)
         return ids
 
+    @staticmethod
+    def page_source(url: str) -> str:
+        """Where a page read from the web is kept in the archive: `web/<host-and-path>.md`."""
+        parts = urllib.parse.urlsplit(url)
+        slug = re.sub(r"[^a-z0-9]+", "-", ((parts.hostname or "") + parts.path).lower()).strip("-")[:80]
+        return f"web/{slug}.md"
+
+    def page(self, url: str) -> tuple[list[str], str]:
+        """A page already in the archive (this run's or an earlier one's): its passage ids, in order, and the date it
+        was read ("" if not recorded). No ids if it isn't here."""
+        rel = self.page_source(url)
+        ids = sorted((p.id for p in self.passages.values() if p.source == rel), key=lambda i: int(i.rsplit("#", 1)[1]))
+        first = self.passages[ids[0]].text if ids else ""
+        m = re.search(r"\(read (\d{4}-\d{2}-\d{2})", first or "")
+        return ids, m.group(1) if m else ""
+
     def add_page(self, url: str, title: str, text: str, fetched: str = "") -> list[str]:
         """A page read from the web joins the archive (and, if the archive has a folder, is kept in archive/web/ for
         later runs). Returns its passage ids; a page already here isn't indexed twice."""
-        parts = urllib.parse.urlsplit(url)
-        slug = re.sub(r"[^a-z0-9]+", "-", f"{parts.hostname or ''}{parts.path}".lower()).strip("-")[:80]
-        rel = f"web/{slug}.md"
+        rel = self.page_source(url)
         existing = sorted((p.id for p in self.passages.values() if p.source == rel), key=lambda i: int(i.rsplit("#", 1)[1]))
         if existing:
             return existing
         body = f"# {title.strip()[:200]}\n\nSource: {url}{f' (read {fetched})' if fetched else ''}\n\n{text.strip()}"
         self._keep(rel, body)
         return self._index(rel, body)
+
+    def replace_page(self, url: str, title: str, text: str, fetched: str = "") -> list[str]:
+        """A page read again (its archived copy was stale): the new text replaces the old."""
+        rel = self.page_source(url)
+        for pid in [pid for pid, p in self.passages.items() if p.source == rel]:
+            self._df.subtract(self._tf.pop(pid).keys())
+            del self.passages[pid]
+        return self.add_page(url, title, text, fetched)
 
     def __len__(self) -> int:
         return len(self.passages)
