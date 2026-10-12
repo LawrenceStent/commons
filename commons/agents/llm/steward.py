@@ -94,7 +94,10 @@ class LLMStrategy:
         """How many members to wake: the default rule (commons/agents/waking.py)."""
         return members_to_wake(obs)
 
+    backend_error: str | None = None  # this turn's model backend failure, if every call failed (cycle.py reads it)
+
     def turn(self, obs: Observation, act: RuntimeAPI) -> None:
+        self.backend_error, self.backend_ok = None, False
         StewardLoop(self, obs, act).run()
 
     # ── tools ──────────────────────────────────────────────────
@@ -214,7 +217,10 @@ class StewardLoop:
                                         max_tokens=self.max_tokens)
         except ModelError as e:
             self.log.append({"kind": "error", "text": f"steward call failed: {e}"})
+            if not getattr(self.agent, "backend_ok", False):
+                self.agent.backend_error = str(e)
             return None
+        self.agent.backend_ok, self.agent.backend_error = True, None
         try:
             self.cost += self.act.record_call("steward", t.model, t.price_as, t.usage, t.real, t.ms, t.cache_hit)
         except InsufficientFunds:

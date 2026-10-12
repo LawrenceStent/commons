@@ -48,7 +48,7 @@ def test_a_pdf_is_read_page_by_page_and_a_scan_is_refused():
     f = fetcher({url: (200, {"content-type": "application/pdf"}, pdf("Spills fell in 2025", "Fines rose"))})
     page = f.fetch(url)
     assert "[page 1]" in page.text and "Spills fell in 2025" in page.text and "[page 2]" in page.text
-    assert "Fines rose" in page.text and page.title == "report.pdf"
+    assert "Fines rose" in page.text and page.title == "Spills fell in 2025"  # no title: its first real line
     scan = fetcher({url: (200, {"content-type": "application/pdf"}, pdf("", ""))})
     with pytest.raises(WebError, match="no text layer"):
         scan.fetch(url)

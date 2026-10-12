@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import difflib
+
 from typing import TYPE_CHECKING
 
 from commons.application.observation import Outcome
+from commons.domain.archive import citations as archive_citations
 from commons.application.screening import review_work, screen
 from commons.domain.grading import is_tagged
 from commons.domain.ids import ContractId
@@ -78,12 +81,30 @@ class CommandBase:
         them)."""
         if (err := self._size_ok(artifact)) is not None:
             return err
+        if (err := self._citations_ok(artifact)) is not None:
+            return err
         if (err := review_work(self.w, self.me.name, self.actor, artifact)) is not None:
             return err
         if is_tagged(artifact) or not (problems := part.format.problems(artifact)):
             return None
         return Outcome(False, f"refused by the format rule for {part.capability}: {'; '.join(problems)}. "
                               f"Revise it ({part.format.describe()}) and hand it in again", FORMAT_REFUSED)
+
+    def _citations_ok(self, artifact: str) -> Outcome | None:
+        """Every [archive: id] the work cites must exist, checked at hand-in so a mistyped id can be fixed (12 Oct: one
+        typo, "wcpr-2025-pdf#45" for "wcpr-24-25-pdf#45", failed a whole job at grading). A near miss gets a
+        suggestion; the grader's rule still fails anything that reaches it with a citation to nothing."""
+        missing = [c for c in archive_citations(artifact) if self.w.archive.get(c) is None]
+        if not missing:
+            return None
+        ids = list(self.w.archive.passages)
+        hints = []
+        for c in missing[:4]:
+            near = difflib.get_close_matches(c, ids, n=1, cutoff=0.85)
+            hints.append(f"{c} (did you mean {near[0]}?)" if near else c)
+        return Outcome(False, f"refused: the work cites archive passages that don't exist: {'; '.join(hints)}. Cite "
+                              "only passages search_archive or read_archive gave you, then hand it in again",
+                       FORMAT_REFUSED)
 
     def _cites_ok(self, cites: tuple[str, ...]) -> Outcome | None:
         unknown = [c for c in cites if c not in self.w.library]

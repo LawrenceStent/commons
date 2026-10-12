@@ -51,7 +51,9 @@ def folder_for(ledger_path: str) -> Path | None:
     if ledger_path == ":memory:":
         return None
     ledger = Path(ledger_path)
-    home = ledger.parent.parent if ledger.parent.name in ("runs", "state") else ledger.parent
+    if ledger.parent.name == "state":  # a ticked society is one continuous run: its answers accumulate in one place
+        return ledger.parent.parent / "answers"
+    home = ledger.parent.parent if ledger.parent.name == "runs" else ledger.parent
     return home / "answers" / ledger.stem
 
 
@@ -95,7 +97,7 @@ class Answers:
             (self.folder / f"{name}.pdf").write_bytes(pdf(report))
         except Exception as e:  # a PDF that won't typeset mustn't stop the society; the Markdown is the record
             (self.folder / f"{name}.pdf-failed.txt").write_text(f"The PDF couldn't be typeset: {e}\n")
-        self.written[job.id] = {"id": job.id, "title": job.title, "status": report["status_short"], "file": md.name}
+        self.written[job.id] = {"id": job.id, "title": report["title"], "status": report["status_short"], "file": md.name}
         (self.folder / "README.md").write_text(index(self.folder.name, list(self.written.values())))
         return md
 
@@ -139,7 +141,7 @@ class Answers:
         else:
             status = f"NOT VERIFIED · failed: {why}"
             short = "failed"
-        return {"id": job.id, "title": job.title, "status": status, "status_short": short, "prime": job.prime or "",
+        return {"id": job.id, "title": re.sub(r"^\[\w+\]\s*", "", job.title), "status": status, "status_short": short, "prime": job.prime or "",
                 "cycle": self.w.cycle, "parts": parts,
                 "sources": [{"number": s.number, "title": s.title, "url": s.url, "passages": sorted(s.passages, key=int)}
                             for s in sorted(sources.values(), key=lambda s: s.number)]}

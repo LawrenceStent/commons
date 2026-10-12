@@ -10,7 +10,7 @@ from commons.domain.pack import load
 
 def test_a_live_run_writes_its_answers_beside_its_runs_folder():
     assert str(folder_for("societies/uk-climate/runs/live-x.sqlite")) == "societies/uk-climate/answers/live-x"
-    assert str(folder_for("runs/ticks/paper/state/ledger.sqlite")) == "runs/ticks/paper/answers/ledger"
+    assert str(folder_for("runs/ticks/paper/state/ledger.sqlite")) == "runs/ticks/paper/answers"  # one continuous run
     assert folder_for(":memory:") is None
 
 

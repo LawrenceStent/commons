@@ -120,7 +120,10 @@ class Society:
         self.operator = operator or Operator(None)
         if self.desk:
             self.operator.know(t["name"] for t in self.desk.tools)
-        self.archive = archive or ArchiveIndex()  # the society's reference material, searched on demand
+        # the society's reference material, searched on demand. `is not None`, not `or`: an archive with no pages yet
+        # is falsy, and `or` swapped a new society's folder-backed archive for a throwaway one, so no page read from
+        # the web was ever kept for later runs (found 12 Oct)
+        self.archive = archive if archive is not None else ArchiveIndex()
 
         self.ratings = ratings  # your ratings of a sample of the paid work (commons/application/ratings.py)
         self.gate = gate or Gate()

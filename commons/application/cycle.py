@@ -80,6 +80,18 @@ def _turns(w: World) -> None:
         with w.lock:
             for c in order:
                 w.turn(c)
+    _backend_down(w, order)
+
+
+def _backend_down(w: World, order) -> None:
+    """Every model-run co-op's turn failed on the model backend (12 Oct: LM Studio's engine stalled and the run went on
+    for two more cycles with no model): halt, with the backend's own error, rather than run empty cycles. Reload the
+    model, reset, and a saved society carries on."""
+    llm = [c for c in order if hasattr(c.strategy, "backend_error")]
+    if llm and all(c.strategy.backend_error for c in llm):
+        with w.lock:
+            w.meter.halt(f"the model backend failed for every co-op this cycle: {llm[0].strategy.backend_error[:200]}. "
+                         "Reload the model, then reset", w.cycle)
 
 
 def _gossip(w: World) -> None:

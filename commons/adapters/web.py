@@ -181,6 +181,15 @@ def page_links(raw: list[tuple[str, str]], base: str) -> list[tuple[str, str]]:
     return (docs + rest)[:MAX_LINKS]
 
 
+_GENERIC = re.compile(r"^(powerpoint presentation|presentation|untitled|document|slide \d+|microsoft (word|powerpoint|"
+                      r"excel)\b.*|.*\.(docx?|pptx?|xlsx?|indd|pdf))$", re.IGNORECASE)
+
+
+def _generic(title: str) -> bool:
+    """A PDF title that says nothing about the document (12 Oct: Ofwat's reports are all "PowerPoint Presentation")."""
+    return not title or bool(_GENERIC.match(title.strip()))
+
+
 def pdf_to_text(body: bytes, max_pages: int = 400) -> tuple[str, str]:
     """A PDF's title and text, each page headed "[page N]"; scanned pages (no text layer) come out empty."""
     from pypdf import PdfReader
@@ -189,6 +198,9 @@ def pdf_to_text(body: bytes, max_pages: int = 400) -> tuple[str, str]:
         reader = PdfReader(io.BytesIO(body))
         title = str((reader.metadata or {}).get("/Title") or "").strip()
         pages = [f"[page {i + 1}]\n{(page.extract_text() or '').strip()}" for i, page in enumerate(reader.pages[:max_pages])]
+        if _generic(title):  # "PowerPoint Presentation", "Microsoft Word - draft3.docx": the first real line instead
+            first = next((line.strip() for page in pages for line in page.splitlines()[1:] if len(line.strip()) > 12), "")
+            title = first[:120]
     except (PdfReadError, ValueError, KeyError, TypeError) as e:
         raise WebError(f"couldn't read the PDF: {e}") from e
     text = re.sub(r"[ \t\r\f\v]+", " ", "\n\n".join(pages))
