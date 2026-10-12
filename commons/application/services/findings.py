@@ -190,6 +190,15 @@ class Findings:
         if hasattr(ws, "subjects") and text not in ws.subjects:
             self.w.pack = replace(self.w.pack, work_source=replace(ws, subjects=(*ws.subjects, text)))
 
+    def _claim_text(self, text: str) -> str:
+        """The part of a text that makes claims: its labelled sections less the gaps and notes on how sure it is (whose
+        sentences aren't findings); all of it if it has no labels."""
+        skip = {s.lower() for s in (*self.w.pack.gap_sections, *self.w.pack.note_sections)}
+        parts = sections(text)
+        if not parts:
+            return text
+        return "\n".join(body for label, body in parts.items() if label.lower() not in skip)
+
     def load(self, qid: str) -> dict | None:
         path = self.folder / f"{qid}.json"
         return json.loads(path.read_text()) if path.exists() else None
@@ -203,7 +212,7 @@ class Findings:
         for cap in sorted(texts, key=lambda c: order.index(c) if c in order else len(order)):
             if job.parts[cap].independent:
                 continue  # the checker's lines are verdicts on claims, not claims
-            for sentence in claims_of(texts[cap]):
+            for sentence in claims_of(self._claim_text(texts[cap])):
                 if sentence in seen:
                     continue
                 seen.add(sentence)

@@ -65,6 +65,7 @@ def main(argv: list[str] | None = None) -> None:
         return
     live._lock()
     world = _open(a, state, society, pack, models)
+    world.label_run("ticks")  # one continuous run, whatever its ledger's file is called
     live._log_turns(world, str(state / "turns.jsonl"))
     start, todo = world.cycle, a.cycles
     for _ in range(todo):  # a cycle at a time, so the cap across societies is rechecked between them

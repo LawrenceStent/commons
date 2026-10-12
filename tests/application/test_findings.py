@@ -175,3 +175,20 @@ def test_a_playbook_a_co_op_publishes_is_kept_for_later_runs(tmp_path):
     assert kept and "Start from GOV.UK." in kept[0].read_text()
     w.add_playbook("seed-x", "operator", "collect", "Seeded", "already yours")
     assert not list((tmp_path / "playbooks").glob("collect--seeded.md"))  # your own seeds aren't copied back
+
+
+def test_findings_come_from_claims_not_from_notes_on_confidence_or_gaps(tmp_path):
+    w = society(tmp_path)
+    noisy = ANALYSIS.replace("High: one official source.", f"I am fairly confident in this {CITE}.").replace(
+        "Per-company counts aren't in the release.", f"Per-company counts aren't in the release {CITE}.")
+    state = w.findings.outcome(job(w, "J1", noisy), paid=True, why="")
+    texts = [c["text"] for c in state["claims"]]
+    assert len(texts) == 2 and all("confident" not in t and "Per-company" not in t for t in texts)
+    assert any("Per-company counts" in g for g in state["gaps"])
+
+
+def test_a_ticked_society_records_its_run_as_ticks(tmp_path):
+    w = society(tmp_path)
+    w.label_run("ticks")
+    w.findings.record(job(w, "J1", ANALYSIS), paid=True, why="")
+    assert "| ticks | J1 | paid |" in next((tmp_path / "archive" / "findings").glob("Q-*.md")).read_text()

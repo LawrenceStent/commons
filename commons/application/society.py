@@ -277,6 +277,14 @@ class Society:
 
     # ── the web, behind the gate ───────────────────────────────
 
+    def label_run(self, name: str) -> None:
+        """What findings and the changelog call this run (a ticked society is one run, "ticks", whatever its ledger's
+        file is called)."""
+        if self.findings is not None:
+            self.findings.run = name
+        if (log := getattr(self.activity, "changelog", None)) is not None:
+            log.run = name
+
     def observe(self, me: Community) -> Observation:
         """What a co-op sees (commons/application/observe.py)."""
         return self.observer.build(me)
