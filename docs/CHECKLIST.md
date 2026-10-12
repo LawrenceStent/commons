@@ -711,6 +711,12 @@ Plan, your decisions (5 Oct) and stages: `docs/PHASE2-PLAN.md`.
 - [ ] P2.7 with your keys: `commons channels --check`, one product end to end (Lemon Squeezy test mode; Etsy later)
 - [ ] Done when: first dollar settles through the ledger (P2.8)
 
+## Findings: building on earlier runs (plan, 12 Oct)
+
+Plan and stages: `docs/FINDINGS-PLAN.md`. Pages read are kept between runs (F0, `3e691de`); next, a dossier per
+question (F1), searchable findings (F2), update jobs (F3), a question lifecycle (F4), paying updates by what they add
+(F5), measurement (F6). Four decisions waiting for you (in the plan).
+
 ## Phase 3 — Multi-channel
 - [ ] Content, services, affiliate venture templates
 
