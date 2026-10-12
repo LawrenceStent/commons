@@ -192,3 +192,14 @@ def test_a_ticked_society_records_its_run_as_ticks(tmp_path):
     w.label_run("ticks")
     w.findings.record(job(w, "J1", ANALYSIS), paid=True, why="")
     assert "| ticks | J1 | paid |" in next((tmp_path / "archive" / "findings").glob("Q-*.md")).read_text()
+
+
+def test_a_follow_ups_reason_reaches_you_when_given_as_the_tools_why(tmp_path):
+    """The steward's dispatch takes `why` off every tool call as the action's rationale (12 Oct: G42's was empty)."""
+    from commons.domain.gate import GatePolicy
+    w = society(tmp_path)
+    w.gate.policy = GatePolicy(govern="ask")
+    act = Actions(w, next(iter(w.communities.values())))
+    act.why = "the 2025 release has no per-site figures"
+    assert act.propose_question("[record] Which storm overflows spilled most in 2025?")
+    assert "Why: the 2025 release has no per-site figures" in next(r for r in w.gate.pending()).detail

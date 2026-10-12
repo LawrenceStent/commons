@@ -110,7 +110,7 @@ class KnowledgeCommands(CommandBase):
             return Outcome(False, "this society already has that question")
         findings.proposed[qid] = question
         out = self.w.approvals.request(self.me.name, self.actor, PROPOSE, "govern", qid,
-                                       f"Follow-up question: {question}\nWhy: {str(why)[:400]}")
+                                       f"Follow-up question: {question}\nWhy: {str(why or self.why)[:400]}")
         if not out.ok:
             findings.proposed.pop(qid, None)
         return out
