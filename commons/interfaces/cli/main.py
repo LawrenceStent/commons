@@ -9,6 +9,7 @@
     uv run commons console ...     the dashboard on a scripted society
     uv run commons found ...       found a society from a brief, or approve its blueprints
     uv run commons approve ...     decide the gate's requests
+    uv run commons log NAME ...    a society's changelog: every action by every co-op, in every run
     uv run commons rate ...        rate the work a society set aside for you
     uv run commons calibrate ...   check a grader or appraiser against its hand-labelled cases
     uv run commons metrics         architecture measurements (development)
@@ -27,7 +28,7 @@ COMMANDS = {
     "calibrate": "calibrate", "metrics": "metrics", "golden": "golden", "tick": "tick",
     "tick-all": "tick:main_all", "list": "societies:main_list", "pause": "societies:main_pause",
     "resume": "societies:main_resume", "pace": "societies:main_pace",
-    "channels": "store:main_channels", "link": "store:main_link",
+    "channels": "store:main_channels", "link": "store:main_link", "log": "changelog",
 }
 
 

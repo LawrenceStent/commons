@@ -133,6 +133,7 @@ class StorageConfig:
     events_keep: int
     activity_keep: int
     activity_path: str | None
+    changelog_dir: str | None
     retain: int
     outputs_keep: int
 
@@ -209,6 +210,7 @@ class Params:
     grading_workers: int = 1
     activity_keep: int = 2000  # entries of the activity log kept in memory
     activity_path: str | None = None  # also append every entry to this JSONL file
+    changelog_dir: str | None = None  # and to the society's daily changelog here (commons/substrate/changelog.py)
     retain: int = 20  # cycles a closed job or contract stays visible before it's dropped
     # population and capabilities (commons/application/population.py)
     max_members: int = 7

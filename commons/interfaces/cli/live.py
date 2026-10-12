@@ -162,7 +162,10 @@ def _world(a, society, pack, m: dict, population, ledger: str) -> World:
     run_name = Path(ledger).stem
     operator = Operator(a.operator) if a.operator else None
     make_desk = pack.desk if a.backend == "fake" else (pack.live_desk or pack.desk)  # a dry run never touches live data
+    logs = str((society.folder if society else Path(ledger).parent.parent if Path(ledger).parent.name == "state"
+                else Path(ledger).parent) / "logs")
     return World(Params(seed=a.seed, ledger_path=ledger, activity_path=ledger.replace(".sqlite", ".activity.jsonl"),
+                        changelog_dir=logs,
                         **{**pack.live, **RUN}),
                  population=population, pack=pack, grader=grader, appraiser=appraiser,
                  operator=operator, web=web_for(a, operator),

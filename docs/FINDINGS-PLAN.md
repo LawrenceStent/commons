@@ -78,6 +78,8 @@ changed. A finding whose source has changed is marked "to re-check".
 Each stage: tests, the full suite and the golden master pass, then a commit.
 
 - [x] **F0** Pages read from the web are kept between runs (the archive fix, 12 Oct)
+- [x] **L1** The changelog: per-society daily logs of every action, gzipped when the day ends, and `commons log`.
+      Done when: two runs of one society land in one log you can filter by co-op and cycle
 - [ ] **F1** Question ids and dossiers. Done when: after a run, `findings/Q-xxxx.md` holds each graded question's
       answer, history and lessons, rebuilt from scratch identically (writing is deterministic)
 - [ ] **F2** Findings: cited claims extracted with their sources and status (`findings/findings.jsonl`); contradicted
@@ -95,13 +97,21 @@ Each stage: tests, the full suite and the golden master pass, then a commit.
 F1-F3 deliver the main benefit: the next run starts from the last one's verified findings. F4-F6 make it a lasting
 research process.
 
-## Decisions for you
+## Your decisions (12 Oct)
 
-1. **Failed answers in dossiers**: include them, marked NOT VERIFIED with the reasons (recommended: a mostly right
-   answer and its one error are both useful), or keep only verified work?
-2. **Refresh period**: how long before an answered question is asked again (30 days suggested)?
-3. **Follow-up questions**: may co-ops propose them from gaps, through your gate?
-4. **Paying for updates**: by what they add (recommended), or the full reward each time?
+1. **Failed answers go in dossiers**, marked NOT VERIFIED, with the grader's reasons as lessons.
+2. **Refresh after 30 days.**
+3. **Co-ops may propose follow-up questions** from gaps; each comes to you at the gate.
+4. **Updates are paid by what they add.**
+5. **A changelog**: every action by every co-op, in every run, kept as a plain debug log (below).
+
+## The changelog (L1)
+
+One append-only log per society, `societies/<name>/logs/<date>.jsonl`: every action, decision and change from the
+activity log, with the run, cycle, co-op, actor, what happened and why, in every run, in order. A day's file is gzipped
+once the day is over, so it stays small on disk; nothing is held in memory beyond the activity log's bounded window.
+`commons log NAME` reads it back, filtered by co-op, cycle, run, action or text. Long texts (drafts, results) are cut
+to a fixed length: the full text of finished work is in the reports and dossiers.
 
 ## Risks
 

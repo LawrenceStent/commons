@@ -163,6 +163,19 @@ A `pause_society` request (risk `govern`) comes when the store has sold nothing 
 in real money over 30 days. Deny one and the rules wait 30 days before asking again. Approving a pause writes the
 `paused` file, so ticks skip the society until `uv run commons resume NAME`.
 
+## commons log
+
+A society's changelog: every action, decision and change by every co-op, in every live run, in order. One file per
+day in `societies/<name>/logs/`, gzipped once the day is over.
+
+```sh
+uv run commons log uk-climate                      # the last 50 entries
+uv run commons log uk-climate --coop report-cite --cycle 5
+uv run commons log uk-climate --name do_part --grep J3 --last 0
+uv run commons log uk-climate --failed             # refused or failed actions only
+uv run commons log uk-climate --runs               # the runs in the log
+```
+
 ## commons sim
 
 Runs a scripted society (no models, no spend) and prints a summary and its scorecard. This is how incentive rules are

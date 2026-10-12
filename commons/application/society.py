@@ -70,6 +70,7 @@ from commons.domain.population import Proposal
 from commons.domain.reputation import Reputation
 from commons.domain.ventures import Appraiser, StubAppraiser, Venture
 from commons.protocol import Envelope, Message
+from commons.substrate.changelog import Changelog
 from commons.substrate.activity import ActivityLog
 from commons.substrate.bus import Bus, MemoryBus, RateLimited
 from commons.substrate.ledger import Ledger, purse
@@ -103,7 +104,9 @@ class Society:
         self._connect(ledger, bus, grader, appraiser, operator, archive, ratings, web, gate, payment)
         self.answers = Answers(self, answers) if answers is not None else None  # finished jobs as reports
         self._open_records()
-        self.activity = activity or ActivityLog(p.storage.activity_keep, p.storage.activity_path)
+        changelog = (Changelog(p.storage.changelog_dir, run=Path(p.storage.ledger_path).stem)
+                     if p.storage.changelog_dir else None)
+        self.activity = activity or ActivityLog(p.storage.activity_keep, p.storage.activity_path, changelog=changelog)
         self.activity.watch(self.hub)
         self._start_services()
         self._genesis()

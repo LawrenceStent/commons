@@ -92,9 +92,10 @@ def _change(ev: Event) -> tuple[str, str | None, str] | None:
 
 
 class ActivityLog:
-    def __init__(self, keep: int = 2000, path: str | None = None):
+    def __init__(self, keep: int = 2000, path: str | None = None, changelog=None):
         self.ring: deque[Entry] = deque(maxlen=keep)
         self.path = path
+        self.changelog = changelog  # the society's changelog across runs (commons/substrate/changelog.py), if any
         self._file = open(path, "a") if path else None
         self._seq = 0
         self._lock = threading.Lock()  # web calls log outside the world's lock
@@ -116,6 +117,8 @@ class ActivityLog:
             if self._file:
                 self._file.write(json.dumps(asdict(e)) + "\n")
                 self._file.flush()
+            if self.changelog is not None:
+                self.changelog.write(asdict(e))
         return e
 
     def watch(self, hub: Hub) -> None:
@@ -133,6 +136,8 @@ class ActivityLog:
     def close(self) -> None:
         if self._file:
             self._file.close()
+        if self.changelog is not None:
+            self.changelog.close()
 
 
 def log_action(cmd, name: str, args: dict, out) -> None:
