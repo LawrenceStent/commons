@@ -106,3 +106,49 @@ def test_a_question_worked_before_is_posted_as_an_update(tmp_path):
     assert "Never cite the dossier itself" in spec
     fresh = MarketJob("J9", "[org] A question never asked", 1, {"collect": Part("collect", "Find.", "r")}, posted=0, deadline=9)
     assert not w.findings.brief(fresh) and fresh.parts["collect"].spec == "Find."
+
+
+def test_open_questions_come_first_and_answered_ones_wait_thirty_days(tmp_path):
+    """F4, your decision 12 Oct: refresh after 30 days."""
+    import time as clock
+    w = society(tmp_path)
+    other = "[org] What did the Climate Change Committee report in 2025?"
+    assert w.findings.due([Q, other], live=set()) == [Q, other]  # neither answered yet
+    w.findings.record(job(w, "J1", ANALYSIS), paid=True, why="")
+    assert w.findings.due([Q, other], live=set()) == [other]  # Q is answered and fresh
+    assert w.findings.due([Q, other], live={other}) == []  # the other is on the board already: nothing to post
+    later = clock.time() + 31 * 86_400
+    assert w.findings.due([Q], live=set(), now=later) == [Q]  # its refresh is due
+
+
+def test_a_follow_up_question_goes_to_your_gate_then_to_the_board(tmp_path):
+    from commons.domain.gate import GatePolicy
+    w = society(tmp_path)
+    w.gate.policy = GatePolicy(govern="ask")
+    w.findings.record(job(w, "J1", ANALYSIS), paid=True, why="")  # Q has a dossier: the society has it
+    act = Actions(w, next(iter(w.communities.values())))
+    follow = "[record] How many storm overflow spills did each water company report per site in 2025?"
+    out = act.propose_question(follow, "the 2025 answer lacks per-company figures")
+    assert out and "waiting for the operator" in out.message
+    assert not act.propose_question(follow, "again")  # already proposed
+    assert not act.propose_question(Q, "x")  # already one of the society's questions
+    request = next(r for r in w.gate.pending() if r.tool == "propose_question")
+    assert follow in request.detail and request.risk == "govern"
+    w.web_desk.decide([request.id], True)
+    w.step()  # approvals run at the start of the next cycle
+    assert follow in (tmp_path / "questions.md").read_text() and follow in w.pack.work_source.subjects
+
+
+def test_a_follow_up_about_a_person_is_refused(tmp_path):
+    w = society(tmp_path)
+    act = Actions(w, next(iter(w.communities.values())))
+    out = act.propose_question("[person] Where does the chief executive live?", "x")
+    assert not out and w.findings.proposed == {}
+
+
+def test_only_societies_that_take_follow_ups_are_offered_the_tool():
+    from commons.adapters.models import FakeBackend
+    from commons.agents.llm.steward import LLMStrategy
+    from commons.agents.llm.tools import TOOLS
+    assert "propose_question" not in {t["name"] for t in TOOLS}  # not in the shared list: other packs unchanged
+    assert load("osint").followups and not load("earn_online").followups

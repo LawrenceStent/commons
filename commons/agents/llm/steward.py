@@ -26,7 +26,7 @@ from typing import Any
 from commons.agents.llm.member import Draft, MemberWorker
 from commons.agents.llm.prompts import MEMBER_SYSTEM, NUDGE, steward_system
 from commons.agents.llm.render import render
-from commons.agents.llm.tools import NAMES, steward_tools
+from commons.agents.llm.tools import PROPOSE_QUESTION, NAMES, steward_tools
 from commons.agents.waking import members_to_wake
 from commons.application.commands.base import FORMAT_REFUSED
 from commons.application.observation import Observation, Outcome, RuntimeAPI
@@ -165,6 +165,7 @@ class StewardLoop:
         op, pack = act.operator_view(), act.pack()
         self.system = steward_system(pack, self.obs, op)
         self.without = pack.without
+        self.extra = (PROPOSE_QUESTION,) if pack.followups else ()  # kernel tools only some packs offer
         rt = op.runtime  # per-co-op runtime settings from the operator override the defaults for this turn
         self.model = rt.get("steward_model", a.steward_model)
         self.max_tokens = int(rt.get("max_tokens", a.max_tokens))
@@ -213,7 +214,7 @@ class StewardLoop:
             return None
         try:
             t = self.agent.backend.chat(model=self.model, system=self.system, messages=self.messages,
-                                        tools=steward_tools(bool(self.obs.web), self.obs.desk_tools, self.without),
+                                        tools=steward_tools(bool(self.obs.web), (*self.obs.desk_tools, *self.extra), self.without),
                                         max_tokens=self.max_tokens)
         except ModelError as e:
             self.log.append({"kind": "error", "text": f"steward call failed: {e}"})

@@ -20,10 +20,11 @@ import hashlib
 import json
 import re
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+from commons.application.services.approvals import CARRIERS
 from commons.domain import events as ev
 from commons.domain.archive import citations
 
@@ -32,6 +33,8 @@ if TYPE_CHECKING:
     from commons.domain.market import MarketJob
 
 PREFIX = "findings"  # dossier passages' ids start with this: "findings-q-3f2a1b#2"
+REFRESH_DAYS = 30  # an answered question is asked again after this long (your decision, 12 Oct)
+PROPOSE = "propose_question"  # the gate tool for a follow-up question a co-op proposes
 _SENTENCE = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9\"'(])")
 _LABEL = re.compile(r"^\**([A-Z][A-Za-z ]{0,30}?)\**:?\s*$")
 
@@ -86,6 +89,7 @@ class Findings:
     folder: Path
     run: str = ""  # the run outcomes are recorded under (its ledger's name)
     reasons: dict[str, dict[str, str]] = field(default_factory=dict)  # job -> part -> why it failed grading
+    proposed: dict[str, str] = field(default_factory=dict)  # question id -> a follow-up waiting for your decision
 
     def observe(self, event: ev.Event) -> None:
         if isinstance(event, ev.PartGraded) and event.audit is None and event.grade.score < 0.5:
@@ -119,6 +123,36 @@ class Findings:
         for part in job.parts.values():
             part.spec = f"{note}\n\n{part.spec}"
         return True
+
+    # ── F4: which questions are posted, and follow-ups ─────────
+    def due(self, subjects, live: set[str], now: float | None = None) -> list[str]:
+        """The questions to post from: open ones (never answered) first; else answered ones whose refresh is due
+        (REFRESH_DAYS after their last verified answer); never one with a job already on the board. Empty when every
+        question is answered and fresh: nothing is posted."""
+        now = now or time.time()
+        open_, stale = [], []
+        for s in subjects:
+            if s in live:
+                continue
+            state = self.load(question_id(s))
+            paid = [o for o in (state or {}).get("outcomes", []) if o["status"] == "paid"]
+            if not paid:
+                open_.append(s)
+            elif now - time.mktime(time.strptime(paid[-1]["date"], "%Y-%m-%d")) >= REFRESH_DAYS * 86_400:
+                stale.append(s)
+        return open_ or stale
+
+    def questions_file(self) -> Path:
+        return self.folder.parent.parent / "questions.md"  # the society's own (archive/findings -> society)
+
+    def add_question(self, text: str) -> None:
+        """A follow-up you approved joins the society's questions: its file, and the board from now on."""
+        path = self.questions_file()
+        existing = path.read_text() if path.exists() else ""
+        path.write_text(existing + ("" if existing.endswith("\n") or not existing else "\n") + text + "\n")
+        ws: Any = self.w.pack.work_source  # a template work source has subjects; others don't take questions
+        if hasattr(ws, "subjects") and text not in ws.subjects:
+            self.w.pack = replace(self.w.pack, work_source=replace(ws, subjects=(*ws.subjects, text)))
 
     def load(self, qid: str) -> dict | None:
         path = self.folder / f"{qid}.json"
@@ -213,3 +247,16 @@ def dossier(state: dict) -> str:
     out += [f"| {o['date']} | {o['run']} | {o['job']} | {o['status']}{': ' + o['why'] if o['why'] else ''} |"
             for o in outcomes]
     return "\n".join(out) + "\n"
+
+
+def _approve_question(w, r) -> tuple[bool, str]:
+    """You approved a follow-up question: it's added to the society's questions and posted like any other."""
+    findings = w.findings
+    text = findings.proposed.pop(r.target, None) if findings is not None else None
+    if findings is None or text is None:
+        return False, "the proposal is no longer on record"
+    findings.add_question(text)
+    return True, f"added to this society's questions: {text}"
+
+
+CARRIERS[PROPOSE] = _approve_question

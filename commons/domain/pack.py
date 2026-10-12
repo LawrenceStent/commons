@@ -116,6 +116,7 @@ class Pack:
     report_parts: tuple[tuple[str, str], ...] = ()
     # the labelled sections of a part that name what the sources don't settle (services/findings.py keeps them as gaps)
     gap_sections: tuple[str, ...] = ()
+    followups: bool = False  # co-ops may propose follow-up questions from gaps, through your gate (propose_question)
     health: Callable[[bool], list[str]] | None = None  # its outside services: keys set? (and, if asked, do they answer?)
 
     @property

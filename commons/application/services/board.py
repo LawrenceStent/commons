@@ -6,8 +6,10 @@ paid and forfeited if it fails. The rules of each move are the job aggregate's (
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import random
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 from commons.domain import events as ev
 from commons.domain.community import Community
@@ -29,8 +31,15 @@ class JobBoard:
     def post(self) -> None:
         p = self.w.params
         for _ in range(p.market.jobs_per_cycle):
-            job = self.w.pack.work_source.new_job(self.w.rng, f"J{self.w.ids.next('job')}", self.w.cycle, p.market.job_reward, p.market.board_ttl,
-                                                p.market.parts_per_job)
+            source: Any = self.w.pack.work_source
+            if self.w.findings is not None and hasattr(source, "subjects"):  # F4: open questions first, refreshes later
+                live = {j.title for j in self.w.jobs.values() if j.status in (JobStatus.OPEN, JobStatus.CLAIMED)}
+                due = self.w.findings.due(source.subjects, live)
+                if not due:
+                    return  # every question is answered and fresh, or already on the board
+                source = replace(source, subjects=tuple(due))
+            job = source.new_job(self.w.rng, f"J{self.w.ids.next('job')}", self.w.cycle, p.market.job_reward, p.market.board_ttl,
+                                 p.market.parts_per_job)
             if self.w.findings is not None:  # a question worked before is posted as an update (services/findings.py)
                 self.w.findings.brief(job)
             self.w.jobs[job.id] = job

@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 
 from commons.application.commands.base import CommandBase
 from commons.application.commands.pipeline import command
+from commons.application.screening import screen
+from commons.application.services.findings import PROPOSE, question_id
 from commons.application.observation import Outcome
 from commons.domain.ids import PassageId, PlaybookId
 from commons.protocol.knowledge import Publish
@@ -92,3 +94,24 @@ class KnowledgeCommands(CommandBase):
     def web_fetch(self, url: str) -> Outcome:
         """Read a page through the gate; it joins the archive, to cite as [archive: <id>]."""
         return self.w.web_desk.call(self.me.name, self.actor, "web_fetch", url)
+
+    @command()
+    def propose_question(self, question: str, why: str = "") -> Outcome:
+        """A follow-up question from a gap (F4): screened like the society's own questions, then to your gate."""
+        findings = self.w.findings
+        if findings is None or not self.w.pack.followups:
+            return Outcome(False, "this society doesn't take proposed questions")
+        question = " ".join(str(question).split())[:400]
+        if why_not := screen(self.w, self.me.name, "question", question):
+            return Outcome(False, why_not)
+        qid = question_id(question)
+        subjects = getattr(self.w.pack.work_source, "subjects", ())
+        if qid in {question_id(s) for s in subjects} or qid in findings.proposed or findings.load(qid) is not None:
+            return Outcome(False, "this society already has that question")
+        findings.proposed[qid] = question
+        out = self.w.approvals.request(self.me.name, self.actor, PROPOSE, "govern", qid,
+                                       f"Follow-up question: {question}\nWhy: {str(why)[:400]}")
+        if not out.ok:
+            findings.proposed.pop(qid, None)
+        return out
+

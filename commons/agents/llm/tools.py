@@ -117,7 +117,14 @@ for _t in _TOOLS:
     _t["input_schema"]["properties"]["why"] = {"type": "string", "description": "optional: why, in one sentence"}
 
 TOOLS: list[dict[str, Any]] = sorted(_TOOLS, key=lambda t: t["name"])
-NAMES = frozenset(t["name"] for t in TOOLS)
+# offered only in a society whose pack takes follow-up questions (Pack.followups), beside the pack's desk tools, so
+# every other society's tool list (and its cached prompt prefix) is unchanged
+PROPOSE_QUESTION: dict[str, Any] = {
+    "name": "propose_question", "description": "Propose a follow-up question for this society to investigate, from a "
+    "gap the sources left open. It must name its kind like the society's questions ([org], [event], [infrastructure], "
+    "[record]) and never be about a private person. Free; goes to the operator, who decides.",
+    "input_schema": _obj({"question": S, "why": S}, ["question", "why"])}
+NAMES = frozenset(t["name"] for t in TOOLS) | {PROPOSE_QUESTION["name"]}
 WEB = frozenset({"web_search", "web_fetch"})
 OFFLINE: list[dict[str, Any]] = [t for t in TOOLS if t["name"] not in WEB]  # a society with no web isn't offered it
 # what a member may use while writing: look things up, nothing else

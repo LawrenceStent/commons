@@ -141,6 +141,7 @@ PACK = Pack(
     report_parts=(("report", "Answer"), ("analyse", "Analysis"), ("collect", "Sources gathered"),
                   ("verify", "Independent check")),
     gap_sections=("Gaps", "Unknowns"),
+    followups=True,
     # subjects come from your questions, screened; a venture would let a co-op pick its own
     without=frozenset({"propose_venture"}),
 )
