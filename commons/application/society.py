@@ -28,6 +28,7 @@ from pathlib import Path
 from collections import Counter, defaultdict, deque
 
 from commons.application.services.answers import Answers
+from commons.application.services.findings import Findings
 from commons.application import saving
 from commons.application.actions import Actions
 from commons.application.cycle import run_cycle
@@ -89,7 +90,8 @@ class Society:
                  operator: Operator | None = None, pack: Pack | None = None, archive: ArchiveIndex | None = None,
                  ratings: Ratings | None = None, web: WebPort | None = None, gate: Gate | None = None,
                  ledger: Ledger | None = None, bus: Bus | None = None, activity: ActivityLog | None = None,
-                 payment: PaymentPolicy | None = None, desk: Desk | None = None, answers: Path | None = None):
+                 payment: PaymentPolicy | None = None, desk: Desk | None = None, answers: Path | None = None,
+                 findings: Path | None = None):
         """Everything outside the society's rules can be passed in (the model-backed grader and appraiser, the web,
         the ledger, the bus, the activity log, the economy, the pack's desk, the folder finished jobs are written to);
         what isn't is built from `params`."""
@@ -103,6 +105,8 @@ class Society:
         self.desk = desk or (self.pack.desk(p.run.seed) if self.pack.desk else None)  # the pack's own tools (domain/desk.py)
         self._connect(ledger, bus, grader, appraiser, operator, archive, ratings, web, gate, payment)
         self.answers = Answers(self, answers) if answers is not None else None  # finished jobs as reports
+        self.findings = (Findings(self, findings, run=Path(p.storage.ledger_path).stem) if findings is not None
+                         else None)  # each question's record, across runs
         self._open_records()
         changelog = (Changelog(p.storage.changelog_dir, run=Path(p.storage.ledger_path).stem)
                      if p.storage.changelog_dir else None)

@@ -80,9 +80,9 @@ Each stage: tests, the full suite and the golden master pass, then a commit.
 - [x] **F0** Pages read from the web are kept between runs (the archive fix, 12 Oct)
 - [x] **L1** The changelog: per-society daily logs of every action, gzipped when the day ends, and `commons log`.
       Done when: two runs of one society land in one log you can filter by co-op and cycle
-- [ ] **F1** Question ids and dossiers. Done when: after a run, `findings/Q-xxxx.md` holds each graded question's
+- [x] **F1** Question ids and dossiers. Done when: after a run, `findings/Q-xxxx.md` holds each graded question's
       answer, history and lessons, rebuilt from scratch identically (writing is deterministic)
-- [ ] **F2** Findings: cited claims extracted with their sources and status (`findings/findings.jsonl`); contradicted
+- [x] **F2** Findings: cited claims extracted with their sources and status (`findings/findings.jsonl`); contradicted
       claims from the checker's verdicts; gaps collected; dossiers indexed in the archive. Done when:
       `search_archive` finds an earlier run's verified finding and its source
 - [ ] **F3** Update jobs: a question with a dossier is posted as an update (prior answer, gaps, "what's new since");

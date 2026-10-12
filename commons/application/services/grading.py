@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING
 
 from commons.application.graders import GradingError
+from commons.application.services.findings import is_finding
 from commons.domain import events as ev
 from commons.domain.archive import citations as archive_citations
 from commons.domain.grading import Grade
@@ -103,6 +104,9 @@ class Grading:
         if missing:
             return Grade(0.0, 0, f"cites archive passages that don't exist ({', '.join(missing[:3])}); a made-up "
                                  f"citation fails the part")
+        if leads := [c for c in cited if is_finding(c)]:
+            return Grade(0.0, 0, f"cites a finding as a source ({', '.join(leads[:3])}); findings are leads, and every "
+                                 "claim must cite the page it came from")
         try:
             return self.w.grader.grade(spec + self.sources(cited), rubric, artifact)
         except GradingError as e:

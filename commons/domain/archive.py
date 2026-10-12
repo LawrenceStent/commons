@@ -123,6 +123,13 @@ class ArchiveIndex:
     def get(self, passage_id: PassageId) -> Passage | None:
         return self.passages.get(passage_id)
 
+    def replace_source(self, rel: str, text: str) -> list[str]:
+        """A source rewritten (a dossier after another run): its old passages go, its new ones are indexed."""
+        for pid in [pid for pid, p in self.passages.items() if p.source == rel]:
+            self._df.subtract(self._tf.pop(pid).keys())
+            del self.passages[pid]
+        return self._index(rel, text)
+
     def coverage(self, passage_id: PassageId, query: str) -> float:
         """The share of the query's words the passage contains: how well a hit answers what was asked."""
         q = set(_terms(query))

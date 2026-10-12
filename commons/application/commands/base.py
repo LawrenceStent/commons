@@ -7,6 +7,7 @@ import difflib
 from typing import TYPE_CHECKING
 
 from commons.application.observation import Outcome
+from commons.application.services.findings import is_finding
 from commons.domain.archive import citations as archive_citations
 from commons.application.screening import review_work, screen
 from commons.domain.grading import is_tagged
@@ -94,7 +95,12 @@ class CommandBase:
         """Every [archive: id] the work cites must exist, checked at hand-in so a mistyped id can be fixed (12 Oct: one
         typo, "wcpr-2025-pdf#45" for "wcpr-24-25-pdf#45", failed a whole job at grading). A near miss gets a
         suggestion; the grader's rule still fails anything that reaches it with a citation to nothing."""
-        missing = [c for c in archive_citations(artifact) if self.w.archive.get(c) is None]
+        cited = archive_citations(artifact)
+        if leads := [c for c in cited if is_finding(c)]:
+            return Outcome(False, f"refused: {', '.join(leads[:3])} is a finding, not a source. A dossier's claims are "
+                                  "leads: cite the page each one's [archive: ...] id points to, after reading it",
+                           FORMAT_REFUSED)
+        missing = [c for c in cited if self.w.archive.get(c) is None]
         if not missing:
             return None
         ids = list(self.w.archive.passages)

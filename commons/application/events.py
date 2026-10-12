@@ -38,6 +38,8 @@ class Events:
             self.w.hub.emit(kind, self.w.cycle, **fields)
         if (answers := getattr(self.w, "answers", None)) is not None:  # finished jobs, written out as reports
             answers.observe(event)
+        if (findings := getattr(self.w, "findings", None)) is not None:  # each question's record, across runs
+            findings.observe(event)
 
 
 # ── what co-ops are told ───────────────────────────────────────

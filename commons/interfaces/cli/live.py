@@ -173,6 +173,7 @@ def _world(a, society, pack, m: dict, population, ledger: str) -> World:
                  archive=Archive(society.folder / "archive") if society else None,
                  ratings=Ratings(society.folder, run=run_name, every=a.rate_every) if society else None,
                  answers=folder_for(ledger) if a.backend != "fake" else None,
+                 findings=society.folder / "archive" / "findings" if society and a.backend != "fake" else None,
                  desk=make_desk(a.seed) if make_desk else None)
 
 

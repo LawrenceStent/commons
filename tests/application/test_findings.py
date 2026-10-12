@@ -1,0 +1,90 @@
+"""Findings kept across runs (docs/FINDINGS-PLAN.md F1-F2): a dossier per question, searchable, never a source."""
+
+import json
+
+from commons.application.actions import Actions
+from commons.application.archive import Archive
+from commons.application.services.findings import dossier, question_id
+from commons.application.society import Params, World
+from commons.domain.market import MarketJob, Part
+from commons.domain.pack import load
+
+Q = "[record] How many storm overflow spills did each English water company report in 2025?"
+PAGE = ("https://www.gov.uk/government/news/fewer-and-shorter-storm-overflow-spills-in-2025",
+        "Fewer and shorter storm overflow spills in 2025",
+        "There were 291,492 monitored spills in 2025.\n\nSpill duration fell by a fifth.")
+
+
+def society(tmp_path):
+    pack = load("osint")
+    archive = Archive(tmp_path / "archive")
+    if not archive.passages:
+        archive.add_page(*PAGE)
+    w = World(Params(**{**pack.params, "seed": 0, "verify": False}), pack=pack, archive=archive,
+              findings=tmp_path / "archive" / "findings")
+    w.step()
+    return w
+
+
+def job(w, jid, analysis, check=None):
+    prime = next(iter(w.communities))
+    parts = {"analyse": Part("analyse", "s", "r", artifact=analysis, source="self")}
+    if check:
+        parts["verify"] = Part("verify", "s", "r", artifact=check, source="self", independent=True)
+    return MarketJob(jid, Q, 1, parts, posted=0, deadline=9, prime=prime)
+
+
+CITE = "[archive: web-www-gov-uk-government-news-fewer-and-shorter-storm-overflow-spills-in-2025#1]"
+ANALYSIS = (f"Findings\nThere were 291,492 monitored spills in 2025 {CITE}. Duration fell by a fifth {CITE}.\n\n"
+            "Confidence\nHigh: one official source.\n\nGaps\nPer-company counts aren't in the release.")
+
+
+def test_a_questions_id_is_the_same_in_any_run():
+    assert question_id(Q) == question_id("  " + Q.upper()) and question_id(Q).startswith("Q-")
+    assert question_id(Q) != question_id(Q + " Why?")
+
+
+def test_a_failure_then_a_paid_answer_build_one_dossier(tmp_path):
+    w = society(tmp_path)
+    w.findings.reasons["J1"] = {"analyse": "cites a passage that doesn't support the duration claim"}
+    w.findings.record(job(w, "J1", ANALYSIS), paid=False, why="a part failed grading (analyse 0.40)")
+    path = w.findings.record(job(w, "J7", ANALYSIS), paid=True, why="")
+    text = path.read_text()
+    assert text.startswith(f"# {question_id(Q)} · {Q}") and "Status: answered: verified on" in text
+    assert "## Current best answer" in text and "## Verified findings" in text
+    assert "There were 291,492 monitored spills in 2025" in text and CITE in text  # its source, there to follow
+    assert "## Open gaps" in text and "Per-company counts aren't in the release." in text
+    assert "cites a passage that doesn't support the duration claim" in text  # the lesson from the failure
+    assert "| J1 | failed: a part failed grading" in text and "| J7 | paid |" in text
+    state = json.loads(path.with_suffix(".json").read_text())
+    assert dossier(state) == text  # written by rule: the same record, the same dossier
+
+
+def test_a_claim_the_checker_contradicted_is_marked_so(tmp_path):
+    w = society(tmp_path)
+    check = f"Claim 2: duration fell by a fifth: contradicted by {CITE}\nSupported: 1 of 2. Contradicted: 1."
+    text = w.findings.record(job(w, "J2", ANALYSIS, check), paid=False, why="the check found 1 contradicted").read_text()
+    assert "## Contradicted findings" in text
+
+
+def test_dossiers_are_searchable_now_and_in_the_next_run(tmp_path):
+    w = society(tmp_path)
+    w.findings.record(job(w, "J1", ANALYSIS), paid=True, why="")
+    act = Actions(w, next(iter(w.communities.values())))
+    assert question_id(Q).lower() in act.search_archive("storm overflow spills dossier verified findings").message
+    later = society(tmp_path)  # a new run on the same society: its archive folder brings the dossier back
+    assert any(p.source.startswith("findings/") for p in later.archive.passages.values())
+
+
+def test_a_finding_is_never_a_source(tmp_path):
+    w = society(tmp_path)
+    w.findings.record(job(w, "J1", ANALYSIS), paid=True, why="")
+    lead = next(pid for pid in w.archive.passages if pid.startswith("findings-"))
+    prime = next(iter(w.communities))
+    open_job = MarketJob("J9", Q, 1, {"analyse": Part("analyse", "s", "r")}, posted=w.cycle, deadline=w.cycle + 9,
+                         prime=prime)
+    open_job.status = "claimed"
+    w.jobs["J9"] = open_job
+    out = Actions(w, w.communities[prime]).do_part("J9", "analyse", f"Spills fell [archive: {lead}].")
+    assert not out and "is a finding, not a source" in out.message
+    assert w.grading.try_grade("s", "r", f"<q=0.9> spills [archive: {lead}]").score == 0

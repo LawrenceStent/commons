@@ -140,6 +140,7 @@ PACK = Pack(
     review_flagged_work=True,
     report_parts=(("report", "Answer"), ("analyse", "Analysis"), ("collect", "Sources gathered"),
                   ("verify", "Independent check")),
+    gap_sections=("Gaps", "Unknowns"),
     # subjects come from your questions, screened; a venture would let a co-op pick its own
     without=frozenset({"propose_venture"}),
 )

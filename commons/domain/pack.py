@@ -114,6 +114,8 @@ class Pack:
     # finished jobs written out as reports (commons/application/services/answers.py): the parts in reading order, with
     # their headings; parts not named come after, under their own names
     report_parts: tuple[tuple[str, str], ...] = ()
+    # the labelled sections of a part that name what the sources don't settle (services/findings.py keeps them as gaps)
+    gap_sections: tuple[str, ...] = ()
     health: Callable[[bool], list[str]] | None = None  # its outside services: keys set? (and, if asked, do they answer?)
 
     @property
