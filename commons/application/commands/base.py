@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from commons.application.observation import Outcome
 from commons.application.services.findings import is_finding
 from commons.domain.archive import citations as archive_citations
+from commons.domain.grounding import ungrounded
 from commons.application.screening import review_work, screen
 from commons.domain.grading import is_tagged
 from commons.domain.ids import ContractId
@@ -102,7 +103,7 @@ class CommandBase:
                            FORMAT_REFUSED)
         missing = [c for c in cited if self.w.archive.get(c) is None]
         if not missing:
-            return None
+            return self._grounded(artifact, cited)
         ids = list(self.w.archive.passages)
         hints = []
         for c in missing[:4]:
@@ -111,6 +112,18 @@ class CommandBase:
         return Outcome(False, f"refused: the work cites archive passages that don't exist: {'; '.join(hints)}. Cite "
                               "only passages search_archive or read_archive gave you, then hand it in again",
                        FORMAT_REFUSED)
+
+    def _grounded(self, artifact: str, cited: list[str]) -> Outcome | None:
+        """Every figure and date in a cited sentence must be in a passage it cites (commons/domain/grounding.py): the
+        self-check, by rule, before any grader reads it."""
+        passages = {c: p.text for c in cited if (p := self.w.archive.get(c)) is not None}
+        problems = ungrounded(artifact, passages)
+        if not problems:
+            return None
+        lines = [f'"{u.fact}" in "{u.sentence[:90]}" isn\'t in {", ".join(u.cites)}' for u in problems[:3]]
+        return Outcome(False, "refused: a figure or date isn't in the passage cited for it: " + "; ".join(lines)
+                       + (f" (and {len(problems) - 3} more)" if len(problems) > 3 else "") + ". Cite the passage that "
+                       "states it (read_archive to check), or take it out, then hand it in again", FORMAT_REFUSED)
 
     def _cites_ok(self, cites: tuple[str, ...]) -> Outcome | None:
         unknown = [c for c in cites if c not in self.w.library]

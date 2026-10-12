@@ -148,7 +148,10 @@ PACK = Pack(
     population=population,
     live_population=live_population,
     params=dict(economy="grant", grant_budget=120_000, grant_cap_cycles=3),
-    live_params=dict(economy="grant", grant_budget=600_000, grant_cap_cycles=3),
+    # 12 Oct: four of seven jobs in the first long runs missed their deadlines: more time for a job with a contracted
+    # part, awards two cycles after an announcement, one job per co-op at a time
+    live_params=dict(economy="grant", grant_budget=600_000, grant_cap_cycles=3, job_ttl=18, auto_award_after=2,
+                     max_held_jobs=1),
     grader_system=GRADER_SYSTEM,
     member_system=MEMBER_SYSTEM,
     grader_cases=CASES,

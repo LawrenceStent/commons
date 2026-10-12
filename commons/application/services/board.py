@@ -83,7 +83,9 @@ class JobBoard:
         return sum(j.prime == name and j.status == JobStatus.CLAIMED for j in self.w.jobs.values())
 
     def claim_limit(self, c: Community) -> int:
-        return max(2, c.thinking)
+        limit = max(2, c.thinking)
+        cap = self.w.params.market.max_held_jobs
+        return min(limit, cap) if cap else limit
 
     def pending_claims(self, name: str) -> list[str]:
         return [jid for jid, who in self.claims.items() if name in who]

@@ -40,7 +40,11 @@ class ContractNet:
     def expire_overdue(self) -> None:
         """Every contract stage has a deadline, so no one can stall another."""
         now = self.w.cycle
+        early = self.w.params.contracts.auto_award_after
         for c in list(self.w.contracts.values()):
+            if early and c.status == ContractStatus.OPEN and c.bids and now - c.announced >= early:
+                if self.award_by_rule(c):  # bids are in and the prime hasn't chosen: don't wait out the window
+                    continue
             if c.deadline >= now:
                 continue
             if c.status == ContractStatus.OPEN:

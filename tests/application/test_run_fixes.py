@@ -69,3 +69,45 @@ def test_when_the_model_backend_fails_for_every_co_op_the_society_halts():
         pass
     assert w.meter.halted
     assert any("model backend failed for every co-op" in e.text for e in w.activity.recent(20))
+
+
+def test_an_ungrounded_figure_is_refused_at_hand_in_with_the_reason():
+    from commons.domain.archive import ArchiveIndex
+    arc = ArchiveIndex()
+    pid = arc.add_page("https://www.clientearth.org/ruling", "Ruling", "The judge agreed emissions should count.")[0]
+    pack = load("osint")
+    w = World(Params(**{**pack.params, "seed": 0, "verify": False}), pack=pack, archive=arc)
+    w.step()
+    prime = next(iter(w.communities))
+    cap = sorted(w.communities[prime].capabilities)[0]
+    job = MarketJob("T1", "q", 1, {cap: Part(cap, "s", "r")}, posted=w.cycle, deadline=w.cycle + 9, prime=prime)
+    job.status = "claimed"
+    w.jobs[job.id] = job
+    out = Actions(w, w.communities[prime]).do_part(job.id, cap, f"In January 2025 the judge ruled [archive: {pid}].")
+    assert not out and '"January 2025"' in out.message and pid in out.message and "take it out" in out.message
+
+
+def test_with_bids_in_an_announcement_is_awarded_early():
+    """12 Oct: jobs missed deadlines waiting out bid windows; OSINT's live settings award after two cycles."""
+    from tests.application.test_turns_and_contracts import act, claimed_job_needing_build, world
+    w = world(auto_award_after=2, bid_window=6)
+    job = claimed_job_needing_build(w)
+    job.deadline = w.cycle + 20
+    cid = act(w, "prime").announce(job.id, "build", 30_000, 0.5).id
+    assert act(w, "sub").bid(cid, 20_000)
+    w.step()
+    assert w.contracts[cid].status == "open"  # one cycle: others may still bid
+    w.step()
+    assert w.contracts[cid].status == "awarded" and w.cycle < w.contracts[cid].deadline
+
+
+def test_a_co_op_can_be_held_to_one_job_at_a_time():
+    from tests.application.test_turns_and_contracts import act, world
+    w = world(max_held_jobs=1)
+    for n in range(2):
+        w.jobs[f"H{n}"] = MarketJob(f"H{n}", "kit", 80_000, {"research": Part("research", "r", "r")}, posted=w.cycle,
+                                    deadline=w.cycle + 5)
+    act(w, "prime").me.capacity = 10
+    assert act(w, "prime").claim("H0")
+    assert "finish one first" in act(w, "prime").claim("H1").message
+    assert load("osint").live_params["max_held_jobs"] == 1 and load("osint").live_params["job_ttl"] == 18

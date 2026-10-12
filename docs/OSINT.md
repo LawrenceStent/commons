@@ -118,6 +118,8 @@ activity log, then reset the kill-switch from the dashboard. Check the grader fi
 | Every co-op went broke before a job could be paid (thinking took 80% of the money) | local thinking costs a fifth of Haiku; live purses start at 1M |
 | About 20 turns a run went on contract mistakes | the view and each refusal say the next step |
 | The grader caught a claim cited to a source that didn't support it (J3) | working as designed: the job wasn't paid |
+| Four of seven jobs in two long runs missed their deadlines (a contracted part arrived too late, or a co-op sat on two jobs) | OSINT's live settings: 18 cycles a job, awards two cycles after an announcement once bids are in, one job per co-op at a time |
+| Three answers failed at grading on a figure or date not in the source cited for it | the grounding check at hand-in (`commons/domain/grounding.py`, adapted from the fwx verifier): every figure and date in a cited sentence must be in a passage it cites; refused with which one and where |
 
 ## What's measured
 

@@ -64,6 +64,7 @@ class MarketConfig:
     grade_retries: int
     grade_cost: Micros
     grader_reviews: bool
+    max_held_jobs: int
 
 
 @dataclass(frozen=True)
@@ -77,6 +78,7 @@ class ContractsConfig:
     review_ttl: int
     audit_cost: Micros
     dispute_window: int
+    auto_award_after: int
 
 
 @dataclass(frozen=True)
@@ -187,6 +189,12 @@ class Params:
     board_ttl: int = 3  # cycles a job stays on the board
     job_ttl: int = 8  # cycles from claim to submission
     bid_window: int = 3  # cycles an announcement stays open
+    # with eligible bids, the commons awards an announcement this many cycles after it opened, rather than at the end
+    # of its window (0: only at the end). Live OSINT runs, 12 Oct: jobs missed deadlines waiting for awards
+    auto_award_after: int = 0
+    # the most claimed jobs a co-op may hold (0: the default, its thinking or 2). Live OSINT runs: one co-op held two
+    # jobs and finished neither while another held none
+    max_held_jobs: int = 0
     deliver_ttl: int = 3
     review_ttl: int = 2
     publish_cost: Micros = 15_000
