@@ -90,7 +90,7 @@ Each stage: tests, the full suite and the golden master pass, then a commit.
       sources without fetching them again, and its report says what changed
 - [x] **F4** Question lifecycle and refresh; follow-up questions proposed through the gate. Done when: answered
       questions wait until a refresh is due and open ones are posted first
-- [ ] **F5** Pay updates by what they add; keep published playbooks between runs
+- [x] **F5** Pay updates by what they add; keep published playbooks between runs
 - [ ] **F6** Measure it: pages fetched again, cycles to a paid answer per question, verified findings over time,
       your ratings; a knowledge panel on the dashboard
 

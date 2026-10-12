@@ -152,3 +152,26 @@ def test_only_societies_that_take_follow_ups_are_offered_the_tool():
     from commons.agents.llm.tools import TOOLS
     assert "propose_question" not in {t["name"] for t in TOOLS}  # not in the shared list: other packs unchanged
     assert load("osint").followups and not load("earn_online").followups
+
+
+def test_an_update_is_paid_by_what_it_adds(tmp_path):
+    """F5, your decision 12 Oct: re-confirming earns little; new findings and corrections earn in full."""
+    from commons.application.services.findings import RECONFIRM
+    w = society(tmp_path)
+    assert w.findings.novelty(job(w, "J1", ANALYSIS)) is None  # a question's first answer is all new
+    w.findings.record(job(w, "J1", ANALYSIS), paid=True, why="")
+    assert w.findings.novelty(job(w, "J2", ANALYSIS)) == RECONFIRM  # the same two claims again
+    newer = ANALYSIS.replace("Duration fell by a fifth", "Anglian Water reported the most spills")
+    assert w.findings.novelty(job(w, "J3", newer)) == 0.5  # one claim of two is new
+    j = job(w, "J4", newer)
+    j.scores, j.novelty = {"analyse": 1.0}, 0.5
+    assert j.value(quality_pay=0.5) == round(j.reward * 0.5)
+
+
+def test_a_playbook_a_co_op_publishes_is_kept_for_later_runs(tmp_path):
+    w = society(tmp_path)
+    w.add_playbook("P1", next(iter(w.communities)), "collect", "Primary sources first", "Start from GOV.UK.")
+    kept = list((tmp_path / "playbooks").glob("collect--primary-sources-first.md"))
+    assert kept and "Start from GOV.UK." in kept[0].read_text()
+    w.add_playbook("seed-x", "operator", "collect", "Seeded", "already yours")
+    assert not list((tmp_path / "playbooks").glob("collect--seeded.md"))  # your own seeds aren't copied back

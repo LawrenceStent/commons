@@ -38,6 +38,9 @@ class Payments:
         self.payment_queue = []
         if not queue:
             return
+        if self.w.findings is not None:  # an update to an answered question is paid by what it adds (F5)
+            for j in queue:
+                j.novelty = self.w.findings.novelty(j)
         values = {j.id: j.value(self.w.params.money.quality_pay) for j in queue}
         pool, total = self.pool_balance(), sum(values.values())
         shares = self.w.payment.shares(values, pool)
@@ -58,6 +61,8 @@ class Payments:
         tax = self.w.ledger.balance("treasury") < self.w.params.money.treasury_reserve
         mean = job.mean_score
         if payout is None:
+            if self.w.findings is not None and job.novelty is None:
+                job.novelty = self.w.findings.novelty(job)
             payout = job.value(self.w.params.money.quality_pay)  # pay scales with quality
         split = self.w.ledger.settle_revenue(prime, payout, cycle=self.w.cycle, royalties=dict(weights), memo=job.id, tax=tax,
                                            source=self.w.payment.source)

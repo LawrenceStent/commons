@@ -34,6 +34,7 @@ if TYPE_CHECKING:
 
 PREFIX = "findings"  # dossier passages' ids start with this: "findings-q-3f2a1b#2"
 REFRESH_DAYS = 30  # an answered question is asked again after this long (your decision, 12 Oct)
+RECONFIRM = 0.2  # what an update earns, as a share of its value, if it adds nothing new (F5)
 PROPOSE = "propose_question"  # the gate tool for a follow-up question a co-op proposes
 _SENTENCE = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9\"'(])")
 _LABEL = re.compile(r"^\**([A-Z][A-Za-z ]{0,30}?)\**:?\s*$")
@@ -92,7 +93,9 @@ class Findings:
     proposed: dict[str, str] = field(default_factory=dict)  # question id -> a follow-up waiting for your decision
 
     def observe(self, event: ev.Event) -> None:
-        if isinstance(event, ev.PartGraded) and event.audit is None and event.grade.score < 0.5:
+        if isinstance(event, ev.PlaybookPublished) and event.playbook.author != "operator":
+            self.keep_playbook(event.playbook)
+        elif isinstance(event, ev.PartGraded) and event.audit is None and event.grade.score < 0.5:
             self.reasons.setdefault(event.job, {})[event.part] = event.grade.reason
         elif isinstance(event, ev.JobPaid):
             self.record(event.job, paid=True, why="")
@@ -123,6 +126,28 @@ class Findings:
         for part in job.parts.values():
             part.spec = f"{note}\n\n{part.spec}"
         return True
+
+    # ── F5: updates paid by what they add; playbooks kept ──────
+    def novelty(self, job: MarketJob) -> float | None:
+        """The share of an update's claims its question's dossier doesn't already hold as verified (corrections and new
+        findings count), at least RECONFIRM. None for a question never verified: its first answer is all new."""
+        state = self.load(question_id(job.title))
+        known = {c["text"] for o in (state or {}).get("outcomes", []) if o["status"] == "paid"
+                 for c in o["claims"] if c["status"] == "verified"}
+        if not known:
+            return None
+        claims = [s for p in job.parts.values() if p.artifact and not p.independent for s in claims_of(p.artifact)]
+        if not claims:
+            return RECONFIRM
+        return max(RECONFIRM, sum(c not in known for c in claims) / len(claims))
+
+    def keep_playbook(self, playbook) -> None:
+        """A playbook a co-op published joins the society's playbooks/, seeded into the library of later runs."""
+        folder = self.folder.parent.parent / "playbooks"
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / f"{playbook.capability}--{re.sub(r'[^a-z0-9]+', '-', playbook.title.lower()).strip('-')[:60]}.md"
+        if not path.exists():
+            path.write_text(f"{playbook.text.strip()}\n\n(published by {playbook.author}, run {self.run})\n")
 
     # ── F4: which questions are posted, and follow-ups ─────────
     def due(self, subjects, live: set[str], now: float | None = None) -> list[str]:

@@ -57,6 +57,7 @@ class MarketJob:
     bond: Micros = 0  # posted by the prime on allocation; returned when paid, forfeited if the job fails
     settle_at: int | None = None  # for deferred outcomes: the cycle the grader settles it
     verified: float | None = None  # the share of claims its checker found supported (domain/verification.py)
+    novelty: float | None = None  # for an update, the share of its claims that are new (services/findings.py)
 
     @property
     def owner(self) -> str:
@@ -111,9 +112,11 @@ class MarketJob:
 
     def value(self, quality_pay: float) -> int:
         """What passing work is worth: the reward, with `quality_pay` of it scaled by the mean part score, and all of it
-        by the share of claims its checker found supported, if it has one."""
+        by the share of claims its checker found supported, if it has one, and, for an update to a question already
+        answered, by what it adds (your decision, 12 Oct)."""
         checked = 1.0 if self.verified is None else self.verified
-        return round(self.reward * (1 - quality_pay + quality_pay * self.mean_score) * checked)
+        added = 1.0 if self.novelty is None else self.novelty
+        return round(self.reward * (1 - quality_pay + quality_pay * self.mean_score) * checked * added)
 
     def tally(self) -> Tally | None:
         """What its checker found (the tally ending an independent part's work), if it has one."""
